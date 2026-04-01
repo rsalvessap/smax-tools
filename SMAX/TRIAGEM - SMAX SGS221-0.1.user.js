@@ -322,12 +322,19 @@
     .smax-global-hint[data-state="staged"] { color:#4ade80; }
     #smax-triage-worker-select[data-staged="true"] { border-color:#22c55e !important; box-shadow:0 0 12px rgba(34,197,94,0.4) !important; background:#052e16 !important; color:#bbf7d0 !important; }
     #smax-triage-worker-select[data-staged="false"] { border-color:#facc15 !important; box-shadow:0 0 8px rgba(250,204,21,0.25) !important; }
-    #smax-triage-guide-btn { padding:4px 10px; border-radius:999px; border:1px solid #374151; background:transparent; color:#cbd5f5; font-size:12px; cursor:pointer; }
-    #smax-triage-guide-btn:hover { background:#1f2937; }
-    #smax-quick-guide-panel { position:absolute; top:54px; right:20px; width:260px; background:#020617; border:1px solid #1f2937; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.55); padding:12px 14px; font-size:12px; color:#e2e8f0; display:none; z-index:5; }
-    #smax-quick-guide-panel h4 { margin:0 0 6px; font-size:13px; }
-    #smax-quick-guide-panel ul { margin:0; padding-left:16px; }
-    #smax-quick-guide-panel li { margin-bottom:4px; line-height:1.35; }
+    #smax-triage-status-badge { font-size:11px; font-weight:600; color:#e2e8f0; background:rgba(0,0,0,0.35); border-radius:6px; padding:3px 10px; white-space:nowrap; cursor:default; transition:background .2s ease, color .2s ease; }
+    #smax-triage-status-badge[data-empty="true"] { color:#64748b; font-style:italic; font-weight:400; }
+    #smax-triage-status-badge[data-status="RequestStatusSuspended"] { background:rgba(250,204,21,0.2); color:#fde68a; }
+    #smax-triage-status-badge[data-status="RequestStatusActive"] { background:rgba(34,197,94,0.2); color:#bbf7d0; }
+    #smax-triage-status-badge[data-status="RequestStatusComplete"] { background:rgba(59,130,246,0.2); color:#bfdbfe; }
+    #smax-triage-status-badge[data-status="RequestStatusAccepted"] { background:rgba(34,197,94,0.15); color:#a7f3d0; }
+    #smax-triage-status-badge[data-status="RequestStatusReject"] { background:rgba(239,68,68,0.2); color:#fecaca; }
+    #smax-triage-status-badge[data-status="RequestStatusAbandon"] { background:rgba(239,68,68,0.15); color:#fca5a5; }
+    #smax-triage-status-badge[data-status="RequestStatusPendingVendor"],
+    #smax-triage-status-badge[data-status="RequestStatusPendingApproval"],
+    #smax-triage-status-badge[data-status="RequestStatusPendingCustomer"],
+    #smax-triage-status-badge[data-status="RequestStatusPendingChange"] { background:rgba(251,146,60,0.2); color:#fed7aa; }
+    #smax-triage-status-badge[data-status="RequestStatusClassify"] { background:rgba(168,85,247,0.2); color:#e9d5ff; }
     .smax-triage-primary { padding:10px 20px; border-radius:10px; border:none; cursor:pointer; background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%); color:#fff; font-weight:600; font-size:14px; box-shadow:0 4px 16px rgba(34,197,94,.35); transition:transform .15s ease, box-shadow .15s ease; }
     .smax-triage-primary:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(34,197,94,.45); }
     .smax-triage-secondary { padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.05); color:#e5e7eb; cursor:pointer; font-size:13px; transition:all .15s ease; }
@@ -1535,6 +1542,10 @@
       if (!locationId && existing.locationId) locationId = existing.locationId;
       if (!locationName && existing.locationName) locationName = existing.locationName;
 
+      // Extract Status (e.g. "RequestStatusSuspended")
+      let status = props.Status ? String(props.Status).trim() : '';
+      if (!status && existing.status) status = existing.status;
+
       const { assignmentGroupId, assignmentGroupName } = pickAssignmentGroupMeta(props, rel);
       triageCache.set(id, Object.assign({}, existing, {
         idText: id,
@@ -1554,7 +1565,8 @@
         assignmentGroupName,
         processNumber,
         locationId,
-        locationName
+        locationName,
+        status
       }));
     };
 
@@ -2700,7 +2712,7 @@
           <div class="smax-team-item" style="border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:linear-gradient(135deg,rgba(15,23,42,0.8) 0%,rgba(30,41,59,0.4) 100%);transition:border-color .15s ease,box-shadow .15s ease;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
-                <strong style="font-size:13px;color:#f8fafc;">${Utils.escapeHtml(t.id || 'Sem ID')}</strong>
+                <strong style="font-size:13px;color:#f8fafc;">${Utils.escapeHtml(t.name || t.id || 'Sem nome')}</strong>
                 ${isDefault ? '<span style="font-size:10px;background:rgba(56,189,248,0.2);color:#38bdf8;padding:2px 6px;border-radius:999px;margin-left:6px;border:1px solid rgba(56,189,248,0.3);">Padrão</span>' : ''}
                 <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Prioridade: ${t.priority || 0} • Membros: ${t.workers ? t.workers.length : 0}</div>
               </div>
@@ -2771,7 +2783,7 @@
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
               <label style="display:block;font-size:12px;font-weight:600;color:#cbd5e1;margin-bottom:4px;">Qual o nome da equipe?</label>
-              <input type="text" id="smax-edit-id" value="${Utils.escapeHtml(team.id || '')}" ${!isNew ? 'disabled' : ''} placeholder="Ex: JEC, Cível, Criminal..." style="width:100%;padding:8px 12px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f8fafc;font-size:13px;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;">
+              <input type="text" id="smax-edit-id" value="${Utils.escapeHtml(team.name || team.id || '')}" ${isGeneralTeam ? 'disabled' : ''} placeholder="Ex: JEC, Cível, Criminal..." style="width:100%;padding:8px 12px;border:1px solid #475569;border-radius:8px;background:${isGeneralTeam ? 'rgba(15,23,42,0.6)' : '#1e293b'};color:${isGeneralTeam ? '#94a3b8' : '#f8fafc'};font-size:13px;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;${isGeneralTeam ? 'cursor:not-allowed;' : ''}">
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:600;color:#cbd5e1;margin-bottom:4px;">Prioridade</label>
@@ -2919,15 +2931,17 @@
           });
 
           // Update state
-          const newTeam = { id: newId, name: newId, priority: newPrio, gseRules: newGseRules, workers: newWorkers, matchers: newMatchers };
-
           if (editingTeamId === '__NEW__') {
+            const newTeam = { id: newId, name: newId, priority: newPrio, gseRules: newGseRules, workers: newWorkers, matchers: newMatchers };
             currentTeams.push(newTeam);
           } else {
             const idx = currentTeams.findIndex(t => t.id === editingTeamId);
             if (idx !== -1) {
-              // Merge to keep other props? Maybe not needed for now, but safe
-              currentTeams[idx] = { ...currentTeams[idx], ...newTeam };
+              const existingTeam = currentTeams[idx];
+              const isDefault = !!existingTeam.isDefault;
+              const updatedName = isDefault ? existingTeam.name : newId;
+              const updatedId = isDefault ? existingTeam.id : newId;
+              currentTeams[idx] = { ...existingTeam, id: updatedId, name: updatedName, priority: newPrio, gseRules: newGseRules, workers: newWorkers, matchers: newMatchers };
             }
           }
 
@@ -3180,6 +3194,9 @@
           <button type="button" id="smax-config-toggle-btn" style="padding:10px 18px;border-radius:8px;border:1px solid rgba(56,189,248,.2);background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px;">
             <span style="font-size:14px;">🔧</span> Configuração manual
           </button>
+          <button type="button" id="smax-guide-toggle-btn" style="padding:10px 18px;border-radius:8px;border:1px solid rgba(56,189,248,.2);background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px;">
+            <span style="font-size:14px;">📖</span> Guia Rápido
+          </button>
         </div>
 
         <div id="smax-config-editor-panel" style="display:none;margin-top:12px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,.2);box-shadow:0 4px 16px rgba(0,0,0,.3);">
@@ -3194,6 +3211,24 @@
             <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;">📋 Copiar</button>
             <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);color:#fff;font-size:12px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
           </div>
+        </div>
+
+        <div id="smax-guide-panel" style="display:none;margin-top:12px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,.2);box-shadow:0 4px 16px rgba(0,0,0,.3);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="font-size:13px;font-weight:600;color:#38bdf8;">📖 Guia Rápido</div>
+            <button type="button" id="smax-guide-close-btn" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;" title="Fechar">✕</button>
+          </div>
+          <ul style="margin:0;padding-left:18px;font-size:12px;color:#e2e8f0;line-height:1.6;">
+            <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
+            <li>"Meus finais" limita a fila de triagem aos IDs desejados.</li>
+            <li>Editar a resposta rápida já a deixa pronta; "ENVIAR" grava tudo no SMAX.</li>
+            <li>Filtre os chamados através do SMAX corretamente antes de começar a Triagem.</li>
+            <li>Configure corretamente os finais e colegas ausentes através do ícone de configuração.</li>
+            <li>No mesmo painel, escolha quem assume automaticamente globais vinculados.</li>
+            <li>O filtro (não a coluna) "Hora de Criação" do SMAX permite escolher um intervalo de datas.</li>
+            <li>Os chamados são ordenados sempre por VIP, e mais antigos primeiro.</li>
+            <li style="color:#fca5a5;font-weight:600;">CUIDADO DOBRADO: Vincular Global NÃO VERIFICA se o número é válido.</li>
+          </ul>
         </div>
       `;
       wirePanelEvents();
@@ -3312,6 +3347,22 @@
           setIOStatus(result.msg, '#4ade80');
           // Re-render to reflect changes
           setTimeout(() => renderPanel(), 300);
+        });
+      }
+
+      // --- Guide panel toggle ---
+      const guideToggle = container.querySelector('#smax-guide-toggle-btn');
+      const guidePanel = container.querySelector('#smax-guide-panel');
+      const guideCloseBtn = container.querySelector('#smax-guide-close-btn');
+
+      if (guideToggle && guidePanel) {
+        guideToggle.addEventListener('click', () => {
+          guidePanel.style.display = guidePanel.style.display !== 'none' ? 'none' : 'block';
+        });
+      }
+      if (guideCloseBtn && guidePanel) {
+        guideCloseBtn.addEventListener('click', () => {
+          guidePanel.style.display = 'none';
         });
       }
     };
@@ -3789,6 +3840,29 @@
       crit: { Urgency: 'TotalLossOfService', ImpactScope: 'Enterprise' }
     };
 
+    const REQUEST_STATUS_MAP = {
+      RequestStatusInProgress: 'Em Andamento',
+      RequestStatusActive: 'Ativo',
+      RequestStatusSuspended: 'Suspenso',
+      RequestStatusComplete: 'Concluído',
+      RequestStatusAccepted: 'Aceito',
+      RequestStatusReject: 'Rejeitado',
+      RequestStatusPendingApproval: 'Aguardando Aprovação',
+      RequestStatusPendingCustomer: 'Aguardando Solicitante',
+      RequestStatusClassify: 'Classificar',
+      RequestStatusAbandon: 'Abandonado',
+      RequestStatusPendingChange: 'Aguardando Mudança',
+      RequestStatusPending: 'Usuário Final Pendente',
+      RequestStatusReady: 'Pronto'
+    };
+
+    const humanReadableStatus = (raw) => {
+      if (!raw) return '';
+      if (REQUEST_STATUS_MAP[raw]) return REQUEST_STATUS_MAP[raw];
+      // Fallback: strip 'RequestStatus' prefix and add spaces before capitals
+      return raw.replace(/^RequestStatus/i, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+    };
+
     const getQuickReplyField = () => (backdrop ? backdrop.querySelector('#smax-triage-quickreply-editor') : null);
 
     const setQuickReplyHtml = (html, { syncBaseline = false } = {}) => {
@@ -3865,23 +3939,6 @@
       updateQuickReplyStageState({ announce: true });
     };
 
-    const setQuickGuideVisible = (visible) => {
-      if (!backdrop) return;
-      const panel = backdrop.querySelector('#smax-quick-guide-panel');
-      if (!panel) return;
-      panel.style.display = visible ? 'block' : 'none';
-      panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
-    };
-
-    const toggleQuickGuide = () => {
-      if (!backdrop) return;
-      const panel = backdrop.querySelector('#smax-quick-guide-panel');
-      if (!panel) return;
-      const next = panel.style.display !== 'block';
-      setQuickGuideVisible(next);
-    };
-
-    const hideQuickGuide = () => setQuickGuideVisible(false);
 
     const refreshPersonalFinalsSet = () => {
       personalFinalsSet = new Set(Utils.parseDigitRanges(prefs.personalFinalsRaw || ''));
@@ -4654,6 +4711,8 @@
         activeTicketId = null;
         clearQuickReplyState();
         updateAttachmentPanel({ state: 'empty', items: [] });
+        const statusBadge = backdrop.querySelector('#smax-triage-status-badge');
+        if (statusBadge) { statusBadge.textContent = '—'; statusBadge.dataset.empty = 'true'; statusBadge.dataset.status = ''; statusBadge.title = ''; }
         return;
       }
 
@@ -4676,7 +4735,7 @@
         globalHint.textContent = 'Sem vínculo global';
       }
       clearQuickReplyState();
-      setStatus('Carregando solução do chamado selecionado...', 3000);
+      // (removed: "Carregando solução" message — redundant with real-time loading indicators)
       updateAttachmentPanel({ state: 'loading' });
 
       if (ticketDetailsEl) {
@@ -4775,6 +4834,24 @@
             locationDisplayEl.textContent = 'Sem local';
             locationDisplayEl.title = 'Local de divulgação não disponível';
             locationDisplayEl.dataset.empty = 'true';
+          }
+        }
+
+        // Update status display in header
+        const statusDisplayEl = backdrop.querySelector('#smax-triage-status-badge');
+        if (statusDisplayEl) {
+          const rawStatus = full.status || '';
+          if (rawStatus) {
+            const label = humanReadableStatus(rawStatus);
+            statusDisplayEl.textContent = label;
+            statusDisplayEl.title = `Status: ${label} (${rawStatus})`;
+            statusDisplayEl.dataset.empty = 'false';
+            statusDisplayEl.dataset.status = rawStatus;
+          } else {
+            statusDisplayEl.textContent = '';
+            statusDisplayEl.title = '';
+            statusDisplayEl.dataset.empty = 'true';
+            statusDisplayEl.dataset.status = '';
           }
         }
 
@@ -5128,7 +5205,10 @@
       queueSyncPromise = DataRepository.refreshQueueFromApi()
         .catch((err) => {
           console.warn('[SMAX] Falha ao sincronizar fila via API:', err);
-          if (announce && backdrop && backdrop.style.display === 'flex') setStatus('Não foi possível atualizar a fila.', 4000);
+          // Only show error if queue is actually empty — grid intercepts may have already populated it
+          if (announce && backdrop && backdrop.style.display === 'flex' && !triageQueue.length) {
+            setStatus('Não foi possível atualizar a fila via API.', 4000);
+          }
           return null;
         })
         .finally(() => {
@@ -5207,7 +5287,6 @@
       backdrop.style.display = 'none';
       if (startBtn) startBtn.style.display = 'block';
       closeGseDropdown();
-      hideQuickGuide();
     };
 
     const init = () => {
@@ -5229,8 +5308,7 @@
             <div id="smax-triage-hud-header">
               <div class="smax-triage-title-bar">
                 <label id="smax-personal-finals-label" title="Limite os chamados pelos seus dígitos finais">
-                  <span>Meus finais</span>
-                  <input type="text" id="smax-personal-finals-input" placeholder="0-32,66-99" inputmode="numeric" autocomplete="off" />
+                  <input type="text" id="smax-personal-finals-input" placeholder="Finais (0-32)" inputmode="numeric" autocomplete="off" />
                 </label>
                 <div id="smax-triage-gse-wrapper" data-state="loading" data-open="false" title="Grupo de suporte">
                   <button type="button" id="smax-triage-gse-display" disabled>
@@ -5244,6 +5322,7 @@
                   </div>
                 </div>
                 <div id="smax-triage-location-display" data-empty="true" title="Local de divulgação">Sem local</div>
+                <span id="smax-triage-status-badge" data-empty="true" data-status="" title="">—</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <span class="smax-triage-header-nav">
@@ -5251,25 +5330,7 @@
                   <button type="button" id="smax-triage-next" disabled aria-label="Próximo chamado" title="Próximo chamado">&#x203A;</button>
                 </span>
                 <button type="button" class="smax-triage-secondary" id="smax-triage-refresh" title="Sincronizar fila">&#x21bb;</button>
-                <button type="button" id="smax-triage-guide-btn" title="Dicas rápidas">Guia Rápido</button>
                 <button type="button" class="smax-triage-secondary" id="smax-triage-close" title="Minimizar triagem">_</button>
-              </div>
-            </div>
-            <div id="smax-quick-guide-panel" aria-hidden="true">
-              <h4>Guia rápido</h4>
-              <ul>
-                <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
-                <li>“Meus finais” limita a fila de triagem aos IDs desejados.</li>
-                <li>Editar a resposta rápida já a deixa pronta; "ENVIAR" grava tudo no SMAX.</li>
-                <li>Filtre os chamados através do SMAX corretamente antes de começar a Triagem</li>
-                <li>Configure corretamente os finais e colegas ausentes através do ícone de configuração, no canto direito inferior do SMAX</li>
-                <li>No mesmo painel, escolha quem assume automaticamente globais vinculados.</li>
-                <li>O filtro (não a coluna) "Hora de Criação" do SMAX permite escolher um intervalo de datas.</li>
-                <li>Os chamados são ordenados sempre por VIP, e mais antigos primeiro.</li>
-                <li>CUIDADO DOBRADO: Vincular Global NÃO VERIFICA se o número é válido.</li>
-              </ul>
-              <div style="margin-top:8px;display:flex;justify-content:flex-end;">
-                <button type="button" class="smax-triage-secondary" id="smax-guide-close" style="padding:4px 10px;">Fechar</button>
               </div>
             </div>
             <div id="smax-triage-hud-body">
@@ -5313,10 +5374,6 @@
       startBtn.addEventListener('click', openHud);
       backdrop.querySelector('#smax-triage-close').addEventListener('click', closeHud);
       backdrop.addEventListener('click', (event) => {
-        const panel = backdrop.querySelector('#smax-quick-guide-panel');
-        if (panel && panel.style.display === 'block') {
-          if (!panel.contains(event.target) && event.target.id !== 'smax-triage-guide-btn') hideQuickGuide();
-        }
         if (event.target === backdrop) closeHud();
       });
       const prevBtn = backdrop.querySelector('#smax-triage-prev');
@@ -5376,16 +5433,7 @@
 
       // NOTE: team/worker select event handlers are wired inside render() with dataset.wired guards
 
-      const guideBtn = backdrop.querySelector('#smax-triage-guide-btn');
-      if (guideBtn) guideBtn.addEventListener('click', (evt) => {
-        evt.stopPropagation();
-        toggleQuickGuide();
-      });
-      const guideClose = backdrop.querySelector('#smax-guide-close');
-      if (guideClose) guideClose.addEventListener('click', (evt) => {
-        evt.stopPropagation();
-        hideQuickGuide();
-      });
+
       scheduleQuickReplyEditor();
     };
 
