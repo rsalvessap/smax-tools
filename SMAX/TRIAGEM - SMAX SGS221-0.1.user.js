@@ -5514,6 +5514,7 @@
             const newTeam = TeamsConfig.getTeamById(stagedState.selectedTeamId);
             const suggInfo = TeamsConfig.suggestWorker(newTeam, tick ? (tick.idText || tick.idNum) : '');
             const newWorkerName = suggInfo ? suggInfo.name : '';
+            populateTeamsDropdown(stagedState.selectedTeamId);
             populateWorkerDropdown(stagedState.selectedTeamId, newWorkerName);
             currentOwnerName = newWorkerName;
             stagedState.selectedWorkerId = newWorkerName;
@@ -5522,6 +5523,7 @@
           } else if (wrapper.id === 'smax-triage-worker-wrapper') {
             stagedState.selectedWorkerId = item.dataset.value;
             currentOwnerName = item.dataset.value;
+            populateWorkerDropdown(stagedState.selectedTeamId, stagedState.selectedWorkerId);
             refreshButtons();
             setBaselineStatus();
           } else if (wrapper.id === 'smax-triage-status-wrapper') {
