@@ -726,6 +726,84 @@
       setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
     };
 
+    // ── CNJ linkifier ────────────────────────────────────────
+    // Detecta dois formatos:
+    //   Formatado : NNNNNNN-DD.AAAA.J.TT.OOOO  (ex: 4000439-14.2026.8.26.0201)
+    //   Bruto     : 20 dígitos seguidos          (ex: 40004391420268260201)
+    //
+    // Ao clicar, foca/abre a aba nomeada "eproc-consulta" (já logada) e envia o
+    // número via postMessage para o bridge script executar a busca de dentro da sessão.
+    const CNJ_REGEX = /\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}|\d{20})\b/g;
+
+    const formatRawCNJ = (raw) =>
+      `${raw.slice(0,7)}-${raw.slice(7,9)}.${raw.slice(9,13)}.${raw.slice(13,14)}.${raw.slice(14,16)}.${raw.slice(16,20)}`;
+
+    const normalizeCNJ = (s) => (/^\d{20}$/.test(s.trim()) ? formatRawCNJ(s.trim()) : s.trim());
+
+    const EPROC_ORIGIN = 'https://eproc1g.tjsp.jus.br';
+    const EPROC_URL    = 'https://eproc1g.tjsp.jus.br/eproc/controlador.php';
+
+    // Abre (ou foca) a aba do eProc e despacha o número via postMessage.
+    // O bridge script rodando no eProc recebe e executa a consulta dentro da sessão ativa.
+    const openEprocProcess = (processNumber) => {
+      const eprocWin = window.open(EPROC_URL, 'eproc-consulta');
+      if (!eprocWin) {
+        // Popup bloqueado pelo navegador — copia o número como fallback
+        navigator.clipboard?.writeText(processNumber).catch(() => {});
+        alert(`Popups bloqueados pelo navegador.\nNúmero copiado: ${processNumber}\n\nPermita popups para este site nas configurações do navegador.`);
+        return;
+      }
+      const msg = { type: 'SMAX_CONSULTAR_PROCESSO', num: processNumber };
+      // Envia em múltiplos intervalos para cobrir tab já aberta (rápido) e nova aba (aguarda carregamento)
+      [300, 1200, 3000].forEach(d => setTimeout(() => {
+        try { eprocWin.postMessage(msg, EPROC_ORIGIN); } catch (_) {}
+      }, d));
+    };
+
+    // Expõe globalmente para uso em atributos onclick de strings innerHTML
+    window._smaxOpenEproc = openEprocProcess;
+
+    const linkifyCNJ = (html) => {
+      if (!html) return html;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      const makeLink = (match) => {
+        const formatted = normalizeCNJ(match);
+        const span = document.createElement('span');
+        span.textContent = formatted;
+        span.style.cssText = 'color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;';
+        span.title = `Consultar processo no eProc: ${formatted}`;
+        span.addEventListener('click', () => openEprocProcess(formatted));
+        return span;
+      };
+
+      const walk = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          CNJ_REGEX.lastIndex = 0;
+          const text = node.textContent;
+          if (!CNJ_REGEX.test(text)) return;
+          CNJ_REGEX.lastIndex = 0;
+          const frag = document.createDocumentFragment();
+          let last = 0;
+          let m;
+          while ((m = CNJ_REGEX.exec(text)) !== null) {
+            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            frag.appendChild(makeLink(m[1]));
+            last = m.index + m[0].length;
+          }
+          if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+          node.parentNode.replaceChild(frag, node);
+        } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'A' && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+          Array.from(node.childNodes).forEach(walk);
+        }
+      };
+
+      Array.from(tmp.childNodes).forEach(walk);
+      return tmp.innerHTML;
+    };
+    // ────────────────────────────────────────────────────────
+
     return {
       debounce,
       getGridViewport,
@@ -746,7 +824,10 @@
       formatBrDate,
       deepClone,
       normalizeHtml,
-      triggerFileDownload
+      triggerFileDownload,
+      linkifyCNJ,
+      normalizeCNJ,
+      openEprocProcess
     };
   })();
 
@@ -4638,7 +4719,7 @@
         const title = Utils.escapeHtml(entry.purposeLabel || 'Discussão');
         const privacy = Utils.escapeHtml(entry.privacyCode || '');
         const privacyLabel = Utils.escapeHtml(entry.privacyLabel || 'Interno');
-        const bodyHtml = entry.bodyHtml || '<div style="color:#94a3b8;">(Sem conteúdo)</div>';
+        const bodyHtml = Utils.linkifyCNJ(entry.bodyHtml) || '<div style="color:#94a3b8;">(Sem conteúdo)</div>';
         const timestamp = Utils.formatBrDate(entry.createdTs, entry.createdRaw, DISCUSSION_DATE_OPTIONS, 'Data desconhecida');
         const name = resolveSubmitterName(entry);
         const authorName = name ? String(name) : (entry.submitterDisplay ? String(entry.submitterDisplay) : 'Registro manual');
@@ -4855,13 +4936,21 @@
         const requestedForHtml = full.requestedForName
           ? `<span style="color:#64748b;">→</span> ${Utils.escapeHtml(full.requestedForName)}`
           : '';
-        // Process number (optional field) - inline monospace text
-        const processNumberHtml = full.processNumber
-          ? `<span style="color:#64748b;">•</span> <span style="font-family:monospace;color:#a5b4fc;">${Utils.escapeHtml(full.processNumber)}</span>`
+        // Process number (optional field) - link to eProc if CNJ format detected (formatado ou 20 dígitos brutos)
+        const rawProcNum = (full.processNumber || '').trim();
+        const isCNJFormatted = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/.test(rawProcNum);
+        const isCNJRaw = /^\d{20}$/.test(rawProcNum);
+        const isCNJFormat = rawProcNum && (isCNJFormatted || isCNJRaw);
+        const displayProcNum = isCNJFormat ? Utils.normalizeCNJ(rawProcNum) : rawProcNum;
+        const processNumberHtml = rawProcNum
+          ? `<span style="color:#64748b;">•</span> ${isCNJFormat
+              ? `<span onclick="window._smaxOpenEproc('${displayProcNum}')" style="color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;" title="Consultar processo no eProc: ${Utils.escapeHtml(displayProcNum)}">${Utils.escapeHtml(displayProcNum)}</span>`
+              : `<span style="font-family:monospace;color:#a5b4fc;">${Utils.escapeHtml(rawProcNum)}</span>`
+            }`
           : '';
         if (!ticketDetailsEl) return;
         const createdDisplay = Utils.formatBrDate(full.createdTs, full.createdText);
-        const descHtml = Utils.sanitizeRichText(full.descriptionHtml || full.descriptionText || full.subjectText || '');
+        const descHtml = Utils.linkifyCNJ(Utils.sanitizeRichText(full.descriptionHtml || full.descriptionText || full.subjectText || ''));
         const descDisplay = descHtml || `<span style="color:#64748b;">(Sem descrição disponível)</span>`;
         const idLink = full.idText
           ? `<a href="https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(full.idText)}/general" target="_blank" rel="noreferrer noopener" style="color:#38bdf8;text-decoration:none;font-weight:600;">${full.idText}</a>`
