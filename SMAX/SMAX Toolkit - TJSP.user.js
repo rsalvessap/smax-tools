@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TRIAGEM - SMAX SGS221
+// @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.10
-// @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
+// @version      1.11
+// @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
@@ -11,8 +11,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
-// @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js
-// @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js
+// @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
+// @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @homepageURL  https://github.com/rsalvessap/SMAX-TOOLS
 // @supportURL   https://github.com/rsalvessap/SMAX-TOOLS/issues
 // ==/UserScript==

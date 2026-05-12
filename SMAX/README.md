@@ -1,6 +1,6 @@
-# SMAX Tools — Triagem SGS221
+# SMAX Toolkit - TJSP
 
-Scripts de automação e aprimoramento de interface para o sistema SMAX do Tribunal de Justiça de São Paulo.
+Conjunto de ferramentas de automação e aprimoramento de interface para o sistema SMAX do Tribunal de Justiça de São Paulo.
 
 ---
 
@@ -8,7 +8,7 @@ Scripts de automação e aprimoramento de interface para o sistema SMAX do Tribu
 
 | Script | Descrição |
 |--------|-----------|
-| `TRIAGEM - SMAX SGS221-0.1.user.js` | Interface de triagem no SMAX + bridge de consulta de processos no eProc |
+| `SMAX Toolkit - TJSP.user.js` | Triagem, templates, radar de pendentes, Zen Mode, consulta de processos no eProc e mais |
 
 ---
 
@@ -27,7 +27,7 @@ Scripts de automação e aprimoramento de interface para o sistema SMAX do Tribu
 
 Clique no link abaixo para instalar diretamente pelo Tampermonkey:
 
-**[⬇ Instalar TRIAGEM - SMAX SGS221](https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js)**
+**[⬇ Instalar SMAX Toolkit - TJSP](https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js)**
 
 > O Tampermonkey abrirá uma aba de confirmação. Clique em **Instalar**.
 
@@ -35,11 +35,15 @@ Um único script cobre tanto o SMAX quanto o eProc — não é necessário insta
 
 ---
 
-## 3. Configuração inicial do script de triagem
+## 3. Configuração inicial
 
 Ao abrir o SMAX na tela de chamados (`Requests`), uma **engrenagem** aparecerá no canto inferior direito. Clique nela para configurar.
 
-### 3.1 Equipes e roteamento
+### 3.1 Triador (quem está operando)
+
+No campo **"Quem é você?"**, busque e selecione seu próprio nome. Isso vincula suas ações ao seu usuário e ativa o Radar de pendentes.
+
+### 3.2 Equipes e roteamento
 
 1. Clique em **+ Nova Equipe** para criar uma equipe (ex: JEC)
 2. Defina as regras de roteamento:
@@ -52,61 +56,72 @@ Ao abrir o SMAX na tela de chamados (`Requests`), uma **engrenagem** aparecerá 
 
 > A equipe **GERAL** é padrão e captura tudo que não se enquadrar nas regras específicas.
 
-### 3.2 Configurações pessoais
+### 3.3 Opções
 
-No campo **"Triador (quem está operando)"**, busque e selecione seu próprio nome. Isso vincula suas ações de triagem ao seu usuário.
+Na engrenagem, a seção **Opções** permite ativar/desativar cada módulo:
+
+| Opção | Descrição |
+|-------|-----------|
+| 🧘 Zen Mode | Oculta campos desnecessários no formulário (Fabricante, SLTs, Plano de Tarefa…) |
+| 📡 Radar de pendentes | Badge vermelho com chamados seus em revisão ou aguardando aceite |
+| 💬 Comentários expandidos | Exibe todos os comentários sem limite de altura |
+| 📂 Recolher seções | Recolhe automaticamente seções desnecessárias |
+| 💀 Caveira detratores | Marca visualmente pessoas na lista de detratores |
+| 🏷️ Badges na grid | Exibe responsável ao lado do chamado na lista |
 
 ---
 
-## 4. Como usar o HUD de triagem
+## 4. Módulos
+
+### 4.1 HUD de Triagem
 
 Clique em **INICIAR TRIAGEM** (botão flutuante, canto inferior da tela) para abrir o painel.
 
-### Cabeçalho
-
 | Campo | Descrição |
 |-------|-----------|
-| Local de Divulgação | Origem do chamado (ex: "JUIZADO ESPECIAL CÍVEL DE JUNDIAÍ") |
+| Local de Divulgação | Origem do chamado |
 | Meus Finais | Dígitos que você processa (ex: `00-50`) |
 | GSE | Grupo de suporte — visualizar ou alterar |
 | Controles | Navegação `< >`, atualizar fila `↻`, sair |
 
-### Processo de triagem
-
 1. Navegue entre chamados com as setas ou atalhos de teclado
-2. Clique em uma urgência (**Baixa / Média / Alta / Crítica**) — o sistema automaticamente:
-   - Define a urgência
-   - Calcula o responsável pelos dígitos finais do chamado
-   - Prepara o chamado para envio (campo Responsável fica com borda verde)
+2. Clique em uma urgência (**Baixa / Média / Alta / Crítica**) — o sistema automaticamente define urgência e calcula o responsável pelos dígitos finais
 3. Opcionalmente, digite uma resposta no editor de texto
 4. Clique em **ENVIAR** para gravar tudo de uma vez
 
-### Funcionalidades extras
+### 4.2 Templates de Resposta
 
-- **Anexos** — exibidos no canto inferior direito, clique para visualizar
-- **Discussões** — histórico de interações exibido à esquerda
-- **Log de atividades** — exportável em CSV pelas configurações (engrenagem)
+Botão **📋** flutuante (acima da engrenagem). Abre um modal com abas **Solução** e **Discussão**.
 
----
+- Clique em um template para **inserir direto no CKEditor** aberto
+- Crie, edite e exclua templates pelo próprio modal
+- Armazenados localmente no navegador (localStorage)
 
-## 5. Consulta de processos no eProc
+### 4.3 Radar de Pendentes
 
-Chamados que contenham um número de processo judicial (formato CNJ) na **descrição** ou nas **discussões** exibem o número como link clicável.
+Badge vermelho fixo no canto superior direito da tela quando há chamados seus em:
+- **Rejeitado** (fase Review)
+- **Aguardando aceite** (fase Accept)
+
+Clique no badge para ver a lista e acessar cada chamado diretamente.
+
+### 4.4 Botões de Resolução no Topo
+
+Na tela de fechamento de chamado, os botões **Salvar**, **Salvar e Fechar** e **Lifecycle** aparecem automaticamente no **topo** da seção — sem precisar rolar até a toolbar.
+
+### 4.5 Consulta de Processos no eProc
+
+Números de processo no formato CNJ aparecem como links clicáveis em qualquer parte do SMAX (descrição, discussões, tela normal de chamado).
 
 **Formatos reconhecidos:**
 - Formatado: `4000439-14.2026.8.26.0201`
 - Bruto (20 dígitos): `40004391420268260201`
 
-**Como funciona:**
-1. Clique no número de processo
-2. A aba do eProc (já logada) é focada automaticamente
-3. O bridge script executa a consulta dentro da sessão ativa — sem nenhuma ação adicional do usuário
-
-> **Requisito:** ter o eProc aberto e logado em alguma aba do navegador, e o script `eproc-smax-bridge.user.js` instalado.
+Clique no número → nova aba do eProc abre já com a pesquisa executada (requer eProc aberto e logado).
 
 ---
 
-## 6. Dicas
+## 5. Dicas
 
 - Mantenha o cadastro de ausências atualizado — chamados são redistribuídos automaticamente para quem está presente
 - Se um chamado cair na equipe errada, revise as regras de GSE e Local de Divulgação nas configurações
