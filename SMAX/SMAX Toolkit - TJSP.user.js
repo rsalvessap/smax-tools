@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.12
+// @version      1.13
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -97,6 +97,44 @@
 
   const prefs = PrefStore.state;
   const savePrefs = PrefStore.save;
+
+  /* =========================================================
+   * PersonalStore — configurações pessoais (não compartilhadas)
+   * Cada usuário tem seus próprios valores; não entra no export
+   * de config da equipe (CONFIG_KEYS).
+   * Inclui: cores por servidor, detratores, destaques (futuro).
+   * =======================================================*/
+  const PersonalStore = (() => {
+    const STORAGE_KEY = 'smax_personal_prefs';
+    const defaults = {
+      myColors:     {},  // { "NOME NORMALIZADO": { bg: "#hex", fg: "#hex" } }
+      myDetratores: [],  // ["NOME NORMALIZADO", ...]
+    };
+
+    const state = JSON.parse(JSON.stringify(defaults));
+
+    const load = () => {
+      try {
+        const saved = GM_getValue(STORAGE_KEY);
+        if (!saved) return;
+        const parsed = JSON.parse(saved);
+        Object.assign(state, defaults, parsed || {});
+      } catch (err) {
+        console.warn('[SMAX] PersonalStore load error:', err);
+      }
+    };
+
+    const save = () => {
+      try { GM_setValue(STORAGE_KEY, JSON.stringify(state)); }
+      catch (err) { console.error('[SMAX] PersonalStore save error:', err); }
+    };
+
+    load();
+    return { state, save };
+  })();
+
+  const personal     = PersonalStore.state;
+  const savePersonal = PersonalStore.save;
 
   /* =========================================================
    * Activity Log (persistent workload tracking)
@@ -1326,6 +1364,10 @@
      */
     const get = (name) => {
       if (!name) return { bg: '#374151', fg: '#fff' };
+
+      // Cor pessoal definida pelo usuário tem prioridade
+      const normalized = Utils.normalizeText(name);
+      if (personal.myColors[normalized]) return personal.myColors[normalized];
 
       // Legacy hash-based generation for backwards compatibility
       let hash = 0;
@@ -2943,11 +2985,23 @@
         `;
       }).join('');
 
-      const workersHtml = (team.workers || []).map((w, idx) => `
-        <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:8px;border-radius:8px;">
-          <input type="text" class="smax-worker-name" data-idx="${idx}" value="${Utils.escapeHtml(w.name || '')}" style="flex:1;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Nome do Responsável">
-          <input type="text" class="smax-worker-digits" data-idx="${idx}" value="${Utils.escapeHtml(w.digits || '')}" style="width:80px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Digitos (ex: 0-9)">
-          
+      const workersHtml = (team.workers || []).map((w, idx) => {
+        const normName = Utils.normalizeText(w.name || '');
+        const myColor  = personal.myColors[normName] || {};
+        const bgVal    = myColor.bg || '#1e293b';
+        const fgVal    = myColor.fg || '#f8fafc';
+        return `
+        <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:8px;border-radius:8px;flex-wrap:wrap;">
+          <input type="text" class="smax-worker-name" data-idx="${idx}" value="${Utils.escapeHtml(w.name || '')}" style="flex:1;min-width:120px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Nome do Responsável">
+          <input type="text" class="smax-worker-digits" data-idx="${idx}" value="${Utils.escapeHtml(w.digits || '')}" style="width:80px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Dígitos (ex: 0-9)">
+          <div title="Cor de fundo (pessoal)" style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <span style="font-size:9px;color:#64748b;">Fundo</span>
+            <input type="color" class="smax-worker-color-bg" data-idx="${idx}" value="${Utils.escapeHtml(bgVal.startsWith('hsl') ? '#1e293b' : bgVal)}" style="width:28px;height:24px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none;">
+          </div>
+          <div title="Cor do texto (pessoal)" style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <span style="font-size:9px;color:#64748b;">Texto</span>
+            <input type="color" class="smax-worker-color-fg" data-idx="${idx}" value="${Utils.escapeHtml(fgVal.startsWith('hsl') ? '#ffffff' : fgVal)}" style="width:28px;height:24px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none;">
+          </div>
           <div class="smax-worker-absent-wrapper" style="display:flex;align-items:center;cursor:pointer;user-select:none;">
              <input type="checkbox" class="smax-worker-absent" data-idx="${idx}" ${w.isAbsent ? 'checked' : ''} style="display:none;">
              <div class="smax-absent-fake" style="width:14px;height:14px;border:1px solid ${w.isAbsent ? '#d32f2f' : '#64748b'};margin-right:4px;background:${w.isAbsent ? '#d32f2f' : 'transparent'};border-radius:2px;display:flex;align-items:center;justify-content:center;"></div>
@@ -2956,7 +3010,7 @@
 
           <button class="smax-worker-del-btn" data-idx="${idx}" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
         </div>
-      `).join('');
+      `; }).join('');
 
       return `
         <div style="margin-top:16px;border:1px solid rgba(56,189,248,.3);padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);box-shadow:0 4px 16px rgba(0,0,0,.3);">
@@ -3328,6 +3382,25 @@
 
         // Existing deletes
         container.querySelectorAll('.smax-worker-del-btn').forEach(b => b.addEventListener('click', e => e.target.closest('div').remove()));
+
+        // Color pickers — salvos imediatamente em PersonalStore (não compartilhado)
+        const syncColor = (nameInput, bgInput, fgInput) => {
+          const name = Utils.normalizeText((nameInput?.value || '').trim());
+          if (!name) return;
+          personal.myColors[name] = { bg: bgInput.value, fg: fgInput.value };
+          savePersonal();
+          ColorRegistry.clearCache();
+        };
+        container.querySelectorAll('.smax-worker-color-bg, .smax-worker-color-fg').forEach(input => {
+          input.addEventListener('change', () => {
+            const idx = input.dataset.idx;
+            const row = input.closest('div[style]');
+            const nameInput   = row?.querySelector(`.smax-worker-name[data-idx="${idx}"]`);
+            const bgInput     = row?.querySelector(`.smax-worker-color-bg[data-idx="${idx}"]`);
+            const fgInput     = row?.querySelector(`.smax-worker-color-fg[data-idx="${idx}"]`);
+            if (nameInput && bgInput && fgInput) syncColor(nameInput, bgInput, fgInput);
+          });
+        });
       }
     };
 
@@ -3385,6 +3458,31 @@
                 ${label}
               </label>
             `).join('')}
+          </div>
+        </div>
+
+        <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);border:1px solid rgba(255,255,255,.08);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div>
+              <div style="font-weight:600;color:#e5e7eb;font-size:13px;">💀 Meus Detratores</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">Lista pessoal — não compartilhada com a equipe</div>
+            </div>
+            <button type="button" id="smax-det-add-btn" style="font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:rgba(239,68,68,.2);color:#fca5a5;cursor:pointer;">+ Adicionar</button>
+          </div>
+          <div id="smax-det-list" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;">
+            ${(personal.myDetratores || []).length === 0
+              ? `<div style="font-size:12px;color:#475569;text-align:center;padding:10px;">Nenhum detrator pessoal cadastrado.</div>`
+              : (personal.myDetratores || []).map((name, i) => `
+                <div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:6px 10px;">
+                  <span style="flex:1;font-size:12px;color:#fca5a5;">${Utils.escapeHtml(name)}</span>
+                  <button class="smax-det-del" data-idx="${i}" style="font-size:10px;padding:2px 8px;border-radius:4px;border:none;background:rgba(239,68,68,.2);color:#fca5a5;cursor:pointer;">✕</button>
+                </div>`).join('')
+            }
+          </div>
+          <div id="smax-det-input-row" style="display:none;margin-top:8px;display:none;gap:6px;">
+            <input type="text" id="smax-det-input" placeholder="Nome completo do detrator" style="flex:1;padding:7px 10px;border-radius:6px;border:1px solid #475569;background:#1e293b;color:#f8fafc;font-size:12px;">
+            <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;cursor:pointer;">Salvar</button>
+            <button type="button" id="smax-det-cancel"  style="padding:7px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#94a3b8;font-size:12px;cursor:pointer;">✕</button>
           </div>
         </div>
 
@@ -3490,6 +3588,39 @@
 
     const wireBottomPanelEvents = () => {
       if (!container) return;
+
+      // --- Detratores pessoais ---
+      const detAddBtn    = container.querySelector('#smax-det-add-btn');
+      const detInputRow  = container.querySelector('#smax-det-input-row');
+      const detInput     = container.querySelector('#smax-det-input');
+      const detConfirm   = container.querySelector('#smax-det-confirm');
+      const detCancel    = container.querySelector('#smax-det-cancel');
+
+      if (detAddBtn) detAddBtn.addEventListener('click', () => {
+        detInputRow.style.display = 'flex';
+        detInput?.focus();
+      });
+      if (detCancel) detCancel.addEventListener('click', () => { detInputRow.style.display = 'none'; if (detInput) detInput.value = ''; });
+      if (detConfirm) detConfirm.addEventListener('click', () => {
+        const name = (detInput?.value || '').trim();
+        if (!name) return;
+        if (!Array.isArray(personal.myDetratores)) personal.myDetratores = [];
+        if (!personal.myDetratores.includes(name)) personal.myDetratores.push(name);
+        savePersonal();
+        renderPanel(); // re-render para atualizar lista
+      });
+      if (detInput) detInput.addEventListener('keydown', e => { if (e.key === 'Enter') detConfirm?.click(); });
+
+      container.querySelectorAll('.smax-det-del').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (!isNaN(idx)) {
+            personal.myDetratores.splice(idx, 1);
+            savePersonal();
+            renderPanel();
+          }
+        });
+      });
 
       // --- Preference toggles ---
       container.querySelectorAll('.smax-pref-toggle').forEach(cb => {
@@ -3824,9 +3955,19 @@
    * Skull flag for detractor users
    * =======================================================*/
   const SkullFlag = (() => {
+    // Lista base (equipe) — hardcoded e não editável individualmente
     const FLAG_SET = new Set([
       'Adriano Zilli', 'Adriana Da Silva Ferreira Oliveira', 'Alessandra Sousa Nunes', 'Bruna Marques Dos Santos', 'Breno Medeiros Malfati', 'Carlos Henrique Scala De Almeida', 'Cassia Santos Alves De Lima', 'Dalete Rodrigues Silva', 'David Lopes De Oliveira', 'Davi Dos Reis Garcia', 'Deaulas De Campos Salviano', 'Diego Oliveira Da Silva', 'Diogo Mendonça Aniceto', 'Elaine Moriya', 'Ester Naili Dos Santos', 'Fabiano Barbosa Dos Reis', 'Fabricio Christiano Tanobe Lyra', 'Gabriel Teixeira Ludvig', 'Gilberto Sintoni Junior', 'Giovanna Coradini Teixeira', 'Gislene Ferreira Sant\'Ana Ramos', 'Guilherme Cesar De Sousa', 'Gustavo De Meira Gonçalves', 'Jackson Alcantara Santana', 'Janaina Dos Passos Silvestre', 'Jefferson Silva De Carvalho Soares', 'Joyce Da Silva Oliveira', 'Juan Campos De Souza', 'Juliana Lino Dos Santos Rosa', 'Karina Nicolau Samaan', 'Karine Barbara Vitor De Lima Souza', 'Kaue Nunes Silva Farrelly', 'Kelly Ferreira De Freitas', 'Larissa Ferreira Fumero', 'Lucas Alves Dos Santos', 'Lucas Carneiro Peres Ferreira', 'Marcos Paulo Silva Madalena', 'Maria Fernanda De Oliveira Bento', 'Natalia Yurie Shiba', 'Paulo Roberto Massoca', 'Pedro Henrique Palacio Baritti', 'Rafaella Silva Lima Petrolini', 'Renata Aparecida Mendes Bonvechio', 'Rodrigo Silva Oliveira', 'Ryan Souza Carvalho', 'Tatiana Lourenço Da Costa Antunes', 'Tatiane Araujo Da Cruz', 'Thiago Tadeu Faustino De Oliveira', 'Tiago Carvalho De Freitas Meneses', 'Victor Viana Roca'
     ].map(Utils.normalizeText));
+
+    // Verifica lista base + lista pessoal do usuário (personal.myDetratores)
+    const isDetratore = (nameRaw) => {
+      const key = Utils.normalizeText(nameRaw);
+      if (!key) return false;
+      if (FLAG_SET.has(key)) return true;
+      const personal_list = (personal.myDetratores || []).map(Utils.normalizeText);
+      return personal_list.some(d => d === key || (key.length >= 8 && (key.includes(d) || d.includes(key))));
+    };
 
     const apply = (personItem) => {
       try {
@@ -3837,7 +3978,7 @@
           else break;
         }
         const leading = clone.textContent || '';
-        if (!FLAG_SET.has(Utils.normalizeText(leading))) return;
+        if (!isDetratore(leading)) return;
         const img = personItem.querySelector('img.ts-avatar, img.pl-shared-item-img, img.ts-image') || personItem.querySelector('img');
         if (img && img.dataset.__g1Applied !== '1') {
           img.dataset.__g1Applied = '1';
