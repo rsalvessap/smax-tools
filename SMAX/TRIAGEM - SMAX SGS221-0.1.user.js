@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.08
+// @version      1.09
 // @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
@@ -5716,24 +5716,23 @@
    * =======================================================*/
   const PageLinkifier = (() => {
     const CNJ_RE = /\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}|\d{20})\b/g;
+    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE', 'PRE', 'SELECT', 'OPTION']);
 
-    // Elementos que não devem ser processados
-    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE', 'PRE']);
+    const hasCNJ = (text) => { CNJ_RE.lastIndex = 0; return CNJ_RE.test(text); };
 
     const processNode = (root) => {
+      if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+      if (root.dataset.smaxProc) return; // o próprio nó já é um link
+      if (root.closest && root.closest('#smax-triage-hud-backdrop')) return; // HUD cuida do próprio
+
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           const parent = node.parentElement;
           if (!parent) return NodeFilter.FILTER_REJECT;
-          // Já é um link CNJ criado por nós
           if (parent.dataset.smaxProc) return NodeFilter.FILTER_REJECT;
-          // Dentro do HUD de triagem (já linkificado via innerHTML)
-          if (parent.closest('#smax-triage-hud-backdrop')) return NodeFilter.FILTER_REJECT;
-          // Tags que não devem ser processadas
           if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-          // Sem CNJ no texto, pula
-          CNJ_RE.lastIndex = 0;
-          if (!CNJ_RE.test(node.nodeValue)) return NodeFilter.FILTER_SKIP;
+          if (parent.closest && parent.closest('#smax-triage-hud-backdrop')) return NodeFilter.FILTER_REJECT;
+          if (!hasCNJ(node.nodeValue)) return NodeFilter.FILTER_SKIP;
           return NodeFilter.FILTER_ACCEPT;
         }
       });
@@ -5743,6 +5742,7 @@
       while ((node = walker.nextNode())) toProcess.push(node);
 
       for (const textNode of toProcess) {
+        if (!textNode.parentNode) continue; // pode ter sido removido no loop
         CNJ_RE.lastIndex = 0;
         const text = textNode.nodeValue;
         const frag = document.createDocumentFragment();
@@ -5763,20 +5763,48 @@
       }
     };
 
-    const schedule = Utils.debounce((mutations) => {
-      for (const mut of mutations) {
-        for (const node of mut.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE) processNode(node);
-        }
-      }
-    }, 150);
+    // Fila de elementos pendentes — evita processar o mesmo elemento várias vezes
+    const pending = new Set();
+    const flush = Utils.debounce(() => {
+      const els = [...pending];
+      pending.clear();
+      els.forEach(processNode);
+    }, 250);
+    const queue = (el) => { pending.add(el); flush(); };
+
+    // Re-scan após navegação SPA (pushState / popstate)
+    const onNavigate = Utils.debounce(() => {
+      // Aguarda o Angular terminar de renderizar (heurística: 800ms)
+      setTimeout(() => processNode(document.body), 800);
+    }, 300);
 
     const init = () => {
-      // Processa o que já existe no DOM
-      processNode(document.body);
-      // Observa adições futuras (SPA navega sem recarregar a página)
-      const obs = new MutationObserver(schedule);
-      obs.observe(document.body, { childList: true, subtree: true });
+      // Scan inicial (para página carregada diretamente ou recarregada)
+      // Atraso pequeno para deixar o Angular terminar o primeiro render
+      setTimeout(() => processNode(document.body), 500);
+
+      // MutationObserver: captura nós adicionados E alterações de texto (characterData)
+      const obs = new MutationObserver((mutations) => {
+        for (const mut of mutations) {
+          if (mut.type === 'childList') {
+            for (const node of mut.addedNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE) queue(node);
+            }
+          } else if (mut.type === 'characterData') {
+            // Angular às vezes atualiza textContent de nós existentes em vez de adicionar novos
+            const parent = mut.target.parentElement;
+            if (parent && !parent.dataset.smaxProc) queue(parent);
+          }
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+      // Detecta navegação SPA via history API
+      const origPush    = history.pushState.bind(history);
+      const origReplace = history.replaceState.bind(history);
+      history.pushState    = (...a) => { origPush(...a);    onNavigate(); };
+      history.replaceState = (...a) => { origReplace(...a); onNavigate(); };
+      window.addEventListener('popstate', onNavigate);
     };
 
     return { init };
