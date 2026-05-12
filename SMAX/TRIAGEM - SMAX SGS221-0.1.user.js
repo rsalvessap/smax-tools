@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.05
+// @version      1.06
 // @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
@@ -5751,6 +5751,27 @@ if (window.location.hostname === 'eproc1g.tjsp.jus.br') {
     };
 
     const tryConsultar = (processNumber) => {
+      // Pesquisa rápida (barra superior — presente em todas as páginas do eProc)
+      const quickSearch = document.querySelector('#txtNumProcessoPesquisaRapida');
+      if (quickSearch) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (nativeSetter) nativeSetter.call(quickSearch, processNumber);
+        else quickSearch.value = processNumber;
+        quickSearch.dispatchEvent(new Event('input',  { bubbles: true }));
+        quickSearch.dispatchEvent(new Event('change', { bubbles: true }));
+        console.log('[SMAX Bridge] Consultando via pesquisa rápida:', processNumber);
+        setTimeout(() => {
+          quickSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+          quickSearch.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+          quickSearch.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+          // Fallback: submete o form pai se existir
+          const form = quickSearch.closest('form');
+          if (form) form.submit();
+        }, 200);
+        return true;
+      }
+
+      // Fallback: formulário de consulta interno (páginas específicas)
       const selectors = [
         '#txtNumProcesso', '#NumProcesso',
         'input[name="num_processo"]',
@@ -5778,7 +5799,7 @@ if (window.location.hostname === 'eproc1g.tjsp.jus.br') {
       if (!button && candidates.length) button = candidates[0];
       if (!button) return false;
 
-      console.log('[SMAX Bridge] Consultando:', processNumber);
+      console.log('[SMAX Bridge] Consultando via formulário interno:', processNumber);
       setTimeout(() => button.click(), 300);
       return true;
     };
@@ -5786,16 +5807,8 @@ if (window.location.hostname === 'eproc1g.tjsp.jus.br') {
     const consultarProcesso = (raw) => {
       const num = normalizeCNJ(raw);
       if (tryConsultar(num)) { sessionStorage.removeItem(STORAGE_KEY); return; }
-
-      // Sem formulário nesta página — guarda e vai para a principal
-      sessionStorage.setItem(STORAGE_KEY, num);
-      const acao = new URLSearchParams(window.location.search).get('acao') || '';
-      if (!acao || acao === 'principal') {
-        console.warn('[SMAX Bridge] Formulário não encontrado. Número:', num);
-        sessionStorage.removeItem(STORAGE_KEY);
-        return;
-      }
-      window.location.href = 'https://eproc1g.tjsp.jus.br/eproc/controlador.php';
+      console.warn('[SMAX Bridge] Campo de pesquisa não encontrado. Número:', num);
+      sessionStorage.removeItem(STORAGE_KEY);
     };
 
     // Listener postMessage (vindo do SMAX)
