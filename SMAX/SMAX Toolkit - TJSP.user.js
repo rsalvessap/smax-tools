@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.11
+// @version      1.12
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
-// @match        https://suporte.tjsp.jus.br/saw/Requests*
+// @match        https://suporte.tjsp.jus.br/saw/*
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
 // @run-at       document-start
 // @grant        GM_addStyle
