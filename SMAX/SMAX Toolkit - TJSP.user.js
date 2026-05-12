@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.13
+// @version      1.14
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -109,6 +109,7 @@
     const defaults = {
       myColors:     {},  // { "NOME NORMALIZADO": { bg: "#hex", fg: "#hex" } }
       myDetratores: [],  // ["NOME NORMALIZADO", ...]
+      themeMode:    'dark', // 'dark' | 'light'
     };
 
     const state = JSON.parse(JSON.stringify(defaults));
@@ -135,6 +136,28 @@
 
   const personal     = PersonalStore.state;
   const savePersonal = PersonalStore.save;
+
+  /* =========================================================
+   * ThemeManager — light / dark mode
+   * =======================================================*/
+  const ThemeManager = (() => {
+    const apply = (mode) => {
+      const m = (mode === 'light') ? 'light' : 'dark';
+      document.documentElement.dataset.smaxTheme = m; // on <html> so vars cascade everywhere
+      document.body.dataset.smaxTheme = m;
+      personal.themeMode = m;
+      savePersonal();
+      // Update toggle button if visible
+      const btn = document.getElementById('smax-theme-toggle-btn');
+      if (btn) {
+        btn.textContent = m === 'light' ? '🌙' : '☀️';
+        btn.title = m === 'light' ? 'Mudar para modo escuro' : 'Mudar para modo claro';
+      }
+    };
+    const toggle = () => apply(personal.themeMode === 'light' ? 'dark' : 'light');
+    const init   = () => apply(personal.themeMode || 'dark');
+    return { apply, toggle, init };
+  })();
 
   /* =========================================================
    * Activity Log (persistent workload tracking)
@@ -289,6 +312,62 @@
    * Styles
    * =======================================================*/
   GM_addStyle(`
+    /* ── Theme variables ── */
+    body[data-smax-theme="dark"] {
+      --sp-bg: #12161e;
+      --sp-surface: rgba(15,23,42,0.9);
+      --sp-surface-2: rgba(2,6,23,0.9);
+      --sp-text: #e5e7eb;
+      --sp-text-muted: #94a3b8;
+      --sp-text-dim: #64748b;
+      --sp-border: rgba(255,255,255,.1);
+      --sp-border-strong: rgba(255,255,255,.18);
+      --sp-primary: #38bdf8;
+      --sp-primary-bg: rgba(56,189,248,.1);
+      --sp-primary-hover: rgba(56,189,248,.18);
+      --sp-sidebar-bg: #0d1117;
+      --sp-sidebar-text: #94a3b8;
+      --sp-sidebar-active-bg: rgba(56,189,248,.12);
+      --sp-sidebar-active-text: #38bdf8;
+      --sp-input-bg: #1a2030;
+      --sp-input-border: #566378;
+      --sp-input-text: #edf0f4;
+      --sp-shadow: 0 25px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07) inset;
+      --sp-card-bg: rgba(15,23,42,0.75);
+      --sp-danger-bg: rgba(239,68,68,.12);
+      --sp-danger-text: #fca5a5;
+      --sp-danger-border: rgba(239,68,68,.3);
+      --sp-success-bg: rgba(34,197,94,.12);
+      --sp-success-text: #86efac;
+    }
+    body[data-smax-theme="light"] {
+      --sp-bg: #f3f5f9;
+      --sp-surface: #ffffff;
+      --sp-surface-2: #f1f5f9;
+      --sp-text: #0f172a;
+      --sp-text-muted: #475569;
+      --sp-text-dim: #94a3b8;
+      --sp-border: rgba(0,0,0,.1);
+      --sp-border-strong: rgba(0,0,0,.18);
+      --sp-primary: #135bec;
+      --sp-primary-bg: rgba(19,91,236,.08);
+      --sp-primary-hover: rgba(19,91,236,.15);
+      --sp-sidebar-bg: #e8ecf3;
+      --sp-sidebar-text: #475569;
+      --sp-sidebar-active-bg: rgba(19,91,236,.1);
+      --sp-sidebar-active-text: #135bec;
+      --sp-input-bg: #ffffff;
+      --sp-input-border: #cbd5e1;
+      --sp-input-text: #1e293b;
+      --sp-shadow: 0 8px 40px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06) inset;
+      --sp-card-bg: #ffffff;
+      --sp-danger-bg: rgba(239,68,68,.06);
+      --sp-danger-text: #dc2626;
+      --sp-danger-border: rgba(239,68,68,.2);
+      --sp-success-bg: rgba(34,197,94,.08);
+      --sp-success-text: #16a34a;
+    }
+
     .slick-cell.tmx-namecell { font-weight:700 !important; transition: box-shadow .15s ease; }
     .slick-cell.tmx-namecell a { color: inherit !important; }
     .slick-cell.tmx-namecell:focus-within { outline: 2px solid rgba(0,0,0,.25); outline-offset: 2px; }
@@ -458,11 +537,10 @@
     .smax-custom-dropdown-item:hover { border-color:#38bdf8; background:#0f172a; color:#f8fafc; }
     .smax-custom-dropdown-item[data-selected="true"] { border-color:#22c55e; background:#052e16; color:#bbf7d0; }
 
-    /* ── Settings panel · eye-comfort overrides ─────────────────
-       Optimised for cold-tone high-DPI Dell institutional monitors.
-       Warmer backgrounds, higher contrast borders, readable body text. */
+    /* ── Settings panel ── */
     #smax-settings {
-      background: #12161e !important;          /* warmer charcoal vs cold #0f172a */
+      background: var(--sp-bg, #12161e);
+      color: var(--sp-text, #e5e7eb);
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
@@ -472,58 +550,134 @@
     #smax-settings *, #smax-settings *::placeholder {
       -webkit-font-smoothing: antialiased;
     }
-    /* Brighter placeholder text (was invisible gray on dark) */
     #smax-settings input::placeholder,
     #smax-settings textarea::placeholder {
-      color: #8899aa !important;
+      color: var(--sp-text-dim, #8899aa) !important;
       opacity: 1 !important;
     }
-    /* All input/textarea fields: warmer bg, brighter borders, bigger text */
     #smax-settings input[type="text"],
     #smax-settings input[type="number"],
     #smax-settings textarea {
-      background: #1a2030 !important;          /* slightly warmer than #1e293b */
-      border-color: #566378 !important;        /* more visible than #475569 */
-      color: #edf0f4 !important;
+      background: var(--sp-input-bg, #1a2030) !important;
+      border-color: var(--sp-input-border, #566378) !important;
+      color: var(--sp-input-text, #edf0f4) !important;
       font-size: 13px !important;
       line-height: 1.5;
     }
     #smax-settings input:focus,
     #smax-settings textarea:focus {
-      border-color: #6cb4d9 !important;        /* softer focus ring (less electric blue) */
-      box-shadow: 0 0 6px rgba(108,180,217,.30) !important;
+      border-color: var(--sp-primary, #38bdf8) !important;
+      box-shadow: 0 0 6px rgba(56,189,248,.25) !important;
       outline: none;
     }
-    /* Labels: warmer white instead of cool slate */
     #smax-settings label {
-      color: #d0d7de !important;
+      color: var(--sp-text, #d0d7de) !important;
     }
-    /* Section headings */
-    #smax-settings [style*="font-weight:600"][style*="color:#e5e7eb"],
-    #smax-settings [style*="font-weight:600"][style*="color:#38bdf8"] {
-      text-shadow: 0 1px 2px rgba(0,0,0,.25);
+    #smax-settings .smax-sp-card {
+      background: var(--sp-surface, rgba(15,23,42,0.85));
+      border: 1px solid var(--sp-border, rgba(255,255,255,.1));
+      border-radius: 10px;
+      padding: 14px;
     }
-    /* Inner cards - warmer tint */
-    #smax-settings [style*="rgba(2,6,23"] {
-      background: rgba(18,22,30,0.92) !important;
+    #smax-settings .smax-sp-section-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--sp-text, #e5e7eb);
+      margin-bottom: 10px;
     }
-    #smax-settings [style*="rgba(15,23,42"] {
-      background: rgba(22,28,38,0.75) !important;
+    #smax-settings .smax-sp-muted {
+      font-size: 11px;
+      color: var(--sp-text-muted, #94a3b8);
     }
-    /* Borders: boost visibility across the board */
-    #smax-settings [style*="border:1px solid #475569"],
-    #smax-settings [style*="border: 1px solid #475569"],
-    #smax-settings [style*="border:1px solid rgba(255,255,255,.1)"] {
-      border-color: #566378 !important;
-    }
-    /* Team item cards */
     #smax-settings .smax-team-item {
-      border-color: rgba(255,255,255,.14) !important;
-      background: linear-gradient(135deg,rgba(22,28,38,0.85) 0%,rgba(30,38,50,0.5) 100%) !important;
+      border-color: var(--sp-border-strong, rgba(255,255,255,.14)) !important;
+      background: var(--sp-card-bg, rgba(15,23,42,0.75)) !important;
     }
-    /* Buttons in the bottom action row */
     #smax-settings button {
       font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    /* Sidebar nav */
+    #smax-settings-sidebar .smax-sidebar-item {
+      width: 100%;
+      text-align: left;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      background: transparent;
+      color: var(--sp-sidebar-text, #94a3b8);
+      transition: all .15s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #smax-settings-sidebar .smax-sidebar-item:hover {
+      background: var(--sp-primary-hover, rgba(56,189,248,.1));
+      color: var(--sp-primary, #38bdf8);
+    }
+    #smax-settings-sidebar .smax-sidebar-item.active {
+      background: var(--sp-sidebar-active-bg, rgba(56,189,248,.12));
+      color: var(--sp-sidebar-active-text, #38bdf8);
+      font-weight: 600;
+    }
+    /* Content area */
+    #smax-settings-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      min-width: 0;
+    }
+    #smax-settings-content::-webkit-scrollbar { width: 6px; }
+    #smax-settings-content::-webkit-scrollbar-track { background: transparent; }
+    #smax-settings-content::-webkit-scrollbar-thumb { background: var(--sp-border-strong, rgba(255,255,255,.2)); border-radius: 999px; }
+    /* Toggle chips */
+    .smax-pref-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--sp-border, rgba(255,255,255,.1));
+      background: var(--sp-surface, rgba(255,255,255,.03));
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--sp-text, #e2e8f0);
+      white-space: nowrap;
+      transition: border-color .15s, background .15s;
+    }
+    .smax-pref-chip:hover {
+      border-color: var(--sp-primary, #38bdf8);
+      background: var(--sp-primary-bg, rgba(56,189,248,.06));
+    }
+    .smax-pref-chip input[type="checkbox"] { accent-color: var(--sp-primary, #38bdf8); }
+    /* Detractor items */
+    .smax-det-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--sp-danger-bg, rgba(239,68,68,.06));
+      border: 1px solid var(--sp-danger-border, rgba(239,68,68,.2));
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .smax-det-item span { flex:1; font-size:12px; color: var(--sp-danger-text, #fca5a5); }
+    .smax-det-item button { font-size:10px; padding:2px 8px; border-radius:4px; border:none; background: var(--sp-danger-bg); color: var(--sp-danger-text); cursor:pointer; }
+    /* Team items in light mode */
+    body[data-smax-theme="light"] .smax-team-item {
+      background: #f8fafc !important;
+      border-color: rgba(0,0,0,.1) !important;
+    }
+    body[data-smax-theme="light"] #smax-settings-sidebar {
+      border-right-color: rgba(0,0,0,.1);
+    }
+    /* Input overrides for light mode */
+    body[data-smax-theme="light"] #smax-settings input[type="text"],
+    body[data-smax-theme="light"] #smax-settings input[type="number"],
+    body[data-smax-theme="light"] #smax-settings textarea {
+      background: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      color: #1e293b !important;
     }
 
     /* ── Zen Mode ── */
@@ -2903,6 +3057,16 @@
     let detachPeopleWatcher;
     let currentTeams = []; // Local state for editing
     let editingTeamId = null; // ID of team currently being edited ('__NEW__' for new team)
+    let activeSection = 'geral'; // current sidebar section
+
+    const SECTIONS = [
+      { id: 'geral',         icon: '⚙️',  label: 'Geral' },
+      { id: 'equipes',       icon: '👥',  label: 'Equipes' },
+      { id: 'especialistas', icon: '👤',  label: 'Especialistas' },
+      { id: 'detratores',    icon: '💀',  label: 'Detratores' },
+      { id: 'templates',     icon: '📋',  label: 'Templates' },
+      { id: 'exportar',      icon: '📤',  label: 'Exportar' },
+    ];
 
     // Load fresh config from prefs
     const reloadConfig = () => {
@@ -2916,14 +3080,37 @@
       RefreshOverlay.show();
     };
 
-    const renderHeader = () => `
-      <div style="display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:10px 20px;background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%);border-radius:12px;margin:-16px -16px 16px -16px;">
-        <div style="font-weight:600;font-size:17px;letter-spacing:.03em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.3);">
-          ⚙️ Configurações do Assistente
+    const renderHeader = () => {
+      const isDark = (personal.themeMode || 'dark') === 'dark';
+      return `
+      <div id="smax-settings-header" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:10px 18px;background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%);border-radius:12px 12px 0 0;flex-shrink:0;gap:12px;">
+        <div style="font-weight:700;font-size:16px;letter-spacing:.03em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.3);white-space:nowrap;">
+          ⚙️ SMAX Toolkit
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button id="smax-theme-toggle-btn"
+            title="${isDark ? 'Mudar para modo claro' : 'Mudar para modo escuro'}"
+            style="border:none;background:rgba(255,255,255,.18);color:#fff;font-size:17px;width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease;flex-shrink:0;">
+            ${isDark ? '☀️' : '🌙'}
+          </button>
+          <button id="smax-settings-close-btn"
+            title="Fechar"
+            style="border:none;background:rgba(255,255,255,.18);color:#fff;font-size:18px;width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease;flex-shrink:0;">
+            ✕
+          </button>
         </div>
       </div>`;
+    };
 
-
+    const renderSidebar = () => `
+      <nav id="smax-settings-sidebar" style="width:190px;flex-shrink:0;background:var(--sp-sidebar-bg,#0d1117);border-right:1px solid var(--sp-border,rgba(255,255,255,.1));padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+        ${SECTIONS.map(s => `
+          <button class="smax-sidebar-item${s.id === activeSection ? ' active' : ''}" data-section="${s.id}">
+            <span style="font-size:14px;flex-shrink:0;">${s.icon}</span>
+            <span>${s.label}</span>
+          </button>
+        `).join('')}
+      </nav>`;
 
     // --- Team Editor Methods ---
 
@@ -3404,137 +3591,6 @@
       }
     };
 
-    const renderPanel = () => {
-      if (!container) return;
-
-      // Triador selection UI - friendly and simple
-      const triadorName = prefs.myPersonName || '';
-      const triadorSection = `
-        <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,.2);box-shadow:0 4px 16px rgba(0,0,0,.3);">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-            <span style="font-size:20px;">👤</span>
-            <div>
-              <div style="font-weight:600;color:#38bdf8;font-size:15px;">Quem é você?</div>
-              <div style="font-size:11px;color:#94a3b8;">Seu nome será vinculado aos chamados globais</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;">
-            <div style="flex:1;position:relative;min-width:200px;">
-              <input type="text" id="smax-triador-search" placeholder="Digite seu nome para buscar..." 
-                style="width:100%;padding:10px 12px;border:1px solid #475569;border-radius:8px;font-size:13px;background:#1e293b;color:#f8fafc;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;">
-              <div id="smax-triador-results" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:250px;overflow-y:auto;background:#020617;border:1px solid #475569;border-top:none;border-radius:0 0 8px 8px;z-index:100;box-shadow:0 12px 24px rgba(0,0,0,.5);"></div>
-            </div>
-            ${triadorName ? `
-              <div id="smax-triador-current" style="display:flex;align-items:center;padding:8px 14px;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);border-radius:8px;font-size:12px;color:#fff;font-weight:500;white-space:nowrap;box-shadow:0 4px 12px rgba(34,197,94,.35);flex-shrink:0;">
-                ✓ ${Utils.escapeHtml(triadorName)}
-              </div>
-            ` : `
-              <div id="smax-triador-current" style="display:flex;align-items:center;padding:8px 14px;background:rgba(220,38,38,.15);border:1px solid rgba(220,38,38,.4);border-radius:8px;font-size:12px;color:#fca5a5;white-space:nowrap;flex-shrink:0;">
-                ⚠️ Não configurado
-              </div>
-            `}
-          </div>
-        </div>
-      `;
-
-      container.innerHTML = `
-        ${renderHeader()}
-        ${renderTeamsList()}
-        ${triadorSection}
-        
-        <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);border:1px solid rgba(255,255,255,.08);">
-          <div style="font-weight:600;color:#e5e7eb;font-size:13px;margin-bottom:10px;">Opções</div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
-            ${[
-              ['zenModeOn',        '🧘 Zen Mode',          'Oculta campos desnecessários no formulário'],
-              ['radarOn',          '📡 Radar de pendentes', 'Badge com chamados rejeitados ou aguardando aceite'],
-              ['enlargeCommentsOn','💬 Comentários expandidos','Exibe todos os comentários sem limite de altura'],
-              ['collapseOn',       '📂 Recolher seções',   'Recolhe automaticamente seções desnecessárias'],
-              ['flagSkullOn',      '💀 Caveira detratores', 'Marca visualmente pessoas na lista de detratores'],
-              ['nameBadgesOn',     '🏷️ Badges na grid',    'Exibe responsável ao lado do chamado na lista'],
-            ].map(([key, label, tip]) => `
-              <label title="${tip}" style="display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);cursor:pointer;font-size:12px;color:#e2e8f0;white-space:nowrap;">
-                <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''} style="accent-color:#38bdf8;">
-                ${label}
-              </label>
-            `).join('')}
-          </div>
-        </div>
-
-        <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);border:1px solid rgba(255,255,255,.08);">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <div>
-              <div style="font-weight:600;color:#e5e7eb;font-size:13px;">💀 Meus Detratores</div>
-              <div style="font-size:11px;color:#64748b;margin-top:2px;">Lista pessoal — não compartilhada com a equipe</div>
-            </div>
-            <button type="button" id="smax-det-add-btn" style="font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:rgba(239,68,68,.2);color:#fca5a5;cursor:pointer;">+ Adicionar</button>
-          </div>
-          <div id="smax-det-list" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;">
-            ${(personal.myDetratores || []).length === 0
-              ? `<div style="font-size:12px;color:#475569;text-align:center;padding:10px;">Nenhum detrator pessoal cadastrado.</div>`
-              : (personal.myDetratores || []).map((name, i) => `
-                <div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:6px 10px;">
-                  <span style="flex:1;font-size:12px;color:#fca5a5;">${Utils.escapeHtml(name)}</span>
-                  <button class="smax-det-del" data-idx="${i}" style="font-size:10px;padding:2px 8px;border-radius:4px;border:none;background:rgba(239,68,68,.2);color:#fca5a5;cursor:pointer;">✕</button>
-                </div>`).join('')
-            }
-          </div>
-          <div id="smax-det-input-row" style="display:none;margin-top:8px;display:none;gap:6px;">
-            <input type="text" id="smax-det-input" placeholder="Nome completo do detrator" style="flex:1;padding:7px 10px;border-radius:6px;border:1px solid #475569;background:#1e293b;color:#f8fafc;font-size:12px;">
-            <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;cursor:pointer;">Salvar</button>
-            <button type="button" id="smax-det-cancel"  style="padding:7px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#94a3b8;font-size:12px;cursor:pointer;">✕</button>
-          </div>
-        </div>
-
-        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
-          <button type="button" id="smax-log-export-all" style="padding:10px 18px;border-radius:8px;border:1px solid rgba(56,189,248,.2);background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px;">
-            <span style="font-size:14px;">📊</span> Exportar logs <span style="color:#38bdf8;font-weight:600;">(${ActivityLog.getCount()})</span>
-          </button>
-          <button type="button" id="smax-config-toggle-btn" style="padding:10px 18px;border-radius:8px;border:1px solid rgba(56,189,248,.2);background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px;">
-            <span style="font-size:14px;">🔧</span> Configuração manual
-          </button>
-          <button type="button" id="smax-guide-toggle-btn" style="padding:10px 18px;border-radius:8px;border:1px solid rgba(56,189,248,.2);background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px;">
-            <span style="font-size:14px;">📖</span> Guia Rápido
-          </button>
-        </div>
-
-        <div id="smax-config-editor-panel" style="display:none;margin-top:12px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,.2);box-shadow:0 4px 16px rgba(0,0,0,.3);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <div style="font-size:11px;color:#94a3b8;">Edite o JSON abaixo e clique em Salvar. Copie para enviar a colegas.</div>
-            <button type="button" id="smax-config-close-btn" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;" title="Fechar">✕</button>
-          </div>
-          <textarea id="smax-config-io-textarea" spellcheck="false"
-            style="width:100%;min-height:160px;max-height:400px;resize:vertical;padding:10px 12px;border:1px solid #475569;border-radius:8px;font-size:11px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;background:#1e293b;color:#e2e8f0;line-height:1.5;box-sizing:border-box;transition:border-color .15s ease;"></textarea>
-          <div id="smax-config-io-status" style="font-size:11px;color:#94a3b8;min-height:16px;margin:8px 0;"></div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
-            <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;">📋 Copiar</button>
-            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);color:#fff;font-size:12px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
-          </div>
-        </div>
-
-        <div id="smax-guide-panel" style="display:none;margin-top:12px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,.2);box-shadow:0 4px 16px rgba(0,0,0,.3);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <div style="font-size:13px;font-weight:600;color:#38bdf8;">📖 Guia Rápido</div>
-            <button type="button" id="smax-guide-close-btn" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;" title="Fechar">✕</button>
-          </div>
-          <ul style="margin:0;padding-left:18px;font-size:12px;color:#e2e8f0;line-height:1.6;">
-            <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
-            <li>"Meus finais" limita a fila de triagem aos IDs desejados.</li>
-            <li>Editar a resposta rápida já a deixa pronta; "ENVIAR" grava tudo no SMAX.</li>
-            <li>Filtre os chamados através do SMAX corretamente antes de começar a Triagem.</li>
-            <li>Configure corretamente os finais e colegas ausentes através do ícone de configuração.</li>
-            <li>No mesmo painel, escolha quem assume automaticamente globais vinculados.</li>
-            <li>O filtro (não a coluna) "Hora de Criação" do SMAX permite escolher um intervalo de datas.</li>
-            <li>Os chamados são ordenados sempre por VIP, e mais antigos primeiro.</li>
-            <li style="color:#fca5a5;font-weight:600;">CUIDADO DOBRADO: Vincular Global NÃO VERIFICA se o número é válido.</li>
-          </ul>
-        </div>
-      `;
-      wirePanelEvents();
-      wireTeamEvents();
-      wireBottomPanelEvents();
-    };
-
     // Shareable config keys (no personal identity — meant for team distribution)
     const CONFIG_KEYS = [
       'nameBadgesOn', 'collapseOn', 'enlargeCommentsOn', 'flagSkullOn',
@@ -3559,20 +3615,13 @@
 
     const applyConfigJSON = (raw) => {
       let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch (err) {
-        return { ok: false, msg: `JSON inválido: ${err.message}` };
-      }
-      if (typeof parsed !== 'object' || parsed === null) {
-        return { ok: false, msg: 'O JSON deve ser um objeto { ... }.' };
-      }
+      try { parsed = JSON.parse(raw); }
+      catch (err) { return { ok: false, msg: `JSON inválido: ${err.message}` }; }
+      if (typeof parsed !== 'object' || parsed === null) return { ok: false, msg: 'O JSON deve ser um objeto.' };
       let count = 0;
       CONFIG_KEYS.forEach(key => {
         if (key === 'teamsConfigRaw' && parsed.teams !== undefined) {
-          prefs.teamsConfigRaw = typeof parsed.teams === 'string'
-            ? parsed.teams
-            : JSON.stringify(parsed.teams);
+          prefs.teamsConfigRaw = typeof parsed.teams === 'string' ? parsed.teams : JSON.stringify(parsed.teams);
           count++;
         } else if (parsed[key] !== undefined) {
           prefs[key] = parsed[key];
@@ -3586,43 +3635,226 @@
       return { ok: true, msg: `${count} configurações aplicadas. ✓` };
     };
 
-    const wireBottomPanelEvents = () => {
-      if (!container) return;
+    /* ── Section content renderers ── */
 
-      // --- Detratores pessoais ---
-      const detAddBtn    = container.querySelector('#smax-det-add-btn');
-      const detInputRow  = container.querySelector('#smax-det-input-row');
-      const detInput     = container.querySelector('#smax-det-input');
-      const detConfirm   = container.querySelector('#smax-det-confirm');
-      const detCancel    = container.querySelector('#smax-det-cancel');
+    const renderSectionGeral = () => {
+      const triadorName = prefs.myPersonName || '';
+      return `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="smax-sp-card">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <span style="font-size:20px;">👤</span>
+              <div>
+                <div style="font-weight:600;color:var(--sp-primary,#38bdf8);font-size:15px;">Quem é você?</div>
+                <div class="smax-sp-muted">Seu nome será vinculado aos chamados globais</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div style="flex:1;position:relative;min-width:180px;">
+                <input type="text" id="smax-triador-search" placeholder="Buscar por nome..."
+                  style="width:100%;padding:9px 12px;border-radius:8px;font-size:13px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;">
+                <div id="smax-triador-results" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:var(--sp-surface-2,#020617);border:1px solid var(--sp-input-border,#475569);border-top:none;border-radius:0 0 8px 8px;z-index:200;box-shadow:0 12px 24px rgba(0,0,0,.5);"></div>
+              </div>
+              ${triadorName ? `
+                <div id="smax-triador-current" style="display:flex;align-items:center;padding:8px 14px;background:linear-gradient(135deg,#22c55e,#16a34a);border-radius:8px;font-size:12px;color:#fff;font-weight:500;white-space:nowrap;box-shadow:0 4px 12px rgba(34,197,94,.35);flex-shrink:0;">
+                  ✓ ${Utils.escapeHtml(triadorName)}
+                </div>
+              ` : `
+                <div id="smax-triador-current" style="display:flex;align-items:center;padding:8px 14px;background:var(--sp-danger-bg);border:1px solid var(--sp-danger-border);border-radius:8px;font-size:12px;color:var(--sp-danger-text);white-space:nowrap;flex-shrink:0;">
+                  ⚠️ Não configurado
+                </div>
+              `}
+            </div>
+          </div>
+          <div class="smax-sp-card">
+            <div class="smax-sp-section-title">Opções dos módulos</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              ${[
+                ['zenModeOn',        '🧘 Zen Mode',              'Oculta campos desnecessários no formulário'],
+                ['radarOn',          '📡 Radar de pendentes',    'Badge com chamados rejeitados ou aguardando aceite'],
+                ['enlargeCommentsOn','💬 Comentários expandidos','Exibe todos os comentários sem limite de altura'],
+                ['collapseOn',       '📂 Recolher seções',      'Recolhe automaticamente seções desnecessárias'],
+                ['flagSkullOn',      '💀 Caveira detratores',   'Marca visualmente pessoas na lista de detratores'],
+                ['nameBadgesOn',     '🏷️ Badges na grid',       'Exibe responsável ao lado do chamado na lista'],
+              ].map(([key, label, tip]) => `
+                <label class="smax-pref-chip" title="${tip}">
+                  <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''}>
+                  ${label}
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>`;
+    };
 
-      if (detAddBtn) detAddBtn.addEventListener('click', () => {
-        detInputRow.style.display = 'flex';
-        detInput?.focus();
-      });
-      if (detCancel) detCancel.addEventListener('click', () => { detInputRow.style.display = 'none'; if (detInput) detInput.value = ''; });
-      if (detConfirm) detConfirm.addEventListener('click', () => {
-        const name = (detInput?.value || '').trim();
-        if (!name) return;
-        if (!Array.isArray(personal.myDetratores)) personal.myDetratores = [];
-        if (!personal.myDetratores.includes(name)) personal.myDetratores.push(name);
-        savePersonal();
-        renderPanel(); // re-render para atualizar lista
-      });
-      if (detInput) detInput.addEventListener('keydown', e => { if (e.key === 'Enter') detConfirm?.click(); });
+    const renderSectionEquipes = () => `<div style="display:flex;flex-direction:column;gap:14px;">${renderTeamsList()}</div>`;
 
-      container.querySelectorAll('.smax-det-del').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const idx = parseInt(btn.dataset.idx, 10);
-          if (!isNaN(idx)) {
-            personal.myDetratores.splice(idx, 1);
-            savePersonal();
-            renderPanel();
+    const renderSectionEspecialistas = () => {
+      const allWorkers = [];
+      currentTeams.forEach(t => (t.workers || []).forEach(w => allWorkers.push({ ...w, teamName: t.name || t.id })));
+      if (!allWorkers.length) return `<div class="smax-sp-card"><div class="smax-sp-muted" style="text-align:center;padding:20px;">Nenhum especialista cadastrado nas equipes.</div></div>`;
+      return `
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">Cores personalizadas por especialista</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">Cores salvas localmente — não afetam outros usuários.</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${allWorkers.map(w => {
+              const normName = Utils.normalizeText(w.name || '');
+              const myColor  = personal.myColors[normName] || {};
+              const bgVal    = myColor.bg || '#1e293b';
+              const fgVal    = myColor.fg || '#f8fafc';
+              return `
+                <div style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface-2);flex-wrap:wrap;">
+                  <div style="flex:1;min-width:100px;">
+                    <div style="font-size:13px;font-weight:500;color:var(--sp-text);">${Utils.escapeHtml(w.name || '')}</div>
+                    <div class="smax-sp-muted">${Utils.escapeHtml(w.teamName)}</div>
+                  </div>
+                  <label style="font-size:11px;color:var(--sp-text-muted);">Fundo</label>
+                  <input type="color" class="smax-worker-color-bg" data-name="${Utils.escapeHtml(normName)}" value="${bgVal}" style="width:30px;height:26px;border:1px solid var(--sp-border);border-radius:4px;cursor:pointer;padding:1px;">
+                  <label style="font-size:11px;color:var(--sp-text-muted);">Texto</label>
+                  <input type="color" class="smax-worker-color-fg" data-name="${Utils.escapeHtml(normName)}" value="${fgVal}" style="width:30px;height:26px;border:1px solid var(--sp-border);border-radius:4px;cursor:pointer;padding:1px;">
+                  <div class="smax-color-preview" data-name="${Utils.escapeHtml(normName)}" style="width:56px;height:24px;border-radius:6px;background:${bgVal};color:${fgVal};font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:600;">
+                    Prévia
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    };
+
+    const renderSectionDetratores = () => `
+      <div class="smax-sp-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div>
+            <div class="smax-sp-section-title" style="margin-bottom:2px;">💀 Meus Detratores</div>
+            <div class="smax-sp-muted">Lista pessoal — não compartilhada com a equipe</div>
+          </div>
+          <button type="button" id="smax-det-add-btn" style="font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:var(--sp-danger-bg);color:var(--sp-danger-text);cursor:pointer;border:1px solid var(--sp-danger-border);">+ Adicionar</button>
+        </div>
+        <div id="smax-det-list" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;margin-bottom:4px;">
+          ${(personal.myDetratores || []).length === 0
+            ? `<div style="font-size:12px;color:var(--sp-text-dim);text-align:center;padding:24px;">Nenhum detrator pessoal cadastrado.</div>`
+            : (personal.myDetratores || []).map((name, i) => `
+              <div class="smax-det-item">
+                <span>${Utils.escapeHtml(name)}</span>
+                <button class="smax-det-del" data-idx="${i}">✕</button>
+              </div>`).join('')
           }
-        });
-      });
+        </div>
+        <div id="smax-det-input-row" style="display:none;margin-top:8px;gap:6px;">
+          <input type="text" id="smax-det-input" placeholder="Nome completo do detrator" style="flex:1;padding:7px 10px;border-radius:6px;font-size:12px;min-width:0;">
+          <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;cursor:pointer;flex-shrink:0;">Salvar</button>
+          <button type="button" id="smax-det-cancel" style="padding:7px 10px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+      </div>`;
 
-      // --- Preference toggles ---
+    const renderSectionTemplates = () => `
+      <div class="smax-sp-card">
+        <div class="smax-sp-section-title">📋 Templates de Resposta</div>
+        <div class="smax-sp-muted" style="margin-bottom:14px;">Templates armazenados localmente. Clique em um template para inserir no campo de texto aberto do SMAX.</div>
+        <button type="button" id="smax-open-tpl-btn" style="padding:10px 20px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(59,130,246,.35);">
+          Abrir Gerenciador de Templates
+        </button>
+      </div>`;
+
+    const renderSectionExportar = () => `
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📊 Log de Atividades</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">${ActivityLog.getCount()} registros armazenados.</div>
+          <button type="button" id="smax-log-export-all" style="padding:10px 18px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:12px;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;gap:6px;">
+            📥 Exportar CSV
+          </button>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">🔧 Configuração JSON</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">Edite e clique Salvar. Copie para compartilhar com colegas.</div>
+          <textarea id="smax-config-io-textarea" spellcheck="false"
+            style="width:100%;min-height:200px;max-height:320px;resize:vertical;padding:10px 12px;border-radius:8px;font-size:11px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;line-height:1.5;box-sizing:border-box;transition:border-color .15s ease;"></textarea>
+          <div id="smax-config-io-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin:8px 0;"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:12px;cursor:pointer;">📋 Copiar</button>
+            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
+          </div>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📖 Guia Rápido</div>
+          <ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--sp-text);line-height:1.7;">
+            <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
+            <li>"Meus finais" limita a fila de triagem aos IDs desejados.</li>
+            <li>Editar a resposta rápida já a deixa pronta; "ENVIAR" grava tudo no SMAX.</li>
+            <li>Filtre os chamados no SMAX corretamente antes de iniciar a Triagem.</li>
+            <li>Configure finais e ausências no painel de Equipes.</li>
+            <li>O filtro "Hora de Criação" do SMAX permite escolher intervalo de datas.</li>
+            <li>Os chamados são ordenados por VIP e mais antigos primeiro.</li>
+            <li style="color:var(--sp-danger-text);font-weight:600;">CUIDADO: Vincular Global NÃO VERIFICA se o número é válido.</li>
+          </ul>
+        </div>
+      </div>`;
+
+    const renderSectionContent = () => {
+      switch (activeSection) {
+        case 'geral':         return renderSectionGeral();
+        case 'equipes':       return renderSectionEquipes();
+        case 'especialistas': return renderSectionEspecialistas();
+        case 'detratores':    return renderSectionDetratores();
+        case 'templates':     return renderSectionTemplates();
+        case 'exportar':      return renderSectionExportar();
+        default:              return renderSectionGeral();
+      }
+    };
+
+    /* ── Per-section event wiring ── */
+
+    const wireGeralEvents = () => {
+      if (!container) return;
+      const triadorSearch  = container.querySelector('#smax-triador-search');
+      const triadorResults = container.querySelector('#smax-triador-results');
+
+      if (triadorSearch && triadorResults) {
+        const selectTriador = (personId, personName) => {
+          prefs.myPersonId   = personId;
+          prefs.myPersonName = personName;
+          savePrefs();
+          triadorSearch.value = '';
+          triadorResults.style.display = 'none';
+          renderPanel();
+        };
+        const renderTriadorResults = (term) => {
+          const q = (term || '').trim().toUpperCase();
+          triadorResults.style.display = q ? 'block' : 'none';
+          if (!q) return;
+          if (!DataRepository.peopleCache.size) {
+            triadorResults.innerHTML = '<div style="padding:8px;color:#999;font-size:11px;">Carregando...</div>';
+            return;
+          }
+          const people = [...DataRepository.peopleCache.values()];
+          const matches = people.filter(p =>
+            (p.name || '').toUpperCase().includes(q) || (p.upn || '').toUpperCase().includes(q)
+          ).slice(0, 10);
+          if (!matches.length) {
+            triadorResults.innerHTML = '<div style="padding:8px;color:#999;font-size:11px;">Nenhum resultado.</div>';
+          } else {
+            triadorResults.innerHTML = matches.map(p => `
+              <div class="smax-triador-pick" data-id="${p.id}" data-name="${Utils.escapeHtml(p.name)}"
+                style="padding:6px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--sp-border,#eee);transition:background .1s;">
+                <div style="font-weight:500;color:var(--sp-text);">${Utils.escapeHtml(p.name)}</div>
+                <div style="color:var(--sp-text-muted);font-size:10px;">${Utils.escapeHtml(p.upn || p.id)}</div>
+              </div>
+            `).join('');
+            triadorResults.querySelectorAll('.smax-triador-pick').forEach(el => {
+              el.addEventListener('click', () => selectTriador(el.dataset.id, el.dataset.name));
+            });
+          }
+        };
+        triadorSearch.addEventListener('input', () => renderTriadorResults(triadorSearch.value));
+        triadorSearch.addEventListener('focus', () => {
+          DataRepository.ensurePeopleLoaded();
+          if (triadorSearch.value) renderTriadorResults(triadorSearch.value);
+        });
+        triadorSearch.addEventListener('blur', () => setTimeout(() => { triadorResults.style.display = 'none'; }, 200));
+      }
+
       container.querySelectorAll('.smax-pref-toggle').forEach(cb => {
         cb.addEventListener('change', () => {
           const key = cb.dataset.key;
@@ -3630,158 +3862,133 @@
             prefs[key] = cb.checked;
             savePrefs();
             if (key === 'zenModeOn') ZenMode.apply();
-            if (key === 'radarOn') { if (cb.checked) RadarRevisar.query(); }
+            if (key === 'radarOn' && cb.checked) RadarRevisar.query();
           }
         });
       });
-
-      // --- Log export button ---
-      const logBtn = container.querySelector('#smax-log-export-all');
-      if (logBtn) logBtn.addEventListener('click', () => ActivityLog.exportCsv());
-
-      // --- Config editor toggle ---
-      const toggleBtn = container.querySelector('#smax-config-toggle-btn');
-      const editorPanel = container.querySelector('#smax-config-editor-panel');
-      const closeBtn = container.querySelector('#smax-config-close-btn');
-      const textarea = container.querySelector('#smax-config-io-textarea');
-      const statusEl = container.querySelector('#smax-config-io-status');
-      const copyBtn = container.querySelector('#smax-config-copy-btn');
-      const saveBtn = container.querySelector('#smax-config-save-btn');
-
-      const setIOStatus = (msg, color = '#94a3b8') => {
-        if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color; }
-      };
-
-      const openEditor = () => {
-        if (!editorPanel || !textarea) return;
-        textarea.value = buildConfigJSON();
-        editorPanel.style.display = 'block';
-        setIOStatus('');
-      };
-
-      const closeEditor = () => {
-        if (editorPanel) editorPanel.style.display = 'none';
-      };
-
-      if (toggleBtn) toggleBtn.addEventListener('click', () => {
-        if (editorPanel && editorPanel.style.display !== 'none') closeEditor();
-        else openEditor();
-      });
-
-      if (closeBtn) closeBtn.addEventListener('click', closeEditor);
-
-      if (copyBtn) {
-        copyBtn.addEventListener('click', () => {
-          if (!textarea || !textarea.value.trim()) return;
-          textarea.select();
-          navigator.clipboard.writeText(textarea.value).then(() => {
-            setIOStatus('Copiado! ✓', '#4ade80');
-          }).catch(() => {
-            document.execCommand('copy');
-            setIOStatus('Copiado! ✓', '#4ade80');
-          });
-        });
-      }
-
-      if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-          if (!textarea) return;
-          const raw = (textarea.value || '').trim();
-          if (!raw) { setIOStatus('O campo está vazio.', '#fca5a5'); return; }
-          const result = applyConfigJSON(raw);
-          if (!result.ok) { setIOStatus(result.msg, '#fca5a5'); return; }
-          setIOStatus(result.msg, '#4ade80');
-          // Re-render to reflect changes
-          setTimeout(() => renderPanel(), 300);
-        });
-      }
-
-      // --- Guide panel toggle ---
-      const guideToggle = container.querySelector('#smax-guide-toggle-btn');
-      const guidePanel = container.querySelector('#smax-guide-panel');
-      const guideCloseBtn = container.querySelector('#smax-guide-close-btn');
-
-      if (guideToggle && guidePanel) {
-        guideToggle.addEventListener('click', () => {
-          guidePanel.style.display = guidePanel.style.display !== 'none' ? 'none' : 'block';
-        });
-      }
-      if (guideCloseBtn && guidePanel) {
-        guideCloseBtn.addEventListener('click', () => {
-          guidePanel.style.display = 'none';
-        });
-      }
     };
 
-    const wirePanelEvents = () => {
+    const wireEspecialistasEvents = () => {
+      if (!container) return;
+      container.querySelectorAll('.smax-worker-color-bg, .smax-worker-color-fg').forEach(input => {
+        input.addEventListener('change', () => {
+          const normName = input.dataset.name;
+          const row = input.closest('div[style]');
+          const bgInput = row?.querySelector(`.smax-worker-color-bg[data-name="${normName}"]`);
+          const fgInput = row?.querySelector(`.smax-worker-color-fg[data-name="${normName}"]`);
+          if (bgInput && fgInput) {
+            personal.myColors[normName] = { bg: bgInput.value, fg: fgInput.value };
+            savePersonal();
+            ColorRegistry.clearCache();
+            const preview = row.querySelector(`.smax-color-preview[data-name="${normName}"]`);
+            if (preview) { preview.style.background = bgInput.value; preview.style.color = fgInput.value; }
+          }
+        });
+      });
+    };
+
+    const wireDetratoresEvents = () => {
+      if (!container) return;
+      const detAddBtn   = container.querySelector('#smax-det-add-btn');
+      const detInputRow = container.querySelector('#smax-det-input-row');
+      const detInput    = container.querySelector('#smax-det-input');
+      const detConfirm  = container.querySelector('#smax-det-confirm');
+      const detCancel   = container.querySelector('#smax-det-cancel');
+      if (detAddBtn) detAddBtn.addEventListener('click', () => { detInputRow.style.display = 'flex'; detInput?.focus(); });
+      if (detCancel) detCancel.addEventListener('click', () => { detInputRow.style.display = 'none'; if (detInput) detInput.value = ''; });
+      if (detConfirm) detConfirm.addEventListener('click', () => {
+        const name = (detInput?.value || '').trim();
+        if (!name) return;
+        if (!Array.isArray(personal.myDetratores)) personal.myDetratores = [];
+        if (!personal.myDetratores.includes(name)) personal.myDetratores.push(name);
+        savePersonal();
+        renderPanel();
+      });
+      if (detInput) detInput.addEventListener('keydown', e => { if (e.key === 'Enter') detConfirm?.click(); });
+      container.querySelectorAll('.smax-det-del').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (!isNaN(idx)) { personal.myDetratores.splice(idx, 1); savePersonal(); renderPanel(); }
+        });
+      });
+    };
+
+    const wireTemplatesEvents = () => {
+      const btn = container?.querySelector('#smax-open-tpl-btn');
+      if (btn) btn.addEventListener('click', () => {
+        container.style.display = 'none';
+        const tplModal = document.getElementById('smax-tpl-modal');
+        if (tplModal) tplModal.classList.add('open');
+      });
+    };
+
+    const wireExportarEvents = () => {
+      if (!container) return;
+      const textarea = container.querySelector('#smax-config-io-textarea');
+      const statusEl = container.querySelector('#smax-config-io-status');
+      const copyBtn  = container.querySelector('#smax-config-copy-btn');
+      const saveBtn  = container.querySelector('#smax-config-save-btn');
+      const logBtn   = container.querySelector('#smax-log-export-all');
+
+      if (textarea) textarea.value = buildConfigJSON();
+
+      const setIOStatus = (msg, color) => {
+        if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color || 'var(--sp-text-muted)'; }
+      };
+      if (logBtn) logBtn.addEventListener('click', () => ActivityLog.exportCsv());
+      if (copyBtn) copyBtn.addEventListener('click', () => {
+        if (!textarea?.value.trim()) return;
+        navigator.clipboard.writeText(textarea.value)
+          .then(() => setIOStatus('Copiado! ✓', '#4ade80'))
+          .catch(() => { textarea.select(); document.execCommand('copy'); setIOStatus('Copiado! ✓', '#4ade80'); });
+      });
+      if (saveBtn) saveBtn.addEventListener('click', () => {
+        const raw = (textarea?.value || '').trim();
+        if (!raw) { setIOStatus('O campo está vazio.', '#fca5a5'); return; }
+        const result = applyConfigJSON(raw);
+        setIOStatus(result.msg, result.ok ? '#4ade80' : '#fca5a5');
+        if (result.ok) setTimeout(() => renderPanel(), 300);
+      });
+    };
+
+    /* ── Main render ── */
+
+    const renderPanel = () => {
       if (!container) return;
 
-      // Triador search logic
-      const triadorSearch = container.querySelector('#smax-triador-search');
-      const triadorResults = container.querySelector('#smax-triador-results');
-      const triadorCurrent = container.querySelector('#smax-triador-current');
+      container.innerHTML = `
+        ${renderHeader()}
+        <div style="display:flex;flex:1;min-height:0;overflow:hidden;">
+          ${renderSidebar()}
+          <div id="smax-settings-content">
+            ${renderSectionContent()}
+          </div>
+        </div>
+      `;
 
-      if (triadorSearch && triadorResults && triadorCurrent) {
-        const selectTriador = (personId, personName) => {
-          prefs.myPersonId = personId;
-          prefs.myPersonName = personName;
-          savePrefs();
-          triadorCurrent.textContent = personName || '(Não selecionado)';
-          triadorSearch.value = '';
-          triadorResults.style.display = 'none';
-        };
+      // Header button events
+      const themeToggleBtn = container.querySelector('#smax-theme-toggle-btn');
+      if (themeToggleBtn) themeToggleBtn.addEventListener('click', ThemeManager.toggle);
+      const panelCloseBtn = container.querySelector('#smax-settings-close-btn');
+      if (panelCloseBtn) panelCloseBtn.addEventListener('click', () => { container.style.display = 'none'; });
 
-        const renderTriadorResults = (query) => {
-          const q = (query || '').toUpperCase().trim();
-          if (!q) {
-            triadorResults.style.display = 'none';
-            return;
-          }
-
-          DataRepository.ensurePeopleLoaded();
-          const people = Array.from(DataRepository.peopleCache.values());
-
-          if (!people.length) {
-            triadorResults.innerHTML = '<div style="padding:8px;color:#999;font-size:11px;">Carregando pessoas...</div>';
-            triadorResults.style.display = 'block';
-            return;
-          }
-
-          const matches = people.filter(p =>
-            (p.name || '').toUpperCase().includes(q) ||
-            (p.upn || '').toUpperCase().includes(q)
-          ).slice(0, 10);
-
-          if (!matches.length) {
-            triadorResults.innerHTML = '<div style="padding:8px;color:#999;font-size:11px;">Nenhum resultado.</div>';
-          } else {
-            triadorResults.innerHTML = matches.map(p => `
-              <div class="smax-triador-pick" data-id="${p.id}" data-name="${Utils.escapeHtml(p.name)}" 
-                style="padding:6px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid #f0f0f0;transition:background .1s;">
-                <div style="font-weight:500;">${Utils.escapeHtml(p.name)}</div>
-                <div style="color:#666;font-size:10px;">${Utils.escapeHtml(p.upn || p.id)}</div>
-              </div>
-            `).join('');
-
-            triadorResults.querySelectorAll('.smax-triador-pick').forEach(el => {
-              el.addEventListener('mouseenter', () => { el.style.background = '#f0f9ff'; });
-              el.addEventListener('mouseleave', () => { el.style.background = '#fff'; });
-              el.addEventListener('click', () => {
-                selectTriador(el.dataset.id, el.dataset.name);
-              });
-            });
-          }
-          triadorResults.style.display = 'block';
-        };
-
-        triadorSearch.addEventListener('input', () => renderTriadorResults(triadorSearch.value));
-        triadorSearch.addEventListener('focus', () => {
-          DataRepository.ensurePeopleLoaded();
-          if (triadorSearch.value) renderTriadorResults(triadorSearch.value);
+      // Sidebar navigation
+      container.querySelectorAll('.smax-sidebar-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+          activeSection = btn.dataset.section;
+          editingTeamId = null;
+          renderPanel();
         });
-        triadorSearch.addEventListener('blur', () => {
-          setTimeout(() => { triadorResults.style.display = 'none'; }, 200);
-        });
+      });
+
+      // Section event wiring
+      switch (activeSection) {
+        case 'geral':         wireGeralEvents();         break;
+        case 'equipes':       wireTeamEvents();          break;
+        case 'especialistas': wireEspecialistasEvents(); break;
+        case 'detratores':    wireDetratoresEvents();    break;
+        case 'templates':     wireTemplatesEvents();     break;
+        case 'exportar':      wireExportarEvents();      break;
       }
     };
 
@@ -3790,31 +3997,43 @@
       toggleBtn = document.createElement('button');
       toggleBtn.id = 'smax-settings-btn';
       toggleBtn.textContent = '⚙️';
-      toggleBtn.title = 'Configurações de Equipes e Triagem';
+      toggleBtn.title = 'Configurações';
       Object.assign(toggleBtn.style, { position: 'fixed', right: '12px', bottom: '12px', zIndex: 999999, border: 'none' });
       document.body.appendChild(toggleBtn);
 
       container = document.createElement('div');
       container.id = 'smax-settings';
       Object.assign(container.style, {
-        position: 'fixed', right: '12px', bottom: '70px', minWidth: '420px', maxWidth: '650px', maxHeight: '85vh', minHeight: '300px', overflow: 'auto', zIndex: 999999, padding: '16px', borderRadius: '16px', background: '#0f172a', boxShadow: '0 25px 60px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.08) inset', display: 'none', backdropFilter: 'blur(8px)', color: '#e5e7eb', fontSize: '14px'
+        position: 'fixed',
+        right: '12px',
+        bottom: '70px',
+        width: '720px',
+        maxWidth: '97vw',
+        height: '82vh',
+        maxHeight: '82vh',
+        zIndex: '999999',
+        borderRadius: '16px',
+        boxShadow: '0 25px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08) inset',
+        display: 'none',
+        backdropFilter: 'blur(8px)',
+        fontSize: '14px',
+        flexDirection: 'column',
+        overflow: 'hidden',
       });
       document.body.appendChild(container);
 
       toggleBtn.addEventListener('click', () => {
-        const visible = container.style.display !== 'none';
+        const visible = container.style.display === 'flex';
         if (!visible) {
           DataRepository.ensurePeopleLoaded();
           reloadConfig();
           renderPanel();
-          container.style.display = 'block';
+          container.style.display = 'flex';
         } else {
           container.style.display = 'none';
         }
       });
     };
-
-
 
     return { init, renderPanel };
   })();
@@ -6468,6 +6687,7 @@
    * Boot
    * =======================================================*/
   const boot = () => {
+    ThemeManager.init();
     CommentExpander.init();
     SectionTweaks.init();
     Orchestrator.init();
