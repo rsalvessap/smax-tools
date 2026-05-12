@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.07
+// @version      1.08
 // @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
@@ -5711,6 +5711,78 @@
   })();
 
   /* =========================================================
+   * PageLinkifier — linkifica CNJs em toda a página SMAX
+   * (tela normal de chamado, fora do HUD de triagem)
+   * =======================================================*/
+  const PageLinkifier = (() => {
+    const CNJ_RE = /\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}|\d{20})\b/g;
+
+    // Elementos que não devem ser processados
+    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE', 'PRE']);
+
+    const processNode = (root) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          // Já é um link CNJ criado por nós
+          if (parent.dataset.smaxProc) return NodeFilter.FILTER_REJECT;
+          // Dentro do HUD de triagem (já linkificado via innerHTML)
+          if (parent.closest('#smax-triage-hud-backdrop')) return NodeFilter.FILTER_REJECT;
+          // Tags que não devem ser processadas
+          if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+          // Sem CNJ no texto, pula
+          CNJ_RE.lastIndex = 0;
+          if (!CNJ_RE.test(node.nodeValue)) return NodeFilter.FILTER_SKIP;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+
+      const toProcess = [];
+      let node;
+      while ((node = walker.nextNode())) toProcess.push(node);
+
+      for (const textNode of toProcess) {
+        CNJ_RE.lastIndex = 0;
+        const text = textNode.nodeValue;
+        const frag = document.createDocumentFragment();
+        let last = 0, m;
+        while ((m = CNJ_RE.exec(text)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          const formatted = Utils.normalizeCNJ(m[1]);
+          const span = document.createElement('span');
+          span.textContent = formatted;
+          span.dataset.smaxProc = formatted;
+          span.style.cssText = 'color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;';
+          span.title = `Consultar processo no eProc: ${formatted}`;
+          frag.appendChild(span);
+          last = m.index + m[0].length;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        textNode.parentNode.replaceChild(frag, textNode);
+      }
+    };
+
+    const schedule = Utils.debounce((mutations) => {
+      for (const mut of mutations) {
+        for (const node of mut.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) processNode(node);
+        }
+      }
+    }, 150);
+
+    const init = () => {
+      // Processa o que já existe no DOM
+      processNode(document.body);
+      // Observa adições futuras (SPA navega sem recarregar a página)
+      const obs = new MutationObserver(schedule);
+      obs.observe(document.body, { childList: true, subtree: true });
+    };
+
+    return { init };
+  })();
+
+  /* =========================================================
    * Boot
    * =======================================================*/
   const boot = () => {
@@ -5721,6 +5793,7 @@
     GridTracker.init();
     TriageHUD.init();
     SkullFlag.init();
+    PageLinkifier.init();
     DataRepository.refreshQueueFromApi().catch(() => { });
     DataRepository.ensureSupportGroups().catch(() => { });
   };
