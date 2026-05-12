@@ -764,9 +764,6 @@
       }, d));
     };
 
-    // Expõe globalmente para uso em atributos onclick de strings innerHTML
-    window._smaxOpenEproc = openEprocProcess;
-
     const linkifyCNJ = (html) => {
       if (!html) return html;
       const tmp = document.createElement('div');
@@ -776,9 +773,9 @@
         const formatted = normalizeCNJ(match);
         const span = document.createElement('span');
         span.textContent = formatted;
+        span.dataset.smaxProc = formatted;
         span.style.cssText = 'color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;';
         span.title = `Consultar processo no eProc: ${formatted}`;
-        span.addEventListener('click', () => openEprocProcess(formatted));
         return span;
       };
 
@@ -834,6 +831,16 @@
       openEprocProcess
     };
   })();
+
+  // Delegação global de cliques em spans CNJ (data-smax-proc)
+  // Usa fase de captura para interceptar antes do router SPA do SMAX
+  document.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-smax-proc]');
+    if (!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    Utils.openEprocProcess(target.dataset.smaxProc);
+  }, true);
 
   /* =========================================================
    * API client (tenant + REST helpers)
@@ -4948,7 +4955,7 @@
         const displayProcNum = isCNJFormat ? Utils.normalizeCNJ(rawProcNum) : rawProcNum;
         const processNumberHtml = rawProcNum
           ? `<span style="color:#64748b;">•</span> ${isCNJFormat
-              ? `<span onclick="window._smaxOpenEproc('${displayProcNum}')" style="color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;" title="Consultar processo no eProc: ${Utils.escapeHtml(displayProcNum)}">${Utils.escapeHtml(displayProcNum)}</span>`
+              ? `<span data-smax-proc="${Utils.escapeHtml(displayProcNum)}" style="color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;" title="Consultar processo no eProc: ${Utils.escapeHtml(displayProcNum)}">${Utils.escapeHtml(displayProcNum)}</span>`
               : `<span style="font-family:monospace;color:#a5b4fc;">${Utils.escapeHtml(rawProcNum)}</span>`
             }`
           : '';
