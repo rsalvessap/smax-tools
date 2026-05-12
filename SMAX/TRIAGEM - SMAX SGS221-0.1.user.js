@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.06
+// @version      1.07
 // @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
@@ -747,10 +747,9 @@
     const EPROC_ORIGIN = 'https://eproc1g.tjsp.jus.br';
     const EPROC_URL    = 'https://eproc1g.tjsp.jus.br/eproc/controlador.php';
 
-    // Abre (ou foca) a aba do eProc e despacha o número via postMessage.
-    // O bridge script rodando no eProc recebe e executa a consulta dentro da sessão ativa.
+    // Abre sempre em nova aba e despacha o número via postMessage para o bridge executar a consulta.
     const openEprocProcess = (processNumber) => {
-      const eprocWin = window.open(EPROC_URL, 'eproc-consulta');
+      const eprocWin = window.open(EPROC_URL, '_blank');
       if (!eprocWin) {
         // Popup bloqueado pelo navegador — copia o número como fallback
         navigator.clipboard?.writeText(processNumber).catch(() => {});
@@ -758,8 +757,8 @@
         return;
       }
       const msg = { type: 'SMAX_CONSULTAR_PROCESSO', num: processNumber };
-      // Envia em múltiplos intervalos para cobrir tab já aberta (rápido) e nova aba (aguarda carregamento)
-      [300, 1200, 3000].forEach(d => setTimeout(() => {
+      // Envia em múltiplos intervalos: a nova aba precisa carregar antes de receber a mensagem
+      [800, 2000, 4000].forEach(d => setTimeout(() => {
         try { eprocWin.postMessage(msg, EPROC_ORIGIN); } catch (_) {}
       }, d));
     };
