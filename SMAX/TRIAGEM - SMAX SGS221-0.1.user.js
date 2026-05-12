@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.03
-// @description  Interface enhancements for triagem workflow
+// @version      1.04
+// @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
+// @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
 // @run-at       document-start
 // @grant        GM_addStyle
 // @grant        GM_getValue
@@ -20,6 +21,9 @@
   'use strict';
 
   if (window.top && window.top !== window.self) return;
+
+  // Código SMAX roda apenas no domínio do SMAX
+  if (window.location.hostname !== 'suporte.tjsp.jus.br') return;
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const getPageCKEditor = () => (pageWindow && pageWindow.CKEDITOR ? pageWindow.CKEDITOR : null);
@@ -5717,3 +5721,95 @@
 
   Utils.onDomReady(boot);
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── eProc SMAX Bridge ────────────────────────────────────────────────────
+// Roda no domínio do eProc. Recebe o número de processo via postMessage
+// enviado pelo script SMAX e executa a consulta dentro da sessão ativa.
+// ═══════════════════════════════════════════════════════════════════════════
+if (window.location.hostname === 'eproc1g.tjsp.jus.br') {
+  (function () {
+    'use strict';
+
+    const SMAX_ORIGIN = 'https://suporte.tjsp.jus.br';
+    const STORAGE_KEY = 'eproc_smax_bridge_proc';
+    const MSG_TYPE    = 'SMAX_CONSULTAR_PROCESSO';
+
+    const normalizeCNJ = (s) => {
+      const t = (s || '').trim();
+      const d = t.replace(/\D/g, '');
+      return d.length === 20
+        ? `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13,14)}.${d.slice(14,16)}.${d.slice(16,20)}`
+        : t;
+    };
+
+    const tryConsultar = (processNumber) => {
+      const selectors = [
+        '#txtNumProcesso', '#NumProcesso',
+        'input[name="num_processo"]',
+        'input[id*="Processo"][type="text"]',
+        'input[name*="processo"][type="text"]',
+      ];
+      let input = null;
+      for (const s of selectors) { input = document.querySelector(s); if (input) break; }
+      if (!input) return false;
+
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      if (nativeSetter) nativeSetter.call(input, processNumber);
+      else input.value = processNumber;
+      input.dispatchEvent(new Event('input',  { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const keywords = ['pesquisar', 'consultar', 'buscar', 'localizar'];
+      const candidates = [
+        ...document.querySelectorAll('button[type="submit"]'),
+        ...document.querySelectorAll('input[type="submit"]'),
+        ...document.querySelectorAll('.infraButton'),
+        ...document.querySelectorAll('.btn-primary'),
+      ];
+      let button = candidates.find(b => keywords.some(k => (b.textContent || b.value || '').toLowerCase().includes(k)));
+      if (!button && candidates.length) button = candidates[0];
+      if (!button) return false;
+
+      console.log('[SMAX Bridge] Consultando:', processNumber);
+      setTimeout(() => button.click(), 300);
+      return true;
+    };
+
+    const consultarProcesso = (raw) => {
+      const num = normalizeCNJ(raw);
+      if (tryConsultar(num)) { sessionStorage.removeItem(STORAGE_KEY); return; }
+
+      // Sem formulário nesta página — guarda e vai para a principal
+      sessionStorage.setItem(STORAGE_KEY, num);
+      const acao = new URLSearchParams(window.location.search).get('acao') || '';
+      if (!acao || acao === 'principal') {
+        console.warn('[SMAX Bridge] Formulário não encontrado. Número:', num);
+        sessionStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      window.location.href = 'https://eproc1g.tjsp.jus.br/eproc/controlador.php';
+    };
+
+    // Listener postMessage (vindo do SMAX)
+    window.addEventListener('message', (event) => {
+      if (event.origin !== SMAX_ORIGIN) return;
+      if (!event.data || event.data.type !== MSG_TYPE) return;
+      console.log('[SMAX Bridge] Mensagem recebida:', event.data.num);
+      consultarProcesso(event.data.num);
+    });
+
+    // Retomada após redirecionamento interno
+    const run = () => {
+      const pending = sessionStorage.getItem(STORAGE_KEY);
+      if (!pending) return;
+      if (tryConsultar(pending)) sessionStorage.removeItem(STORAGE_KEY);
+      else sessionStorage.removeItem(STORAGE_KEY);
+    };
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+
+    console.log('[SMAX Bridge] Aguardando mensagens do SMAX...');
+  })();
+}

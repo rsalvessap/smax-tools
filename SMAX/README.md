@@ -8,8 +8,7 @@ Scripts de automação e aprimoramento de interface para o sistema SMAX do Tribu
 
 | Script | Descrição |
 |--------|-----------|
-| `TRIAGEM - SMAX SGS221-0.1.user.js` | Interface de triagem de chamados no SMAX |
-| `eproc-smax-bridge.user.js` | Bridge para consulta de processos no eProc direto do SMAX |
+| `TRIAGEM - SMAX SGS221-0.1.user.js` | Interface de triagem no SMAX + bridge de consulta de processos no eProc |
 
 ---
 
@@ -24,21 +23,15 @@ Scripts de automação e aprimoramento de interface para o sistema SMAX do Tribu
 
 ---
 
-## 2. Instalação dos scripts
-
-### Script principal — Triagem SMAX
+## 2. Instalação
 
 Clique no link abaixo para instalar diretamente pelo Tampermonkey:
 
 **[⬇ Instalar TRIAGEM - SMAX SGS221](https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js)**
 
-### Script bridge — Consulta de processos no eProc
+> O Tampermonkey abrirá uma aba de confirmação. Clique em **Instalar**.
 
-Necessário para que o clique em números de processo abra a consulta direto no eProc logado.
-
-**[⬇ Instalar eProc SMAX Bridge](https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/eproc-smax-bridge.user.js)**
-
-> Em ambos os casos, o Tampermonkey abrirá uma aba de confirmação. Clique em **Instalar**.
+Um único script cobre tanto o SMAX quanto o eProc — não é necessário instalar nada separado.
 
 ---
 
