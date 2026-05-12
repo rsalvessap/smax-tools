@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.09
+// @version      1.10
 // @description  Interface de triagem para o SMAX TJSP + bridge de consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
@@ -37,6 +37,8 @@
       collapseOn: false,
       enlargeCommentsOn: true,
       flagSkullOn: true,
+      zenModeOn: false,
+      radarOn: true,
       nameGroups: {},
       ausentes: [],
       nameColors: {},
@@ -485,6 +487,71 @@
     #smax-settings button {
       font-family: "Segoe UI", system-ui, sans-serif;
     }
+
+    /* ── Zen Mode ── */
+    body.smax-zen-active div[id*="Fabricante_c_container"],
+    body.smax-zen-active div[id*="TicketFornecedor_c_container"],
+    body.smax-zen-active div[id*="TicketAuxiliar_c_container"],
+    body.smax-zen-active div[id*="DataEnvioFornecedor_c_container"],
+    body.smax-zen-active div[id*="Garantia_c_container"],
+    body.smax-zen-active div[id*="DataAgendamento_c_container"],
+    body.smax-zen-active div[id*="PreferredContactMethod_container"],
+    body.smax-zen-active div[data-aid="related-knowledge-preview"],
+    body.smax-zen-active div[id*="RegisteredForServiceComponent_container"],
+    body.smax-zen-active div[id*="SubscriptionActionType_container"],
+    body.smax-zen-active div[id*="TipoAtendimento_c_container"],
+    body.smax-zen-active div[data-aid="tab-panel-nav-task-plan"],
+    body.smax-zen-active div[data-aid="tab-panel-nav-slts"],
+    body.smax-zen-active div[data-aid="tab-panel-nav-involved-cis"],
+    body.smax-zen-active div[data-aid="tab-panel-nav-related-news"],
+    body.smax-zen-active div[data-aid="tab-panel-nav-reservation"] { display: none !important; }
+
+    /* ── Radar badge ── */
+    #smax-radar-badge { position:fixed; top:10px; right:130px; z-index:999998; background:#ef4444; color:#fff; font-size:11px; font-weight:700; min-width:22px; padding:3px 7px; border-radius:999px; cursor:pointer; display:none; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(239,68,68,.5); font-family:system-ui,sans-serif; }
+    #smax-radar-badge:hover { background:#dc2626; }
+    #smax-radar-dropdown { position:fixed; top:36px; right:80px; z-index:999999; background:#0f172a; border:1px solid rgba(255,255,255,.1); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.5); padding:10px; min-width:240px; max-height:360px; overflow-y:auto; display:none; font-family:system-ui,sans-serif; }
+    .smax-radar-item { padding:7px 10px; border-radius:6px; font-size:12px; color:#e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
+    .smax-radar-item:hover { background:rgba(255,255,255,.07); }
+    .smax-radar-pill { font-size:10px; font-weight:700; padding:2px 6px; border-radius:999px; white-space:nowrap; }
+    .smax-radar-pill.rejected { background:rgba(239,68,68,.2); color:#fca5a5; border:1px solid rgba(239,68,68,.4); }
+    .smax-radar-pill.accept   { background:rgba(34,197,94,.2);  color:#86efac; border:1px solid rgba(34,197,94,.4); }
+
+    /* ── Templates ── */
+    #smax-tpl-btn { position:fixed; right:16px; bottom:80px; z-index:999998; width:46px; height:46px; border-radius:50%; border:none; background:#0f172a; color:#f8fafc; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.4); cursor:pointer; transition:background .15s; }
+    #smax-tpl-btn:hover { background:#1e293b; }
+    #smax-tpl-modal { position:fixed; inset:0; z-index:1000001; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.55); backdrop-filter:blur(4px); }
+    #smax-tpl-modal.open { display:flex; }
+    #smax-tpl-box { background:#0f172a; border:1px solid rgba(255,255,255,.1); border-radius:14px; width:680px; max-width:96vw; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 24px 56px rgba(0,0,0,.6); overflow:hidden; font-family:system-ui,sans-serif; }
+    #smax-tpl-box h3 { margin:0; padding:14px 18px; font-size:15px; font-weight:600; color:#f8fafc; background:linear-gradient(90deg,#0ea5e9,#8b5cf6); }
+    .smax-tpl-tabs { display:flex; border-bottom:1px solid rgba(255,255,255,.08); }
+    .smax-tpl-tab { flex:1; padding:9px; text-align:center; font-size:12px; font-weight:600; color:#94a3b8; cursor:pointer; transition:color .15s,background .15s; }
+    .smax-tpl-tab.active { color:#38bdf8; background:rgba(56,189,248,.06); border-bottom:2px solid #38bdf8; }
+    .smax-tpl-list { flex:1; overflow-y:auto; padding:10px; }
+    .smax-tpl-empty { color:#64748b; font-size:13px; text-align:center; padding:30px; }
+    .smax-tpl-item { padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,.07); margin-bottom:7px; background:rgba(255,255,255,.02); cursor:pointer; transition:background .15s,border-color .15s; }
+    .smax-tpl-item:hover { background:rgba(56,189,248,.08); border-color:rgba(56,189,248,.3); }
+    .smax-tpl-item-title { font-size:13px; font-weight:600; color:#e2e8f0; }
+    .smax-tpl-item-preview { font-size:11px; color:#64748b; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .smax-tpl-item-actions { display:flex; gap:6px; margin-top:6px; }
+    .smax-tpl-item-actions button { font-size:10px; padding:3px 8px; border-radius:4px; border:none; cursor:pointer; }
+    .smax-tpl-edit-btn { background:rgba(56,189,248,.15); color:#38bdf8; }
+    .smax-tpl-del-btn  { background:rgba(239,68,68,.15);  color:#fca5a5; }
+    .smax-tpl-form { padding:12px; border-top:1px solid rgba(255,255,255,.08); display:flex; flex-direction:column; gap:8px; }
+    .smax-tpl-form input, .smax-tpl-form textarea { background:#1e293b; border:1px solid #475569; border-radius:6px; color:#f8fafc; padding:8px 10px; font-size:12px; width:100%; box-sizing:border-box; font-family:system-ui,sans-serif; }
+    .smax-tpl-form textarea { min-height:80px; resize:vertical; }
+    .smax-tpl-form-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .smax-tpl-save-btn { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; padding:7px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .smax-tpl-cancel-btn { background:rgba(255,255,255,.06); color:#94a3b8; border:1px solid rgba(255,255,255,.1); padding:7px 14px; border-radius:6px; font-size:12px; cursor:pointer; }
+    .smax-tpl-add-btn { display:block; width:100%; padding:8px; text-align:center; font-size:12px; color:#38bdf8; background:rgba(56,189,248,.06); border:1px dashed rgba(56,189,248,.3); border-radius:6px; cursor:pointer; margin-top:4px; }
+    .smax-tpl-footer { display:flex; gap:8px; padding:10px 12px; border-top:1px solid rgba(255,255,255,.08); justify-content:flex-end; }
+    .smax-tpl-footer button { font-size:12px; padding:7px 16px; border-radius:6px; cursor:pointer; }
+    .smax-tpl-close-btn { background:rgba(255,255,255,.06); color:#94a3b8; border:1px solid rgba(255,255,255,.1); }
+
+    /* ── Botões de resolução no topo ── */
+    .tmx-top-actions { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+    .tmx-lifecycle-menu { position:fixed; z-index:999999; background:#0f172a; border:1px solid rgba(255,255,255,.12); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.5); padding:4px 0; min-width:180px; display:none; }
+    .tmx-lifecycle-menu-item { padding:8px 14px; cursor:pointer; font-size:13px; color:#e2e8f0; }
+    .tmx-lifecycle-menu-item:hover { background:rgba(255,255,255,.07); }
   `);
 
 
@@ -3302,7 +3369,26 @@
         ${renderTeamsList()}
         ${triadorSection}
         
-        <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;">
+        <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);border:1px solid rgba(255,255,255,.08);">
+          <div style="font-weight:600;color:#e5e7eb;font-size:13px;margin-bottom:10px;">Opções</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            ${[
+              ['zenModeOn',        '🧘 Zen Mode',          'Oculta campos desnecessários no formulário'],
+              ['radarOn',          '📡 Radar de pendentes', 'Badge com chamados rejeitados ou aguardando aceite'],
+              ['enlargeCommentsOn','💬 Comentários expandidos','Exibe todos os comentários sem limite de altura'],
+              ['collapseOn',       '📂 Recolher seções',   'Recolhe automaticamente seções desnecessárias'],
+              ['flagSkullOn',      '💀 Caveira detratores', 'Marca visualmente pessoas na lista de detratores'],
+              ['nameBadgesOn',     '🏷️ Badges na grid',    'Exibe responsável ao lado do chamado na lista'],
+            ].map(([key, label, tip]) => `
+              <label title="${tip}" style="display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);cursor:pointer;font-size:12px;color:#e2e8f0;white-space:nowrap;">
+                <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''} style="accent-color:#38bdf8;">
+                ${label}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
           <button type="button" id="smax-log-export-all" style="padding:10px 18px;border-radius:8px;border:1px solid rgba(56,189,248,.2);background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);color:#e5e7eb;font-size:12px;cursor:pointer;transition:all .15s ease;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px;">
             <span style="font-size:14px;">📊</span> Exportar logs <span style="color:#38bdf8;font-weight:600;">(${ActivityLog.getCount()})</span>
           </button>
@@ -3354,6 +3440,7 @@
     // Shareable config keys (no personal identity — meant for team distribution)
     const CONFIG_KEYS = [
       'nameBadgesOn', 'collapseOn', 'enlargeCommentsOn', 'flagSkullOn',
+      'zenModeOn', 'radarOn',
       'nameGroups', 'ausentes', 'nameColors', 'enableRealWrites',
       'defaultGlobalChangeId', 'personalFinalsRaw', 'teamsConfigRaw'
     ];
@@ -3403,6 +3490,19 @@
 
     const wireBottomPanelEvents = () => {
       if (!container) return;
+
+      // --- Preference toggles ---
+      container.querySelectorAll('.smax-pref-toggle').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const key = cb.dataset.key;
+          if (key in prefs) {
+            prefs[key] = cb.checked;
+            savePrefs();
+            if (key === 'zenModeOn') ZenMode.apply();
+            if (key === 'radarOn') { if (cb.checked) RadarRevisar.query(); }
+          }
+        });
+      });
 
       // --- Log export button ---
       const logBtn = container.querySelector('#smax-log-export-all');
@@ -5711,6 +5811,419 @@
   })();
 
   /* =========================================================
+   * ZenMode — oculta campos desnecessários do formulário
+   * =======================================================*/
+  const ZenMode = (() => {
+    const ZEN_CLASS = 'smax-zen-active';
+
+    const apply = () => {
+      if (prefs.zenModeOn) document.body.classList.add(ZEN_CLASS);
+      else document.body.classList.remove(ZEN_CLASS);
+    };
+
+    const init = () => apply();
+    return { init, apply };
+  })();
+
+  /* =========================================================
+   * RadarRevisar — badge com chamados rejeitados/pendentes
+   * =======================================================*/
+  const RadarRevisar = (() => {
+    let badgeEl = null;
+    let dropdownEl = null;
+    let dropdownOpen = false;
+
+    const BADGE_ID    = 'smax-radar-badge';
+    const DROPDOWN_ID = 'smax-radar-dropdown';
+
+    const ensureElements = () => {
+      if (!badgeEl) {
+        badgeEl = document.createElement('div');
+        badgeEl.id = BADGE_ID;
+        badgeEl.setAttribute('role', 'button');
+        badgeEl.setAttribute('aria-label', 'Chamados pendentes');
+        document.body.appendChild(badgeEl);
+        badgeEl.addEventListener('click', toggleDropdown);
+      }
+      if (!dropdownEl) {
+        dropdownEl = document.createElement('div');
+        dropdownEl.id = DROPDOWN_ID;
+        document.body.appendChild(dropdownEl);
+        document.addEventListener('mousedown', (e) => {
+          if (!badgeEl.contains(e.target) && !dropdownEl.contains(e.target)) closeDropdown();
+        });
+      }
+    };
+
+    const closeDropdown = () => {
+      if (dropdownEl) dropdownEl.style.display = 'none';
+      dropdownOpen = false;
+    };
+
+    const toggleDropdown = () => {
+      if (!dropdownEl) return;
+      dropdownOpen = !dropdownOpen;
+      dropdownEl.style.display = dropdownOpen ? 'block' : 'none';
+      if (dropdownOpen) {
+        const r = badgeEl.getBoundingClientRect();
+        dropdownEl.style.top  = (r.bottom + 6) + 'px';
+        dropdownEl.style.right = (window.innerWidth - r.right) + 'px';
+        dropdownEl.style.left = 'auto';
+      }
+    };
+
+    const renderDropdown = (rejected, ready) => {
+      if (!dropdownEl) return;
+      const all = [
+        ...rejected.map(id => ({ id, type: 'rejected' })),
+        ...ready.map(id => ({ id, type: 'accept' })),
+      ];
+      if (!all.length) { dropdownEl.innerHTML = '<div style="padding:12px;font-size:12px;color:#64748b;">Nenhum chamado pendente.</div>'; return; }
+      dropdownEl.innerHTML = all.map(({ id, type }) => `
+        <div class="smax-radar-item" data-id="${Utils.escapeHtml(id)}">
+          <span class="smax-radar-pill ${type === 'rejected' ? 'rejected' : 'accept'}">${type === 'rejected' ? 'Rejeitado' : 'Aceitar'}</span>
+          <span style="font-family:monospace;">${Utils.escapeHtml(id)}</span>
+        </div>
+      `).join('');
+      dropdownEl.querySelectorAll('.smax-radar-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const id = el.dataset.id;
+          if (id) window.open(`https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(id)}/general`, '_blank');
+          closeDropdown();
+        });
+      });
+    };
+
+    const updateBadge = (rejected, ready) => {
+      ensureElements();
+      const total = rejected.length + ready.length;
+      if (total === 0) { badgeEl.style.display = 'none'; closeDropdown(); return; }
+      badgeEl.style.display = 'flex';
+      badgeEl.textContent = total;
+      badgeEl.title = `${rejected.length} rejeitado(s) • ${ready.length} aguardando aceite`;
+      renderDropdown(rejected, ready);
+    };
+
+    const query = async () => {
+      if (!prefs.radarOn) return;
+      const personId = prefs.myPersonId;
+      if (!personId) return;
+      try {
+        const url = `/rest/213963628/ems/Request?filter=(ExpertAssignee=%27${encodeURIComponent(personId)}%27%20and%20(PhaseId%3D%27Review%27%20or%20PhaseId%3D%27Accept%27))&layout=Id,PhaseId,Status&size=500`;
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = (data.entities || []).map(e => ({
+          id: (e.properties?.Id || '').replace(/^IMRfc:/, ''),
+          phase: e.properties?.PhaseId || '',
+        }));
+        const rejected = items.filter(i => i.phase === 'Review').map(i => i.id);
+        const ready    = items.filter(i => i.phase === 'Accept').map(i => i.id);
+        updateBadge(rejected, ready);
+      } catch (err) {
+        console.warn('[SMAX Radar]', err);
+      }
+    };
+
+    const init = () => {
+      if (!prefs.radarOn) return;
+      ensureElements();
+      query();
+      setInterval(query, 5 * 60 * 1000);
+    };
+
+    return { init, query };
+  })();
+
+  /* =========================================================
+   * Templates — respostas reutilizáveis (localStorage)
+   * =======================================================*/
+  const Templates = (() => {
+    const KEY_SOL  = 'smax_tpl_sol';
+    const KEY_DISC = 'smax_tpl_disc';
+
+    const load = (disc) => {
+      try { const r = JSON.parse(localStorage.getItem(disc ? KEY_DISC : KEY_SOL)); return Array.isArray(r) ? r : []; }
+      catch { return []; }
+    };
+    const save = (disc, arr) => localStorage.setItem(disc ? KEY_DISC : KEY_SOL, JSON.stringify(arr));
+
+    const insertIntoEditor = (html) => {
+      const ck = getPageCKEditor();
+      if (ck) {
+        const instances = Object.values(ck.instances || {});
+        const focused = instances.find(i => i.focusManager?.hasFocus) || instances[instances.length - 1];
+        if (focused) { focused.insertHtml(html); return true; }
+      }
+      const ed = document.querySelector('.cke_editable:focus, [contenteditable="true"]:focus');
+      if (ed) { document.execCommand('insertHTML', false, html); return true; }
+      return false;
+    };
+
+    let modalEl = null;
+    let activeDisc = false;
+    let editingIdx = null;
+
+    const renderList = () => {
+      const list = load(activeDisc);
+      const listEl = modalEl.querySelector('.smax-tpl-list');
+      if (!listEl) return;
+
+      listEl.innerHTML = list.length === 0
+        ? `<div class="smax-tpl-empty">Nenhum template. Clique em "+ Novo" para criar.</div>`
+        : list.map((t, i) => `
+          <div class="smax-tpl-item" data-idx="${i}">
+            <div class="smax-tpl-item-title">${Utils.escapeHtml(t.title)}</div>
+            <div class="smax-tpl-item-preview">${Utils.escapeHtml((t.html || '').replace(/<[^>]+>/g, ' ').trim())}</div>
+            <div class="smax-tpl-item-actions">
+              <button class="smax-tpl-edit-btn" data-idx="${i}">Editar</button>
+              <button class="smax-tpl-del-btn"  data-idx="${i}">Excluir</button>
+            </div>
+          </div>
+        `).join('');
+
+      listEl.querySelectorAll('.smax-tpl-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+          if (e.target.classList.contains('smax-tpl-edit-btn')) return;
+          if (e.target.classList.contains('smax-tpl-del-btn')) return;
+          const idx = parseInt(el.dataset.idx, 10);
+          const tpl = load(activeDisc)[idx];
+          if (!tpl) return;
+          if (!insertIntoEditor(tpl.html)) {
+            navigator.clipboard?.writeText(tpl.html).catch(() => {});
+            alert('Editor não encontrado — conteúdo copiado para a área de transferência.');
+          }
+          closeModal();
+        });
+      });
+
+      listEl.querySelectorAll('.smax-tpl-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => { openForm(parseInt(btn.dataset.idx, 10)); });
+      });
+
+      listEl.querySelectorAll('.smax-tpl-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          const arr = load(activeDisc);
+          if (confirm(`Excluir "${arr[idx]?.title}"?`)) {
+            arr.splice(idx, 1);
+            save(activeDisc, arr);
+            renderList();
+            hideForm();
+          }
+        });
+      });
+    };
+
+    const openForm = (idx = null) => {
+      editingIdx = idx;
+      const arr = load(activeDisc);
+      const tpl = idx !== null ? arr[idx] : null;
+      const formEl = modalEl.querySelector('.smax-tpl-form');
+      const titleInput = formEl.querySelector('.smax-tpl-form-title');
+      const htmlInput  = formEl.querySelector('.smax-tpl-form-html');
+      titleInput.value = tpl ? tpl.title : '';
+      htmlInput.value  = tpl ? tpl.html  : '';
+      formEl.style.display = 'flex';
+      titleInput.focus();
+    };
+
+    const hideForm = () => {
+      editingIdx = null;
+      const formEl = modalEl?.querySelector('.smax-tpl-form');
+      if (formEl) formEl.style.display = 'none';
+    };
+
+    const saveForm = () => {
+      const formEl = modalEl.querySelector('.smax-tpl-form');
+      const title = (formEl.querySelector('.smax-tpl-form-title').value || '').trim();
+      const html  = (formEl.querySelector('.smax-tpl-form-html').value  || '').trim();
+      if (!title) { alert('Informe um título para o template.'); return; }
+      const arr = load(activeDisc);
+      if (editingIdx !== null) arr[editingIdx] = { title, html };
+      else arr.push({ title, html });
+      save(activeDisc, arr);
+      hideForm();
+      renderList();
+    };
+
+    const closeModal = () => {
+      if (modalEl) modalEl.classList.remove('open');
+    };
+
+    const openModal = (preferDisc = false) => {
+      if (!modalEl) buildModal();
+      activeDisc = preferDisc;
+      // Set active tab
+      modalEl.querySelectorAll('.smax-tpl-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.disc === String(preferDisc));
+      });
+      hideForm();
+      renderList();
+      modalEl.classList.add('open');
+    };
+
+    const buildModal = () => {
+      modalEl = document.createElement('div');
+      modalEl.id = 'smax-tpl-modal';
+      modalEl.innerHTML = `
+        <div id="smax-tpl-box">
+          <h3>📋 Templates de Resposta</h3>
+          <div class="smax-tpl-tabs">
+            <div class="smax-tpl-tab active" data-disc="false">Solução</div>
+            <div class="smax-tpl-tab" data-disc="true">Discussão</div>
+          </div>
+          <div class="smax-tpl-list"></div>
+          <button class="smax-tpl-add-btn">+ Novo template</button>
+          <div class="smax-tpl-form" style="display:none;">
+            <input class="smax-tpl-form-title" type="text" placeholder="Título do template">
+            <textarea class="smax-tpl-form-html" placeholder="Conteúdo HTML (ou texto simples)"></textarea>
+            <div class="smax-tpl-form-actions">
+              <button class="smax-tpl-cancel-btn">Cancelar</button>
+              <button class="smax-tpl-save-btn">Salvar</button>
+            </div>
+          </div>
+          <div class="smax-tpl-footer">
+            <button class="smax-tpl-close-btn">Fechar</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modalEl);
+
+      // Tabs
+      modalEl.querySelectorAll('.smax-tpl-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          activeDisc = tab.dataset.disc === 'true';
+          modalEl.querySelectorAll('.smax-tpl-tab').forEach(t => t.classList.toggle('active', t === tab));
+          hideForm();
+          renderList();
+        });
+      });
+
+      // Add button
+      modalEl.querySelector('.smax-tpl-add-btn').addEventListener('click', () => openForm(null));
+
+      // Form buttons
+      modalEl.querySelector('.smax-tpl-save-btn').addEventListener('click', saveForm);
+      modalEl.querySelector('.smax-tpl-cancel-btn').addEventListener('click', hideForm);
+      modalEl.querySelector('.smax-tpl-close-btn').addEventListener('click', closeModal);
+
+      // Click outside box to close
+      modalEl.addEventListener('click', (e) => { if (e.target === modalEl) closeModal(); });
+    };
+
+    const init = () => {
+      // Botão flutuante
+      const btn = document.createElement('button');
+      btn.id = 'smax-tpl-btn';
+      btn.title = 'Templates de resposta';
+      btn.textContent = '📋';
+      btn.addEventListener('click', () => openModal(false));
+      document.body.appendChild(btn);
+    };
+
+    return { init, openModal };
+  })();
+
+  /* =========================================================
+   * ResolutionButtons — Salvar / Salvar e fechar / Lifecycle
+   * no topo da seção de resolução (evita scroll)
+   * =======================================================*/
+  const ResolutionButtons = (() => {
+    const TARGET   = '#onlyResolution_CloseTime_container';
+    const SEL_SAVE = 'button[data-aid="tool-bar-btn-save"].tool-bar-btn-save';
+    const SEL_SAVE_CLOSE = 'button[data-aid="tool-bar-btn-save-and-close"].tool-bar-btn-save-and-close';
+    const SEL_LC   = 'div.pl-lifecycle-overview[data-aid="lifecycle-overview"] div.overview-buttons-container:not(.tmx-clone-lc)';
+    const CLS_WRAP = 'tmx-top-actions';
+    const CLS_MENU = 'tmx-lifecycle-menu';
+
+    const removeIds = (root) => root.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+
+    const clickReal = (sel) => {
+      const el = document.querySelector(sel);
+      if (el && !el.disabled) el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    };
+
+    let lcMenu = null;
+    const showLcMenu = (anchor) => {
+      if (!lcMenu) { lcMenu = document.createElement('div'); lcMenu.className = CLS_MENU; document.body.appendChild(lcMenu); }
+      const src = document.querySelector(SEL_LC);
+      lcMenu.innerHTML = '';
+      if (src) {
+        src.querySelectorAll('[target-phase-id]').forEach(el => {
+          const label = el.textContent.trim();
+          const phaseId = el.getAttribute('target-phase-id');
+          if (!label || !phaseId) return;
+          const item = document.createElement('div');
+          item.className = 'tmx-lifecycle-menu-item';
+          item.textContent = label;
+          item.onclick = () => {
+            const realEl = document.querySelector(`${SEL_LC} [target-phase-id="${phaseId}"]`);
+            if (realEl) realEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            lcMenu.style.display = 'none';
+          };
+          lcMenu.appendChild(item);
+        });
+      }
+      if (!lcMenu.children.length) return;
+      const r = anchor.getBoundingClientRect();
+      lcMenu.style.top  = (r.bottom + window.scrollY + 4) + 'px';
+      lcMenu.style.left = (r.left  + window.scrollX) + 'px';
+      lcMenu.style.display = 'block';
+    };
+
+    document.addEventListener('mousedown', (e) => {
+      if (lcMenu && !lcMenu.contains(e.target)) lcMenu.style.display = 'none';
+    });
+
+    const tick = () => {
+      const dst = document.querySelector(TARGET);
+      if (!dst) return;
+      if (dst.querySelector('.' + CLS_WRAP)) return; // já existe
+
+      const wrap = document.createElement('div');
+      wrap.className = CLS_WRAP;
+
+      const makeBtnClone = (sel, cls) => {
+        const src = document.querySelector(sel);
+        if (!src) return null;
+        const clone = src.cloneNode(true);
+        clone.classList.add(cls);
+        removeIds(clone);
+        clone.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); clickReal(sel); }, true);
+        return clone;
+      };
+
+      const btnSave     = makeBtnClone(SEL_SAVE,       'tmx-clone-save');
+      const btnSaveCl   = makeBtnClone(SEL_SAVE_CLOSE, 'tmx-clone-save-close');
+
+      // Lifecycle button
+      const srcLc = document.querySelector(SEL_LC);
+      let btnLc = null;
+      if (srcLc) {
+        btnLc = srcLc.cloneNode(true);
+        btnLc.classList.add('tmx-clone-lc');
+        removeIds(btnLc);
+        btnLc.querySelectorAll('ul.dropdown-menu').forEach(u => u.remove());
+        btnLc.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showLcMenu(btnLc); }, true);
+      }
+
+      [btnSave, btnSaveCl, btnLc].forEach(b => b && wrap.appendChild(b));
+      dst.prepend(wrap);
+    };
+
+    const schedule = Utils.debounce(tick, 120);
+
+    const init = () => {
+      tick();
+      const obs = new MutationObserver(schedule);
+      obs.observe(document.body, { childList: true, subtree: true });
+    };
+
+    return { init };
+  })();
+
+  /* =========================================================
    * PageLinkifier — linkifica CNJs em toda a página SMAX
    * (tela normal de chamado, fora do HUD de triagem)
    * =======================================================*/
@@ -5821,6 +6334,10 @@
     GridTracker.init();
     TriageHUD.init();
     SkullFlag.init();
+    ZenMode.init();
+    RadarRevisar.init();
+    Templates.init();
+    ResolutionButtons.init();
     PageLinkifier.init();
     DataRepository.refreshQueueFromApi().catch(() => { });
     DataRepository.ensureSupportGroups().catch(() => { });
