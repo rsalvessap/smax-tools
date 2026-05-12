@@ -1,19 +1,19 @@
 // ==UserScript==
 // @name         TRIAGEM - SMAX SGS221
-// @namespace    https://github.com/DanielMacCruz/SGS221-Triagem
-// @version      1.02
+// @namespace    https://github.com/rsalvessap/SMAX-TOOLS
+// @version      1.03
 // @description  Interface enhancements for triagem workflow
-// @author       YOU
+// @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/Requests*
 // @run-at       document-start
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
-// @downloadURL  https://github.com/DanielMacCruz/SGS221-Triagem/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js
-// @updateURL    https://github.com/DanielMacCruz/SGS221-Triagem/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js
-// @homepageURL  https://github.com/DanielMacCruz/SGS221-Triagem
-// @supportURL   https://chatgpt.com
+// @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js
+// @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/TRIAGEM%20-%20SMAX%20SGS221-0.1.user.js
+// @homepageURL  https://github.com/rsalvessap/SMAX-TOOLS
+// @supportURL   https://github.com/rsalvessap/SMAX-TOOLS/issues
 // ==/UserScript==
 
 (() => {

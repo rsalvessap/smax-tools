@@ -1,12 +1,16 @@
 // ==UserScript==
 // @name         eProc SMAX Bridge
-// @namespace    eproc-tjsp
+// @namespace    https://github.com/rsalvessap/SMAX-TOOLS
 // @version      2.0
 // @description  Recebe número de processo do SMAX via postMessage e executa a consulta dentro da sessão ativa do eProc
-// @author       Helpdesk Automation
+// @author       rsalvessap
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
 // @run-at       document-idle
 // @grant        none
+// @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/eproc-smax-bridge.user.js
+// @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/eproc-smax-bridge.user.js
+// @homepageURL  https://github.com/rsalvessap/SMAX-TOOLS
+// @supportURL   https://github.com/rsalvessap/SMAX-TOOLS/issues
 // ==/UserScript==
 
 (function () {
