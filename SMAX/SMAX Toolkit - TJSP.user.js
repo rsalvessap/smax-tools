@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.14
+// @version      1.15
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -600,7 +600,7 @@
     #smax-settings-sidebar .smax-sidebar-item {
       width: 100%;
       text-align: left;
-      padding: 9px 12px;
+      padding: 10px 14px;
       border-radius: 8px;
       border: none;
       cursor: pointer;
@@ -610,7 +610,7 @@
       transition: all .15s ease;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
     #smax-settings-sidebar .smax-sidebar-item:hover {
       background: var(--sp-primary-hover, rgba(56,189,248,.1));
@@ -625,8 +625,9 @@
     #smax-settings-content {
       flex: 1;
       overflow-y: auto;
-      padding: 16px;
+      padding: 24px 32px;
       min-width: 0;
+      max-width: 900px;
     }
     #smax-settings-content::-webkit-scrollbar { width: 6px; }
     #smax-settings-content::-webkit-scrollbar-track { background: transparent; }
@@ -679,6 +680,73 @@
       border-color: #cbd5e1 !important;
       color: #1e293b !important;
     }
+
+    /* ── Ticket Info Bar ── */
+    #smax-ticket-info-bar {
+      width: 100%;
+      background: #0f172a;
+      border-bottom: 1px solid rgba(56,189,248,.25);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 12px;
+      z-index: 9000;
+    }
+    body[data-smax-theme="light"] #smax-ticket-info-bar {
+      background: #1e293b;
+    }
+    .smax-ib-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 16px;
+    }
+    .smax-ib-fields {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 0;
+    }
+    .smax-ib-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 10px;
+    }
+    .smax-ib-label { color: #64748b; white-space: nowrap; }
+    .smax-ib-val   { color: #e2e8f0; font-weight: 500; }
+    .smax-ib-divider { color: #334155; padding: 0 2px; user-select: none; }
+    .smax-ib-att-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      margin: 0 3px;
+      border-radius: 999px;
+      border: 1px solid rgba(56,189,248,.35);
+      background: rgba(56,189,248,.08);
+      color: #38bdf8;
+      font-size: 11px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .smax-ib-att-chip:hover { background: #38bdf8; color: #0f172a; }
+    .smax-ib-close {
+      border: none;
+      background: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: color .15s;
+    }
+    .smax-ib-close:hover { color: #94a3b8; }
 
     /* ── Zen Mode ── */
     body.smax-zen-active div[id*="Fabricante_c_container"],
@@ -3103,10 +3171,11 @@
     };
 
     const renderSidebar = () => `
-      <nav id="smax-settings-sidebar" style="width:190px;flex-shrink:0;background:var(--sp-sidebar-bg,#0d1117);border-right:1px solid var(--sp-border,rgba(255,255,255,.1));padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <nav id="smax-settings-sidebar" style="width:220px;flex-shrink:0;background:var(--sp-sidebar-bg,#0d1117);border-right:1px solid var(--sp-border,rgba(255,255,255,.1));padding:14px 10px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;">
+        <div style="font-size:11px;font-weight:600;color:var(--sp-text-dim);text-transform:uppercase;letter-spacing:.08em;padding:4px 12px 10px;">Navegação</div>
         ${SECTIONS.map(s => `
           <button class="smax-sidebar-item${s.id === activeSection ? ' active' : ''}" data-section="${s.id}">
-            <span style="font-size:14px;flex-shrink:0;">${s.icon}</span>
+            <span style="font-size:15px;flex-shrink:0;">${s.icon}</span>
             <span>${s.label}</span>
           </button>
         `).join('')}
@@ -4005,17 +4074,13 @@
       container.id = 'smax-settings';
       Object.assign(container.style, {
         position: 'fixed',
-        right: '12px',
-        bottom: '70px',
-        width: '720px',
-        maxWidth: '97vw',
-        height: '82vh',
-        maxHeight: '82vh',
+        inset: '0',
+        width: '100vw',
+        height: '100vh',
         zIndex: '999999',
-        borderRadius: '16px',
-        boxShadow: '0 25px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08) inset',
+        borderRadius: '0',
+        boxShadow: 'none',
         display: 'none',
-        backdropFilter: 'blur(8px)',
         fontSize: '14px',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -6584,6 +6649,217 @@
   })();
 
   /* =========================================================
+   * BlackHeader — barra de navegação preta
+   * =======================================================*/
+  const BlackHeader = (() => {
+    const STYLE_ID = 'smax-header-preto';
+    const init = () => {
+      if (document.getElementById(STYLE_ID)) return;
+      const s = document.createElement('style');
+      s.id = STYLE_ID;
+      s.textContent = `
+        .navbar.navbar-fixed-top,
+        .navbar.navbar-fixed-top .navbar-header,
+        .navbar.navbar-fixed-top .navbar-collapse {
+          background: #000 !important;
+          --headerBackgroundColor: #000 !important;
+          --logoBackgroundColor:   #000 !important;
+        }
+        .customBrandLogoContainer {
+          background: #000 !important;
+          --logoBackgroundColor: #000 !important;
+        }
+        #menu-categories .menu-right-section { background: #000 !important; }
+        .navbar.navbar-fixed-top .nav > li > a:hover,
+        .navbar.navbar-fixed-top .nav > li > a:focus { border-bottom: 3px solid #3b82f6 !important; }
+      `;
+      (document.head || document.documentElement).appendChild(s);
+    };
+    return { init };
+  })();
+
+  /* =========================================================
+   * TicketInfoBar — exibe nome, unidade e processo no topo
+   * da tela de chamado (intercepta a API de inicialização)
+   * =======================================================*/
+  const TicketInfoBar = (() => {
+    const BAR_ID    = 'smax-ticket-info-bar';
+    const CACHE_KEY = '_smaxTicketInfoCache';
+    let   lastTicketId = null;
+
+    // ── dados extraídos da resposta de API ──
+    const parseInitData = (json) => {
+      try {
+        const body = (typeof json === 'string') ? JSON.parse(json) : json;
+        // Suporta envelope com entities[] ou resposta direta
+        const entity = body?.entity_result_list?.[0] || body?.EntityData || body;
+        const props   = entity?.properties || {};
+        const related = entity?.related_properties || {};
+
+        const person   = related?.RequestedForPerson?.Name
+                      || related?.RequestedByPerson?.Name
+                      || props?.RequestedByPerson?.Name
+                      || '';
+        const location = related?.RegisteredForLocation?.DisplayName
+                      || related?.RegisteredForLocation?.Name
+                      || related?.RequestedForLocation?.DisplayName
+                      || '';
+        const orgGroup = related?.RequestedForPerson?.OrganizationalGroup
+                      || '';
+        // Número de processo (campo customizado TJSP)
+        const rawProc = props?.UserOptions
+          ? (() => {
+              try {
+                const opts = typeof props.UserOptions === 'string' ? JSON.parse(props.UserOptions) : props.UserOptions;
+                return opts?.complexTypeProperties?.[0]?.properties?.NumerodoProcesso_c || '';
+              } catch { return ''; }
+            })()
+          : props?.NumerodoProcesso_c || '';
+
+        // Anexos: lista de nomes/urls
+        const attachments = [];
+        try {
+          const raw = props?.RequestAttachments || entity?.RequestAttachments;
+          const arr = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : null);
+          if (arr) arr.forEach(a => {
+            const name = a.name || a.Name || a.file_name || '';
+            const url  = a.url  || a.Url  || a.file_url  || '';
+            if (name || url) attachments.push({ name, url });
+          });
+        } catch { /* ignore */ }
+
+        return { person, location, orgGroup, process: rawProc, attachments };
+      } catch { return null; }
+    };
+
+    const renderBar = (data, ticketId) => {
+      let bar = document.getElementById(BAR_ID);
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = BAR_ID;
+      }
+
+      const copyBtn = (text) => text
+        ? `<button class="smax-ib-copy" data-copy="${Utils.escapeHtml(text)}" title="Copiar" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:var(--sp-primary,#38bdf8);line-height:1;">📋</button>`
+        : '';
+
+      const fields = [];
+      if (data.person)   fields.push(`<span class="smax-ib-field"><span class="smax-ib-label">👤 Solicitante:</span> <span class="smax-ib-val">${Utils.escapeHtml(data.person)}</span>${copyBtn(data.person)}</span>`);
+      if (data.location) fields.push(`<span class="smax-ib-field"><span class="smax-ib-label">📍 Unidade:</span> <span class="smax-ib-val">${Utils.escapeHtml(data.location)}</span>${copyBtn(data.location)}</span>`);
+      if (data.process)  fields.push(`<span class="smax-ib-field"><span class="smax-ib-label">⚖️ Processo:</span> <span class="smax-ib-val">${Utils.escapeHtml(data.process)}</span>${copyBtn(data.process)}</span>`);
+
+      const attHtml = data.attachments.length
+        ? `<span class="smax-ib-divider">|</span><span class="smax-ib-field"><span class="smax-ib-label">📎 Anexos:</span> ${data.attachments.map(a =>
+            `<a class="smax-ib-att-chip" ${a.url ? `href="${Utils.escapeHtml(a.url)}" target="_blank" rel="noopener"` : ''} title="${Utils.escapeHtml(a.name)}">${Utils.escapeHtml(a.name || 'Arquivo')}</a>`
+          ).join('')}</span>`
+        : '';
+
+      bar.innerHTML = `
+        <div class="smax-ib-inner">
+          <div class="smax-ib-fields">
+            ${fields.join('<span class="smax-ib-divider">|</span>')}
+            ${attHtml}
+          </div>
+          <button class="smax-ib-close" title="Fechar">✕</button>
+        </div>
+      `;
+
+      bar.querySelectorAll('.smax-ib-copy').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(btn.dataset.copy || '').catch(() => {});
+        });
+      });
+      bar.querySelector('.smax-ib-close')?.addEventListener('click', () => bar.remove());
+
+      return bar;
+    };
+
+    const inject = (data, ticketId) => {
+      if (!data || (!data.person && !data.location && !data.process && !data.attachments.length)) return;
+      // Find the ticket title area — try multiple selectors
+      const anchors = [
+        document.querySelector('input[data-aid="withoutResolution_DisplayLabel"]'),
+        document.querySelector('.pl-entity-page-component-header'),
+        document.querySelector('[data-aid="record-id"]'),
+        document.querySelector('.pl-record-info'),
+      ];
+      const anchor = anchors.find(Boolean);
+      if (!anchor) return;
+
+      const container = anchor.closest('.field-container') || anchor.closest('.pl-entity-page-component-header') || anchor.parentElement;
+      if (!container) return;
+
+      // Remove old bar if ticket changed
+      const existing = document.getElementById(BAR_ID);
+      if (existing && ticketId !== lastTicketId) existing.remove();
+      if (document.getElementById(BAR_ID)) return; // already injected for this ticket
+
+      lastTicketId = ticketId;
+      const bar = renderBar(data, ticketId);
+      container.parentElement?.insertBefore(bar, container);
+    };
+
+    // ── Intercept XHR + fetch ──
+    const hookNetwork = () => {
+      // XHR hook
+      const origOpen = XMLHttpRequest.prototype.open;
+      const origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        this._smaxUrl = url;
+        return origOpen.call(this, method, url, ...rest);
+      };
+      XMLHttpRequest.prototype.send = function(...args) {
+        const url = this._smaxUrl || '';
+        if (url.includes('/entity-page/initializationDataByLayout/Request/') || url.includes('/ems/Request/')) {
+          this.addEventListener('load', () => {
+            try {
+              const data = parseInitData(this.responseText);
+              const m = url.match(/\/Request\/(\d+)/);
+              if (data) inject(data, m?.[1] || '');
+            } catch { /* ignore */ }
+          });
+        }
+        return origSend.apply(this, args);
+      };
+
+      // fetch hook
+      const origFetch = pageWindow.fetch;
+      pageWindow.fetch = function(input, init) {
+        const url = (typeof input === 'string') ? input : (input?.url || '');
+        const p = origFetch.call(this, input, init);
+        if (url.includes('/entity-page/initializationDataByLayout/Request/') || url.includes('/ems/Request/')) {
+          p.then(res => res.clone().text().then(text => {
+            try {
+              const data = parseInitData(text);
+              const m = url.match(/\/Request\/(\d+)/);
+              if (data) inject(data, m?.[1] || '');
+            } catch { /* ignore */ }
+          })).catch(() => {});
+        }
+        return p;
+      };
+    };
+
+    const init = () => {
+      hookNetwork();
+      // Re-inject on SPA navigation (ticket changes)
+      const onNav = Utils.debounce(() => {
+        const existing = document.getElementById(BAR_ID);
+        if (existing) existing.remove();
+        lastTicketId = null;
+      }, 400);
+      const origPush    = history.pushState.bind(history);
+      const origReplace = history.replaceState.bind(history);
+      history.pushState    = (...a) => { origPush(...a);    onNav(); };
+      history.replaceState = (...a) => { origReplace(...a); onNav(); };
+      window.addEventListener('popstate', onNav);
+    };
+
+    return { init };
+  })();
+
+  /* =========================================================
    * PageLinkifier — linkifica CNJs em toda a página SMAX
    * (tela normal de chamado, fora do HUD de triagem)
    * =======================================================*/
@@ -6700,6 +6976,8 @@
     Templates.init();
     ResolutionButtons.init();
     PageLinkifier.init();
+    BlackHeader.init();
+    TicketInfoBar.init();
     DataRepository.refreshQueueFromApi().catch(() => { });
     DataRepository.ensureSupportGroups().catch(() => { });
   };
