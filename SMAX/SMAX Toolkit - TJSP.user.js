@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.19
+// @version      1.20
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -4118,18 +4118,34 @@
         `).join('');
 
         listEl.querySelectorAll('.smax-tpl-sp-use').forEach(btn => {
-          btn.addEventListener('click', (e) => {
+          btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const idx = parseInt(btn.dataset.idx, 10);
             const tpl = Templates.load(tplActiveDisc)[idx];
             if (!tpl) return;
-            if (Templates.insertIntoEditor(tpl.html)) {
-              container.style.display = 'none';
-              const bd = document.getElementById('smax-settings-backdrop');
-              if (bd) bd.style.display = 'none';
-            } else {
+
+            // Fechar painel primeiro para que o CKEditor possa receber foco
+            container.style.display = 'none';
+            const bd = document.getElementById('smax-settings-backdrop');
+            if (bd) bd.style.display = 'none';
+
+            // pushSolutionHtml: abre o editor se necessário e insere com retry
+            const ok = await Utils.pushSolutionHtml(tpl.html);
+            if (!ok) {
+              // Fallback: insere no último editor ativo sem foco
+              const ck = (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window)?.CKEDITOR;
+              if (ck) {
+                const instances = Object.values(ck.instances || {});
+                const last = instances[instances.length - 1];
+                if (last) { last.insertHtml(tpl.html); return; }
+              }
+              // Último recurso: copiar para clipboard
               navigator.clipboard?.writeText(tpl.html).catch(() => {});
-              alert('Editor não encontrado — conteúdo copiado para a área de transferência.');
+              const toast = document.createElement('div');
+              toast.textContent = '📋 Template copiado — cole no campo de resposta (Ctrl+V)';
+              toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#f8fafc;padding:11px 22px;border-radius:10px;font-size:13px;z-index:9999999;box-shadow:0 4px 18px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);';
+              document.body.appendChild(toast);
+              setTimeout(() => toast.remove(), 3500);
             }
           });
         });
@@ -7002,57 +7018,78 @@
    * =======================================================*/
   const BlackHeader = (() => {
     const STYLE_ID = 'smax-header-preto';
-    const SELECTORS = [
-      '.navbar.navbar-fixed-top',
-      '.navbar.navbar-fixed-top .navbar-header',
-      '.navbar.navbar-fixed-top .navbar-collapse',
+    // Covers Bootstrap 3 (.navbar-fixed-top) and Bootstrap 4 (.fixed-top),
+    // plus SMAX-specific ids and generic nav/header roles
+    const KNOWN_SELS = [
+      '.navbar',
+      'nav.navbar',
+      '.navbar-fixed-top',
+      '.navbar.fixed-top',
+      '.navbar-header',
+      '.navbar-collapse',
       '.customBrandLogoContainer',
+      '#menu-categories',
       '#menu-categories .menu-right-section',
-      'header.smax-header',
-      '[id*="app-header"]',
-      'nav[role="navigation"]',
+      'header[role="banner"]',
+      '[id="header"]',
+      '[id="app-header"]',
+      '[id="main-header"]',
     ];
 
-    // Direct inline-style override (beats Angular's style bindings)
-    const applyDirect = () => {
-      SELECTORS.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => {
-          el.style.setProperty('background', '#000', 'important');
-          el.style.setProperty('background-color', '#000', 'important');
-        });
-      });
+    const paintEl = (el) => {
+      el.style.setProperty('background', '#000', 'important');
+      el.style.setProperty('background-color', '#000', 'important');
     };
 
+    // Known selectors
+    const applyKnown = () => KNOWN_SELS.forEach(sel => {
+      try { document.querySelectorAll(sel).forEach(paintEl); } catch {}
+    });
+
+    // Heuristic: paint any fixed/sticky full-width short bar sitting at the top
+    const applyHeuristic = () => {
+      try {
+        const W = window.innerWidth;
+        document.querySelectorAll('nav, header, [role="navigation"], [role="banner"]').forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.top < 10 && r.height > 20 && r.height < 120 && r.width > W * 0.5) {
+            const s = window.getComputedStyle(el);
+            if (s.position === 'fixed' || s.position === 'sticky' || r.top === 0) paintEl(el);
+          }
+        });
+      } catch {}
+    };
+
+    const applyAll = () => { applyKnown(); applyHeuristic(); };
+
     const init = () => {
-      // CSS fallback for elements Angular hasn't touched yet
+      // CSS stylesheet: covers elements not yet affected by Angular's style binding
       if (!document.getElementById(STYLE_ID)) {
         const s = document.createElement('style');
         s.id = STYLE_ID;
         s.textContent = `
-          .navbar.navbar-fixed-top,
-          .navbar.navbar-fixed-top .navbar-header,
-          .navbar.navbar-fixed-top .navbar-collapse {
-            background: #000 !important;
-            background-color: #000 !important;
-          }
+          .navbar, nav.navbar, .navbar-fixed-top, .navbar.fixed-top,
+          .navbar-header, .navbar-collapse,
           .customBrandLogoContainer,
-          #menu-categories .menu-right-section {
+          #menu-categories, #menu-categories .menu-right-section,
+          header[role="banner"], #header, #app-header, #main-header {
             background: #000 !important;
             background-color: #000 !important;
           }
-          .navbar.navbar-fixed-top .nav > li > a:hover,
-          .navbar.navbar-fixed-top .nav > li > a:focus { border-bottom: 3px solid #3b82f6 !important; }
+          .navbar .nav > li > a:hover,
+          .navbar .nav > li > a:focus { border-bottom: 3px solid #3b82f6 !important; }
         `;
         (document.head || document.documentElement).appendChild(s);
       }
-      // Run immediately and at 300ms / 1000ms / 2500ms to catch Angular bootstrap phases
-      applyDirect();
-      setTimeout(applyDirect, 300);
-      setTimeout(applyDirect, 1000);
-      setTimeout(applyDirect, 2500);
-      // Light observer: re-apply when Angular swaps header content
-      const obs = new MutationObserver(Utils.debounce(applyDirect, 200));
-      obs.observe(document.documentElement, { childList: true, subtree: true, attributeFilter: ['style', 'class'] });
+      // Apply at 0 / 400ms / 1200ms / 2500ms / 4000ms — Angular bootstrap is slow
+      applyAll();
+      [400, 1200, 2500, 4000].forEach(t => setTimeout(applyAll, t));
+      // MutationObserver: re-apply whenever Angular re-renders/re-styles the header area
+      const obs = new MutationObserver(Utils.debounce(applyAll, 150));
+      obs.observe(document.documentElement, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['style', 'class'],
+      });
       window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
     };
     return { init };
@@ -7301,19 +7338,34 @@
     }, 250);
     const queue = (el) => { pending.add(el); flush(); };
 
+    // Seletores do campo de descrição no SMAX ticket (tentativa direta)
+    const DESC_SELS = [
+      '.pl-richtext-viewer', '[data-aid*="description"]', '[data-aid*="Description"]',
+      '[class*="richtext"]', '[class*="rich-text"]', '.pl-entity-field-content',
+      '[data-aid="preview_Description"]', '[data-aid="preview_Notes"]',
+      '.ql-editor', '[contenteditable]',
+    ];
+    const scanDescFields = () => {
+      DESC_SELS.forEach(sel => {
+        try { document.querySelectorAll(sel).forEach(el => {
+          if (!el.closest('#smax-triage-hud-backdrop')) processNode(el);
+        }); } catch {}
+      });
+    };
+
     // Re-scan após navegação SPA (pushState / popstate)
     const onNavigate = Utils.debounce(() => {
       // Múltiplas tentativas — Angular + SMAX renderizam conteúdo de forma assíncrona
-      setTimeout(() => processNode(document.body), 800);
-      setTimeout(() => processNode(document.body), 2000);
-      setTimeout(() => processNode(document.body), 4000);
+      setTimeout(() => { processNode(document.body); scanDescFields(); }, 800);
+      setTimeout(() => { processNode(document.body); scanDescFields(); }, 2000);
+      setTimeout(() => { processNode(document.body); scanDescFields(); }, 4000);
     }, 300);
 
     const init = () => {
       // Scan inicial com múltiplas tentativas para o primeiro render do Angular
-      setTimeout(() => processNode(document.body), 500);
-      setTimeout(() => processNode(document.body), 1500);
-      setTimeout(() => processNode(document.body), 3500);
+      setTimeout(() => { processNode(document.body); scanDescFields(); }, 500);
+      setTimeout(() => { processNode(document.body); scanDescFields(); }, 1500);
+      setTimeout(() => { processNode(document.body); scanDescFields(); }, 3500);
 
       // MutationObserver: captura nós adicionados E alterações de texto (characterData)
       const obs = new MutationObserver((mutations) => {
