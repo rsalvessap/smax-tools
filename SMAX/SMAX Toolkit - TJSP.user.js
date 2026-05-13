@@ -768,6 +768,54 @@
     }
     .smax-ib-close:hover { color: #94a3b8; }
 
+    /* ── Contextual Solution / Discussion Bank ── */
+    .smax-ctx-bank-bar {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-sizing: border-box;
+      background: var(--sp-surface-2, #f1f5f9);
+      border: 1px solid var(--sp-border, rgba(0,0,0,.1));
+      border-radius: 6px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 12px;
+    }
+    .smax-ctx-bank-label {
+      color: var(--sp-text-muted, #475569);
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .smax-ctx-bank-select {
+      flex: 1;
+      min-width: 160px;
+      max-width: 320px;
+      padding: 4px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--sp-input-border, #cbd5e1);
+      background: var(--sp-input-bg, #fff);
+      color: var(--sp-input-text, #1e293b);
+      font-size: 12px;
+      cursor: pointer;
+      height: 28px;
+      box-sizing: border-box;
+    }
+    .smax-ctx-bank-btn {
+      padding: 4px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--sp-border, rgba(0,0,0,.1));
+      background: var(--sp-surface, #fff);
+      color: var(--sp-text-muted, #475569);
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+      height: 28px;
+      line-height: 1;
+    }
+    .smax-ctx-bank-btn:hover { background: var(--sp-primary-hover, rgba(19,91,236,.15)); color: var(--sp-primary, #135bec); }
+
     /* ── Zen Mode ── */
     body.smax-zen-active div[id*="Fabricante_c_container"],
     body.smax-zen-active div[id*="TicketFornecedor_c_container"],
@@ -2316,12 +2364,10 @@
         'CreateTime',
         'Priority',
         'Solution',
-        'Comments.item',
         'RequestedForPerson.item',
         'RequestedForDisplayLabel',
         'RequestedForName',
-        'AssignmentGroupDisplayLabel',
-        'AssignmentGroup'
+        'ExpertGroup.item'
       ].join(','),
       order: 'CreateTime desc',
       size: 50,
@@ -6747,14 +6793,21 @@
    * Templates — respostas reutilizáveis (localStorage)
    * =======================================================*/
   const Templates = (() => {
-    const KEY_SOL  = 'smax_tpl_sol';
-    const KEY_DISC = 'smax_tpl_disc';
+    const KEY_SOL  = 'smax_solutions_v2';
+    const KEY_DISC = 'smax_discussions_v2';
+
+    // Normaliza os dois formatos: { title, html } (nosso) e { title, content } (Felipe)
+    const normalize = (arr) => arr.map(t => ({
+      title: t.title || '',
+      html: t.html || t.content || ''
+    }));
 
     const load = (disc) => {
-      try { const r = JSON.parse(localStorage.getItem(disc ? KEY_DISC : KEY_SOL)); return Array.isArray(r) ? r : []; }
+      try { const r = JSON.parse(localStorage.getItem(disc ? KEY_DISC : KEY_SOL)); return normalize(Array.isArray(r) ? r : []); }
       catch { return []; }
     };
-    const save = (disc, arr) => localStorage.setItem(disc ? KEY_DISC : KEY_SOL, JSON.stringify(arr));
+    // Salva sempre no formato { title, html } para compatibilidade com os dois scripts
+    const save = (disc, arr) => localStorage.setItem(disc ? KEY_DISC : KEY_SOL, JSON.stringify(normalize(arr)));
 
     const insertIntoEditor = (html) => {
       const ck = getPageCKEditor();
@@ -6926,6 +6979,145 @@
   })();
 
   /* =========================================================
+   * ContextualSolutionBank — barra de templates injetada
+   * diretamente no container de Solução e na aba Discussão
+   * =======================================================*/
+  const ContextualSolutionBank = (() => {
+    // Localiza o CKEditor dentro de um container específico do DOM
+    const findEditorInContainer = (containerEl) => {
+      if (!containerEl) return null;
+      const ck = getPageCKEditor();
+      if (!(ck && ck.instances)) return null;
+      return Object.values(ck.instances).find(inst => {
+        try {
+          return !!(inst.container && inst.container.$ && containerEl.contains(inst.container.$));
+        } catch { return false; }
+      }) || null;
+    };
+
+    // Insere HTML no editor correto usando insertHtml (não substitui o conteúdo)
+    const smartInsert = (html, isDisc) => {
+      const containerSel = isDisc
+        ? 'pl-entity-comment-tab'
+        : '#onlyResolution_Solution_container';
+      const containerEl = document.querySelector(containerSel);
+      const editor = findEditorInContainer(containerEl);
+
+      if (editor) {
+        editor.insertHtml(html);
+        editor.fire('change');
+        return true;
+      }
+      // Fallback: injeta no div editável diretamente
+      const fallbackSel = isDisc
+        ? 'pl-entity-comment-tab .cke_wysiwyg_div'
+        : '#onlyResolution_Solution_container .cke_wysiwyg_div';
+      const div = document.querySelector(fallbackSel);
+      if (div) {
+        div.focus();
+        document.execCommand('insertHTML', false, html);
+        ['input', 'change'].forEach(e => div.dispatchEvent(new Event(e, { bubbles: true })));
+        return true;
+      }
+      return false;
+    };
+
+    // Constrói a barra com select + botão Gerenciar
+    const buildBar = (idPrefix, labelText, isDisc) => {
+      const bar = document.createElement('div');
+      bar.id = `${idPrefix}-bar`;
+      bar.className = 'smax-ctx-bank-bar';
+
+      const label = document.createElement('span');
+      label.className = 'smax-ctx-bank-label';
+      label.textContent = labelText;
+
+      const select = document.createElement('select');
+      select.id = `${idPrefix}-select`;
+      select.className = 'smax-ctx-bank-select';
+
+      const refreshSelect = () => {
+        select.innerHTML = '<option value="">— Selecione para aplicar —</option>';
+        Templates.load(isDisc).forEach((t, i) => {
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = t.title;
+          select.appendChild(opt);
+        });
+      };
+      refreshSelect();
+
+      select.addEventListener('change', () => {
+        if (!select.value) return;
+        const tpl = Templates.load(isDisc)[parseInt(select.value, 10)];
+        if (tpl) smartInsert(tpl.html, isDisc);
+        select.value = '';
+      });
+
+      const btnManage = document.createElement('button');
+      btnManage.className = 'smax-ctx-bank-btn';
+      btnManage.type = 'button';
+      btnManage.textContent = '⚙️ Gerenciar';
+      btnManage.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        Templates.openModal(isDisc);
+      });
+
+      bar._refresh = refreshSelect;
+      bar.append(label, select, btnManage);
+      return bar;
+    };
+
+    // Injeta barra no container de Solução
+    const injectSolutionBar = () => {
+      const container = document.getElementById('onlyResolution_Solution_container');
+      if (!container || document.getElementById('smax-solution-bank-bar')) return;
+      const bar = buildBar('smax-solution-bank', 'Soluções:', false);
+      const control = container.querySelector('.control-container');
+      if (control) control.insertBefore(bar, control.firstChild);
+      else container.prepend(bar);
+    };
+
+    // Injeta barra no container de Discussão
+    const injectDiscussionBar = () => {
+      const container = document.querySelector('pl-entity-comment-tab');
+      if (!container || document.getElementById('smax-discussion-bank-bar')) return;
+      const bar = buildBar('smax-discussion-bank', 'Discussões:', true);
+      const editorContent = container.querySelector('.currentUserComment .editor-content');
+      const commentArea  = container.querySelector('.currentUserComment');
+      const filterArea   = container.querySelector('.comment-filter');
+      if (editorContent) {
+        editorContent.insertBefore(bar, editorContent.firstChild);
+      } else if (commentArea) {
+        bar.style.marginLeft = '55px';
+        bar.style.width = 'calc(100% - 55px)';
+        commentArea.parentNode.insertBefore(bar, commentArea);
+      } else if (filterArea) {
+        filterArea.parentNode.insertBefore(bar, filterArea.nextSibling);
+      } else {
+        container.prepend(bar);
+      }
+    };
+
+    const tick = () => {
+      injectSolutionBar();
+      injectDiscussionBar();
+    };
+
+    const init = () => {
+      const schedule = Utils.debounce(tick, 300);
+      const obs = new MutationObserver(schedule);
+      obs.observe(document.body, { childList: true, subtree: true });
+      // Re-scan periódico: Angular pode re-renderizar o container sem disparar mutations
+      setInterval(tick, 1500);
+      tick();
+    };
+
+    return { init };
+  })();
+
+  /* =========================================================
    * ResolutionButtons — Salvar / Salvar e fechar / Lifecycle
    * no topo da seção de resolução (evita scroll)
    * =======================================================*/
@@ -7052,6 +7244,10 @@
             // Must span ≥70 % of viewport (full-width bar, not a nav item inside it)
             // and sit at the very top (top < 80px, height 20-200px)
             if (r.width > W * 0.7 && r.height > 20 && r.height < 200 && r.top < 80) {
+              // Only paint fixed/sticky elements — real nav bars are always fixed/sticky;
+              // form containers and ticket-page panels are static/relative and must be skipped.
+              const pos = window.getComputedStyle(el).position;
+              if (pos !== 'fixed' && pos !== 'sticky') return;
               paintEl(el);
             }
           } catch {}
@@ -7559,6 +7755,7 @@
     ZenMode.init();
     RadarRevisar.init();
     Templates.init();
+    ContextualSolutionBank.init();
     ResolutionButtons.init();
     PageLinkifier.init();
     BlackHeader.init();
