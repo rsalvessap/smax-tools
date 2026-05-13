@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.18
+// @version      1.19
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -3777,9 +3777,8 @@
             `).join('')}
             <div class="smax-module-group-label" style="margin-top:6px;">🎫 Tela de Chamado (interno)</div>
             ${[
-              ['zenModeOn',         '🧘', 'Zen Mode',              'Oculta campos desnecessários no formulário de chamado'],
-              ['enlargeCommentsOn', '💬', 'Comentários expandidos','Exibe todos os comentários sem limite de altura'],
-              ['collapseOn',        '📂', 'Recolher seções',       'Recolhe automaticamente seções desnecessárias'],
+              ['zenModeOn',  '🧘', 'Zen Mode',       'Oculta campos desnecessários no formulário de chamado'],
+              ['collapseOn', '📂', 'Recolher seções', 'Recolhe automaticamente seções desnecessárias'],
             ].map(([key, icon, label, tip]) => `
               <div class="smax-module-row${prefs[key] ? ' smax-active' : ''}" data-key="${key}">
                 <div class="smax-module-icon">${icon}</div>
@@ -3912,6 +3911,20 @@
           </button>
         </div>
         <div class="smax-sp-card">
+          <div class="smax-sp-section-title" style="margin-bottom:8px;">⚙️ Opções de Triagem</div>
+          <div class="smax-module-row${prefs.enlargeCommentsOn ? ' smax-active' : ''}" data-key="enlargeCommentsOn">
+            <div class="smax-module-icon">💬</div>
+            <div class="smax-module-info">
+              <div class="smax-module-name">Comentários expandidos</div>
+              <div class="smax-module-desc">Exibe todos os comentários do chamado sem limite de altura</div>
+            </div>
+            <label class="smax-toggle-sw" onclick="event.stopPropagation()">
+              <input type="checkbox" class="smax-pref-toggle" data-key="enlargeCommentsOn" ${prefs.enlargeCommentsOn ? 'checked' : ''}>
+              <span class="smax-toggle-track"></span>
+            </label>
+          </div>
+        </div>
+        <div class="smax-sp-card">
           <div class="smax-sp-section-title">📖 Guia Rápido</div>
           <ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--sp-text);line-height:1.7;">
             <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
@@ -4021,12 +4034,11 @@
           savePrefs();
           const row = cb.closest('.smax-module-row');
           if (row) row.classList.toggle('smax-active', cb.checked);
-          if (key === 'zenModeOn')         ZenMode.apply();
+          if (key === 'zenModeOn')      ZenMode.apply();
           if (key === 'radarOn' && cb.checked) RadarRevisar.query();
-          if (key === 'flagSkullOn')       HighlightUser.applyAll();
-          if (key === 'nameBadgesOn')      NameBadges.apply();
-          if (key === 'enlargeCommentsOn') CommentExpander.expandAll();
-          if (key === 'collapseOn')        SectionTweaks.applyAll();
+          if (key === 'flagSkullOn')    HighlightUser.applyAll();
+          if (key === 'nameBadgesOn')   NameBadges.apply();
+          if (key === 'collapseOn')     SectionTweaks.applyAll();
         });
       });
     };
@@ -4267,6 +4279,26 @@
 
     const wireTriagemEvents = () => {
       if (!container) return;
+
+      // Triagem option toggles (same pattern as wireGeralEvents)
+      container.querySelectorAll('.smax-module-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('.smax-toggle-sw')) return;
+          const cb = row.querySelector('.smax-pref-toggle');
+          if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+        });
+      });
+      container.querySelectorAll('.smax-pref-toggle').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const key = cb.dataset.key;
+          if (!(key in prefs)) return;
+          prefs[key] = cb.checked;
+          savePrefs();
+          const row = cb.closest('.smax-module-row');
+          if (row) row.classList.toggle('smax-active', cb.checked);
+          if (key === 'enlargeCommentsOn') CommentExpander.expandAll();
+        });
+      });
 
       // Launch triage
       const launchBtn = container.querySelector('#smax-launch-triage-btn');
@@ -4575,28 +4607,28 @@
     const applyPersonItem = (personItem) => {
       try {
         if (!(personItem instanceof HTMLElement)) return;
-        // Extract text content ignoring child elements
+        if (personItem.dataset.smaxDestApplied === '1') return; // already processed this exact span
+
+        // Extract leading text node (after any image/icon element)
         const clone = personItem.cloneNode(true);
         while (clone.firstChild) {
           if (clone.firstChild.nodeType === Node.ELEMENT_NODE) clone.removeChild(clone.firstChild);
           else break;
         }
-        const leading = clone.textContent || '';
+        // Also try full textContent as fallback (handles nested spans)
+        const leading = clone.textContent.trim() || personItem.textContent.trim();
         if (!isHighlighted(leading)) return;
 
-        // Mark the person item itself
-        if (personItem.dataset.__smaxDest !== '1') {
-          personItem.dataset.__smaxDest = '1';
-          personItem.style.color = '#f59e0b';
-          personItem.style.fontWeight = '600';
-        }
+        personItem.dataset.smaxDestApplied = '1';
+        personItem.style.setProperty('color', '#f59e0b', 'important');
+        personItem.style.fontWeight = '600';
 
-        // Highlight the entire grid row if inside the ticket list
+        // Highlight the entire grid row — no guard, SlickGrid reuses row elements
+        // so we always re-apply when we find a highlighted person
         const slickRow = personItem.closest('.slick-row');
-        if (slickRow && slickRow.dataset.__smaxDestRow !== '1') {
-          slickRow.dataset.__smaxDestRow = '1';
+        if (slickRow) {
           slickRow.style.setProperty('background', 'linear-gradient(90deg, rgba(251,191,36,.18) 0%, rgba(245,158,11,.07) 100%)', 'important');
-          slickRow.style.boxShadow = 'inset 3px 0 0 #f59e0b';
+          slickRow.style.setProperty('box-shadow', 'inset 3px 0 0 #f59e0b', 'important');
         }
       } catch { }
     };
@@ -6970,27 +7002,58 @@
    * =======================================================*/
   const BlackHeader = (() => {
     const STYLE_ID = 'smax-header-preto';
+    const SELECTORS = [
+      '.navbar.navbar-fixed-top',
+      '.navbar.navbar-fixed-top .navbar-header',
+      '.navbar.navbar-fixed-top .navbar-collapse',
+      '.customBrandLogoContainer',
+      '#menu-categories .menu-right-section',
+      'header.smax-header',
+      '[id*="app-header"]',
+      'nav[role="navigation"]',
+    ];
+
+    // Direct inline-style override (beats Angular's style bindings)
+    const applyDirect = () => {
+      SELECTORS.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => {
+          el.style.setProperty('background', '#000', 'important');
+          el.style.setProperty('background-color', '#000', 'important');
+        });
+      });
+    };
+
     const init = () => {
-      if (document.getElementById(STYLE_ID)) return;
-      const s = document.createElement('style');
-      s.id = STYLE_ID;
-      s.textContent = `
-        .navbar.navbar-fixed-top,
-        .navbar.navbar-fixed-top .navbar-header,
-        .navbar.navbar-fixed-top .navbar-collapse {
-          background: #000 !important;
-          --headerBackgroundColor: #000 !important;
-          --logoBackgroundColor:   #000 !important;
-        }
-        .customBrandLogoContainer {
-          background: #000 !important;
-          --logoBackgroundColor: #000 !important;
-        }
-        #menu-categories .menu-right-section { background: #000 !important; }
-        .navbar.navbar-fixed-top .nav > li > a:hover,
-        .navbar.navbar-fixed-top .nav > li > a:focus { border-bottom: 3px solid #3b82f6 !important; }
-      `;
-      (document.head || document.documentElement).appendChild(s);
+      // CSS fallback for elements Angular hasn't touched yet
+      if (!document.getElementById(STYLE_ID)) {
+        const s = document.createElement('style');
+        s.id = STYLE_ID;
+        s.textContent = `
+          .navbar.navbar-fixed-top,
+          .navbar.navbar-fixed-top .navbar-header,
+          .navbar.navbar-fixed-top .navbar-collapse {
+            background: #000 !important;
+            background-color: #000 !important;
+          }
+          .customBrandLogoContainer,
+          #menu-categories .menu-right-section {
+            background: #000 !important;
+            background-color: #000 !important;
+          }
+          .navbar.navbar-fixed-top .nav > li > a:hover,
+          .navbar.navbar-fixed-top .nav > li > a:focus { border-bottom: 3px solid #3b82f6 !important; }
+        `;
+        (document.head || document.documentElement).appendChild(s);
+      }
+      // Run immediately and at 300ms / 1000ms / 2500ms to catch Angular bootstrap phases
+      applyDirect();
+      setTimeout(applyDirect, 300);
+      setTimeout(applyDirect, 1000);
+      setTimeout(applyDirect, 2500);
+      // Light observer: re-apply when Angular swaps header content
+      const obs = new MutationObserver(Utils.debounce(applyDirect, 200));
+      obs.observe(document.documentElement, { childList: true, subtree: true, attributeFilter: ['style', 'class'] });
+      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
     };
     return { init };
   })();
@@ -7240,14 +7303,17 @@
 
     // Re-scan após navegação SPA (pushState / popstate)
     const onNavigate = Utils.debounce(() => {
-      // Aguarda o Angular terminar de renderizar (heurística: 800ms)
+      // Múltiplas tentativas — Angular + SMAX renderizam conteúdo de forma assíncrona
       setTimeout(() => processNode(document.body), 800);
+      setTimeout(() => processNode(document.body), 2000);
+      setTimeout(() => processNode(document.body), 4000);
     }, 300);
 
     const init = () => {
-      // Scan inicial (para página carregada diretamente ou recarregada)
-      // Atraso pequeno para deixar o Angular terminar o primeiro render
+      // Scan inicial com múltiplas tentativas para o primeiro render do Angular
       setTimeout(() => processNode(document.body), 500);
+      setTimeout(() => processNode(document.body), 1500);
+      setTimeout(() => processNode(document.body), 3500);
 
       // MutationObserver: captura nós adicionados E alterações de texto (characterData)
       const obs = new MutationObserver((mutations) => {
