@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.15
+// @version      1.16
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -3133,7 +3133,7 @@
       { id: 'especialistas', icon: '👤',  label: 'Especialistas' },
       { id: 'detratores',    icon: '💀',  label: 'Detratores' },
       { id: 'templates',     icon: '📋',  label: 'Templates' },
-      { id: 'exportar',      icon: '📤',  label: 'Exportar' },
+      { id: 'triagem',       icon: '🎯',  label: 'Triagem' },
     ];
 
     // Load fresh config from prefs
@@ -3818,20 +3818,72 @@
       </div>`;
 
     const renderSectionTemplates = () => `
-      <div class="smax-sp-card">
-        <div class="smax-sp-section-title">📋 Templates de Resposta</div>
-        <div class="smax-sp-muted" style="margin-bottom:14px;">Templates armazenados localmente. Clique em um template para inserir no campo de texto aberto do SMAX.</div>
-        <button type="button" id="smax-open-tpl-btn" style="padding:10px 20px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(59,130,246,.35);">
-          Abrir Gerenciador de Templates
-        </button>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="smax-sp-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div class="smax-sp-section-title" style="margin-bottom:0;">📋 Templates de Resposta</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button id="smax-tpl-clip-btn" title="Colar HTML do clipboard (OneNote, Word, etc.)" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📎 Do clipboard</button>
+              <button id="smax-tpl-export-btn" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📤 Exportar JSON</button>
+              <button id="smax-tpl-import-btn" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📥 Importar JSON</button>
+              <button id="smax-tpl-new-btn" style="padding:6px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">+ Novo</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:0;border-bottom:1px solid var(--sp-border);margin-bottom:10px;">
+            <button class="smax-tpl-sp-tab active" data-disc="false" style="padding:7px 16px;border:none;border-bottom:2px solid var(--sp-primary,#38bdf8);background:none;color:var(--sp-primary,#38bdf8);font-size:12px;font-weight:600;cursor:pointer;">Solução</button>
+            <button class="smax-tpl-sp-tab" data-disc="true" style="padding:7px 16px;border:none;border-bottom:2px solid transparent;background:none;color:var(--sp-text-muted);font-size:12px;cursor:pointer;">Discussão</button>
+          </div>
+          <div id="smax-tpl-sp-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;min-height:40px;">
+            <div style="color:var(--sp-text-dim);font-size:12px;text-align:center;padding:20px;">Carregando...</div>
+          </div>
+        </div>
+        <div id="smax-tpl-sp-form" class="smax-sp-card" style="display:none;flex-direction:column;gap:10px;">
+          <div class="smax-sp-section-title" style="margin-bottom:4px;">✏️ <span id="smax-tpl-sp-form-title-lbl">Novo template</span></div>
+          <input id="smax-tpl-sp-title" type="text" placeholder="Título do template..." style="padding:8px 10px;border-radius:6px;font-size:13px;width:100%;box-sizing:border-box;">
+          <div class="smax-sp-muted">Conteúdo (aceita HTML. Cole diretamente do OneNote, Word ou qualquer editor rico):</div>
+          <textarea id="smax-tpl-sp-body" placeholder="Cole o conteúdo aqui ou escreva HTML..." style="min-height:140px;resize:vertical;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Segoe UI',system-ui,sans-serif;width:100%;box-sizing:border-box;line-height:1.5;"></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+            <button id="smax-tpl-sp-cancel" style="padding:7px 14px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;">Cancelar</button>
+            <button id="smax-tpl-sp-save" style="padding:7px 18px;border-radius:6px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Salvar template</button>
+          </div>
+        </div>
+        <div id="smax-tpl-import-area" class="smax-sp-card" style="display:none;flex-direction:column;gap:8px;">
+          <div class="smax-sp-section-title" style="margin-bottom:4px;">📥 Importar templates (JSON)</div>
+          <div class="smax-sp-muted">Cole o JSON exportado anteriormente:</div>
+          <textarea id="smax-tpl-import-json-input" style="min-height:100px;resize:vertical;padding:8px 10px;border-radius:6px;font-size:11px;font-family:monospace;width:100%;box-sizing:border-box;"></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button id="smax-tpl-import-cancel" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;">Cancelar</button>
+            <button id="smax-tpl-import-confirm" style="padding:6px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Importar</button>
+          </div>
+        </div>
       </div>`;
 
-    const renderSectionExportar = () => `
+    const renderSectionTriagem = () => `
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div class="smax-sp-card">
+          <div class="smax-sp-section-title">🎯 HUD de Triagem</div>
+          <div class="smax-sp-muted" style="margin-bottom:14px;">
+            Abre o painel de triagem sobre a lista de chamados. Navegue pelos chamados, defina urgência, atribua responsável e envie respostas rapidamente.<br>
+            <strong style="color:var(--sp-text);font-size:11px;">Dica:</strong> filtre e ordene os chamados no SMAX antes de iniciar.
+          </div>
+          <button id="smax-launch-triage-btn" style="padding:12px 32px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);color:#fff;box-shadow:0 6px 20px rgba(59,130,246,.4),0 0 0 1px rgba(255,255,255,.1) inset;transition:transform .15s,box-shadow .15s;">
+            🚀 Iniciar Triagem
+          </button>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📖 Guia Rápido</div>
+          <ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--sp-text);line-height:1.7;">
+            <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
+            <li>"Meus finais" limita a fila aos IDs desejados (ex: 0-32, 50).</li>
+            <li>Edite a resposta rápida e clique ENVIAR para gravar tudo de uma vez.</li>
+            <li>Os chamados são ordenados por VIP e mais antigos primeiro.</li>
+            <li style="color:var(--sp-danger-text);font-weight:600;">CUIDADO: Vincular Global NÃO verifica se o número é válido.</li>
+          </ul>
+        </div>
+        <div class="smax-sp-card">
           <div class="smax-sp-section-title">📊 Log de Atividades</div>
-          <div class="smax-sp-muted" style="margin-bottom:10px;">${ActivityLog.getCount()} registros armazenados.</div>
-          <button type="button" id="smax-log-export-all" style="padding:10px 18px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:12px;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;gap:6px;">
+          <div class="smax-sp-muted" style="margin-bottom:10px;">${ActivityLog.getCount()} registros armazenados localmente.</div>
+          <button type="button" id="smax-log-export-all" style="padding:9px 18px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
             📥 Exportar CSV
           </button>
         </div>
@@ -3839,25 +3891,12 @@
           <div class="smax-sp-section-title">🔧 Configuração JSON</div>
           <div class="smax-sp-muted" style="margin-bottom:10px;">Edite e clique Salvar. Copie para compartilhar com colegas.</div>
           <textarea id="smax-config-io-textarea" spellcheck="false"
-            style="width:100%;min-height:200px;max-height:320px;resize:vertical;padding:10px 12px;border-radius:8px;font-size:11px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;line-height:1.5;box-sizing:border-box;transition:border-color .15s ease;"></textarea>
+            style="width:100%;min-height:180px;max-height:320px;resize:vertical;padding:10px 12px;border-radius:8px;font-size:11px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;line-height:1.5;box-sizing:border-box;transition:border-color .15s ease;"></textarea>
           <div id="smax-config-io-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin:8px 0;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:12px;cursor:pointer;">📋 Copiar</button>
             <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
           </div>
-        </div>
-        <div class="smax-sp-card">
-          <div class="smax-sp-section-title">📖 Guia Rápido</div>
-          <ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--sp-text);line-height:1.7;">
-            <li>Use os botões de urgência para definir impacto antes de atribuir.</li>
-            <li>"Meus finais" limita a fila de triagem aos IDs desejados.</li>
-            <li>Editar a resposta rápida já a deixa pronta; "ENVIAR" grava tudo no SMAX.</li>
-            <li>Filtre os chamados no SMAX corretamente antes de iniciar a Triagem.</li>
-            <li>Configure finais e ausências no painel de Equipes.</li>
-            <li>O filtro "Hora de Criação" do SMAX permite escolher intervalo de datas.</li>
-            <li>Os chamados são ordenados por VIP e mais antigos primeiro.</li>
-            <li style="color:var(--sp-danger-text);font-weight:600;">CUIDADO: Vincular Global NÃO VERIFICA se o número é válido.</li>
-          </ul>
         </div>
       </div>`;
 
@@ -3868,7 +3907,7 @@
         case 'especialistas': return renderSectionEspecialistas();
         case 'detratores':    return renderSectionDetratores();
         case 'templates':     return renderSectionTemplates();
-        case 'exportar':      return renderSectionExportar();
+        case 'triagem':       return renderSectionTriagem();
         default:              return renderSectionGeral();
       }
     };
@@ -3983,16 +4022,207 @@
     };
 
     const wireTemplatesEvents = () => {
-      const btn = container?.querySelector('#smax-open-tpl-btn');
-      if (btn) btn.addEventListener('click', () => {
-        container.style.display = 'none';
-        const tplModal = document.getElementById('smax-tpl-modal');
-        if (tplModal) tplModal.classList.add('open');
+      if (!container) return;
+      let tplActiveDisc = false;
+      let tplEditingIdx = null;
+
+      const getTplList = () => container.querySelector('#smax-tpl-sp-list');
+      const getForm    = () => container.querySelector('#smax-tpl-sp-form');
+      const getImport  = () => container.querySelector('#smax-tpl-import-area');
+
+      const renderTplList = () => {
+        const listEl = getTplList();
+        if (!listEl) return;
+        const items = Templates.load(tplActiveDisc);
+        if (!items.length) {
+          listEl.innerHTML = `<div style="color:var(--sp-text-dim);font-size:12px;text-align:center;padding:20px;">Nenhum template. Clique em "+ Novo" para criar.</div>`;
+          return;
+        }
+        listEl.innerHTML = items.map((t, i) => `
+          <div class="smax-tpl-sp-item" data-idx="${i}" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface-2);cursor:pointer;transition:border-color .15s,background .15s;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:var(--sp-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(t.title)}</div>
+              <div style="font-size:11px;color:var(--sp-text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml((t.html||'').replace(/<[^>]+>/g,' ').trim().slice(0,80))}</div>
+            </div>
+            <button class="smax-tpl-sp-use" data-idx="${i}" title="Inserir no editor" style="flex-shrink:0;padding:4px 10px;border-radius:5px;border:none;background:var(--sp-primary-bg);color:var(--sp-primary);font-size:11px;font-weight:600;cursor:pointer;">Usar</button>
+            <button class="smax-tpl-sp-edit-btn" data-idx="${i}" title="Editar" style="flex-shrink:0;padding:4px 8px;border-radius:5px;border:1px solid var(--sp-border);background:none;color:var(--sp-text-muted);font-size:11px;cursor:pointer;">✏️</button>
+            <button class="smax-tpl-sp-del-btn" data-idx="${i}" title="Excluir" style="flex-shrink:0;padding:4px 8px;border-radius:5px;border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);color:var(--sp-danger-text);font-size:11px;cursor:pointer;">✕</button>
+          </div>
+        `).join('');
+
+        listEl.querySelectorAll('.smax-tpl-sp-use').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = parseInt(btn.dataset.idx, 10);
+            const tpl = Templates.load(tplActiveDisc)[idx];
+            if (!tpl) return;
+            if (Templates.insertIntoEditor(tpl.html)) {
+              container.style.display = 'none'; // fecha settings ao inserir
+            } else {
+              navigator.clipboard?.writeText(tpl.html).catch(() => {});
+              alert('Editor não encontrado — conteúdo copiado para a área de transferência.');
+            }
+          });
+        });
+        listEl.querySelectorAll('.smax-tpl-sp-edit-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => { e.stopPropagation(); openTplForm(parseInt(btn.dataset.idx, 10)); });
+        });
+        listEl.querySelectorAll('.smax-tpl-sp-del-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = parseInt(btn.dataset.idx, 10);
+            const arr = Templates.load(tplActiveDisc);
+            if (confirm(`Excluir "${arr[idx]?.title}"?`)) {
+              arr.splice(idx, 1);
+              Templates.save(tplActiveDisc, arr);
+              renderTplList();
+            }
+          });
+        });
+      };
+
+      const openTplForm = (idx = null) => {
+        tplEditingIdx = idx;
+        const formEl = getForm();
+        if (!formEl) return;
+        const arr = Templates.load(tplActiveDisc);
+        const tpl = idx !== null ? arr[idx] : null;
+        formEl.querySelector('#smax-tpl-sp-form-title-lbl').textContent = idx !== null ? 'Editar template' : 'Novo template';
+        formEl.querySelector('#smax-tpl-sp-title').value = tpl?.title || '';
+        formEl.querySelector('#smax-tpl-sp-body').value  = tpl?.html  || '';
+        formEl.style.display = 'flex';
+        formEl.querySelector('#smax-tpl-sp-title').focus();
+        // Hide import area
+        const imp = getImport(); if (imp) imp.style.display = 'none';
+      };
+
+      const closeTplForm = () => {
+        tplEditingIdx = null;
+        const formEl = getForm(); if (formEl) formEl.style.display = 'none';
+      };
+
+      const saveTplForm = () => {
+        const formEl = getForm(); if (!formEl) return;
+        const title = (formEl.querySelector('#smax-tpl-sp-title').value || '').trim();
+        const html  = (formEl.querySelector('#smax-tpl-sp-body').value  || '').trim();
+        if (!title) { alert('Informe um título para o template.'); return; }
+        const arr = Templates.load(tplActiveDisc);
+        if (tplEditingIdx !== null) arr[tplEditingIdx] = { title, html };
+        else arr.push({ title, html });
+        Templates.save(tplActiveDisc, arr);
+        closeTplForm();
+        renderTplList();
+      };
+
+      // Tabs
+      container.querySelectorAll('.smax-tpl-sp-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          tplActiveDisc = tab.dataset.disc === 'true';
+          container.querySelectorAll('.smax-tpl-sp-tab').forEach(t => {
+            const isActive = t === tab;
+            t.style.borderBottomColor  = isActive ? 'var(--sp-primary,#38bdf8)' : 'transparent';
+            t.style.color = isActive ? 'var(--sp-primary,#38bdf8)' : 'var(--sp-text-muted)';
+            t.style.fontWeight = isActive ? '600' : '400';
+            if (isActive) t.classList.add('active'); else t.classList.remove('active');
+          });
+          closeTplForm();
+          renderTplList();
+        });
       });
+
+      // New button
+      container.querySelector('#smax-tpl-new-btn')?.addEventListener('click', () => openTplForm(null));
+
+      // Form buttons
+      container.querySelector('#smax-tpl-sp-save')?.addEventListener('click', saveTplForm);
+      container.querySelector('#smax-tpl-sp-cancel')?.addEventListener('click', closeTplForm);
+
+      // Paste from clipboard (OneNote / Word rich HTML)
+      container.querySelector('#smax-tpl-clip-btn')?.addEventListener('click', async () => {
+        openTplForm(null);
+        const bodyEl = container.querySelector('#smax-tpl-sp-body');
+        if (!bodyEl) return;
+        try {
+          // Tenta ler HTML do clipboard (Chrome 86+, Firefox 127+)
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            if (item.types.includes('text/html')) {
+              const blob = await item.getType('text/html');
+              const html = await blob.text();
+              bodyEl.value = html;
+              return;
+            }
+          }
+          // Fallback: plain text
+          const text = await navigator.clipboard.readText();
+          bodyEl.value = text;
+        } catch {
+          // Fallback silencioso: usuário pode colar manualmente no campo
+          bodyEl.placeholder = 'Cole o conteúdo aqui com Ctrl+V...';
+          bodyEl.focus();
+        }
+      });
+
+      // Export JSON
+      container.querySelector('#smax-tpl-export-btn')?.addEventListener('click', () => {
+        const data = { sol: Templates.load(false), disc: Templates.load(true) };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'smax_templates.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      });
+
+      // Import JSON — show textarea
+      container.querySelector('#smax-tpl-import-btn')?.addEventListener('click', () => {
+        const imp = getImport(); if (!imp) return;
+        imp.style.display = imp.style.display === 'flex' ? 'none' : 'flex';
+        closeTplForm();
+      });
+      container.querySelector('#smax-tpl-import-cancel')?.addEventListener('click', () => {
+        const imp = getImport(); if (imp) imp.style.display = 'none';
+      });
+      container.querySelector('#smax-tpl-import-confirm')?.addEventListener('click', () => {
+        const raw = (container.querySelector('#smax-tpl-import-json-input')?.value || '').trim();
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            // Format: array of {title, html}
+            const arr = Templates.load(tplActiveDisc);
+            parsed.forEach(t => { if (t.title) arr.push(t); });
+            Templates.save(tplActiveDisc, arr);
+          } else if (parsed.sol || parsed.disc) {
+            // Format: {sol:[...], disc:[...]}
+            if (Array.isArray(parsed.sol))  { const s = Templates.load(false); parsed.sol.forEach(t => s.push(t));  Templates.save(false, s); }
+            if (Array.isArray(parsed.disc)) { const d = Templates.load(true);  parsed.disc.forEach(t => d.push(t)); Templates.save(true,  d); }
+          }
+          const imp = getImport(); if (imp) imp.style.display = 'none';
+          renderTplList();
+          alert('Templates importados com sucesso!');
+        } catch(e) { alert('JSON inválido: ' + e.message); }
+      });
+
+      // Initial render
+      renderTplList();
     };
 
-    const wireExportarEvents = () => {
+    const wireTriagemEvents = () => {
       if (!container) return;
+
+      // Launch triage
+      const launchBtn = container.querySelector('#smax-launch-triage-btn');
+      if (launchBtn) {
+        launchBtn.addEventListener('mouseenter', () => { launchBtn.style.transform = 'translateY(-2px)'; launchBtn.style.boxShadow = '0 10px 28px rgba(59,130,246,.55),0 0 0 1px rgba(255,255,255,.15) inset'; });
+        launchBtn.addEventListener('mouseleave', () => { launchBtn.style.transform = ''; launchBtn.style.boxShadow = ''; });
+        launchBtn.addEventListener('click', () => {
+          container.style.display = 'none';
+          TriageHUD.open();
+        });
+      }
+
+      // Log + config (reuse same logic)
       const textarea = container.querySelector('#smax-config-io-textarea');
       const statusEl = container.querySelector('#smax-config-io-status');
       const copyBtn  = container.querySelector('#smax-config-copy-btn');
@@ -4057,7 +4287,7 @@
         case 'especialistas': wireEspecialistasEvents(); break;
         case 'detratores':    wireDetratoresEvents();    break;
         case 'templates':     wireTemplatesEvents();     break;
-        case 'exportar':      wireExportarEvents();      break;
+        case 'triagem':       wireTriagemEvents();       break;
       }
     };
 
@@ -6005,12 +6235,10 @@
     };
 
     const init = () => {
-      if (startBtn) return;
+      if (backdrop) return; // já inicializado
       hookNativeEditors();
-      startBtn = document.createElement('button');
-      startBtn.id = 'smax-triage-start-btn';
-      startBtn.textContent = 'Iniciar triagem';
-      document.body.appendChild(startBtn);
+      // Botão flutuante removido — triagem iniciada pelo painel de configurações
+      startBtn = null;
 
       backdrop = document.createElement('div');
       backdrop.id = 'smax-triage-hud-backdrop';
@@ -6232,7 +6460,7 @@
       rebuildQueueForPersonalFinals();
     });
 
-    return { init };
+    return { init, open: openHud };
   })();
 
   /* =========================================================
@@ -6537,17 +6765,9 @@
       modalEl.addEventListener('click', (e) => { if (e.target === modalEl) closeModal(); });
     };
 
-    const init = () => {
-      // Botão flutuante
-      const btn = document.createElement('button');
-      btn.id = 'smax-tpl-btn';
-      btn.title = 'Templates de resposta';
-      btn.textContent = '📋';
-      btn.addEventListener('click', () => openModal(false));
-      document.body.appendChild(btn);
-    };
+    const init = () => { /* botão externo removido — acesso via painel de configurações */ };
 
-    return { init, openModal };
+    return { init, openModal, load, save, insertIntoEditor };
   })();
 
   /* =========================================================
