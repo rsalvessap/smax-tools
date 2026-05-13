@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.16
+// @version      1.17
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -625,33 +625,48 @@
     #smax-settings-content {
       flex: 1;
       overflow-y: auto;
-      padding: 24px 32px;
+      padding: 24px 28px;
       min-width: 0;
-      max-width: 900px;
     }
     #smax-settings-content::-webkit-scrollbar { width: 6px; }
     #smax-settings-content::-webkit-scrollbar-track { background: transparent; }
     #smax-settings-content::-webkit-scrollbar-thumb { background: var(--sp-border-strong, rgba(255,255,255,.2)); border-radius: 999px; }
-    /* Toggle chips */
-    .smax-pref-chip {
+    /* Module toggle rows */
+    .smax-module-group-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      color: var(--sp-text-dim, #64748b);
+      padding: 10px 2px 5px;
+    }
+    .smax-module-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      border-radius: 8px;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
       border: 1px solid var(--sp-border, rgba(255,255,255,.1));
-      background: var(--sp-surface, rgba(255,255,255,.03));
       cursor: pointer;
-      font-size: 12px;
-      color: var(--sp-text, #e2e8f0);
-      white-space: nowrap;
-      transition: border-color .15s, background .15s;
+      transition: background .15s, border-color .15s, opacity .15s;
+      user-select: none;
+      margin-bottom: 4px;
     }
-    .smax-pref-chip:hover {
-      border-color: var(--sp-primary, #38bdf8);
-      background: var(--sp-primary-bg, rgba(56,189,248,.06));
-    }
-    .smax-pref-chip input[type="checkbox"] { accent-color: var(--sp-primary, #38bdf8); }
+    .smax-module-row:hover { border-color: var(--sp-border-strong); }
+    .smax-module-row.smax-active { background: var(--sp-primary-bg); border-color: var(--sp-primary); }
+    .smax-module-row:not(.smax-active) { opacity: 0.55; }
+    .smax-module-row:not(.smax-active):hover { opacity: 0.9; }
+    .smax-module-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .smax-module-info { flex: 1; min-width: 0; }
+    .smax-module-name { font-size: 13px; font-weight: 500; color: var(--sp-text); }
+    .smax-module-desc { font-size: 11px; color: var(--sp-text-muted); margin-top: 2px; }
+    /* Toggle pill */
+    .smax-toggle-sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+    .smax-toggle-sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .smax-toggle-track { position: absolute; inset: 0; border-radius: 999px; background: var(--sp-border-strong, rgba(255,255,255,.2)); transition: background .2s; }
+    .smax-toggle-sw input:checked + .smax-toggle-track { background: var(--sp-primary, #38bdf8); }
+    .smax-toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+    .smax-toggle-sw input:checked + .smax-toggle-track::before { transform: translateX(16px); }
     /* Detractor items */
     .smax-det-item {
       display: flex;
@@ -3737,21 +3752,42 @@
           </div>
           <div class="smax-sp-card">
             <div class="smax-sp-section-title">Opções dos módulos</div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;">
-              ${[
-                ['zenModeOn',        '🧘 Zen Mode',              'Oculta campos desnecessários no formulário'],
-                ['radarOn',          '📡 Radar de pendentes',    'Badge com chamados rejeitados ou aguardando aceite'],
-                ['enlargeCommentsOn','💬 Comentários expandidos','Exibe todos os comentários sem limite de altura'],
-                ['collapseOn',       '📂 Recolher seções',      'Recolhe automaticamente seções desnecessárias'],
-                ['flagSkullOn',      '💀 Caveira detratores',   'Marca visualmente pessoas na lista de detratores'],
-                ['nameBadgesOn',     '🏷️ Badges na grid',       'Exibe responsável ao lado do chamado na lista'],
-              ].map(([key, label, tip]) => `
-                <label class="smax-pref-chip" title="${tip}">
+            <div class="smax-module-group-label">📋 Tela de Lista (fila de chamados)</div>
+            ${[
+              ['radarOn',      '📡', 'Radar de pendentes',  'Badge com chamados rejeitados ou aguardando aceite'],
+              ['flagSkullOn',  '💀', 'Caveira detratores',  'Marca visualmente pessoas da sua lista de detratores'],
+              ['nameBadgesOn', '🏷️', 'Badges na grid',      'Exibe o responsável ao lado do chamado na lista'],
+            ].map(([key, icon, label, tip]) => `
+              <div class="smax-module-row${prefs[key] ? ' smax-active' : ''}" data-key="${key}">
+                <div class="smax-module-icon">${icon}</div>
+                <div class="smax-module-info">
+                  <div class="smax-module-name">${label}</div>
+                  <div class="smax-module-desc">${tip}</div>
+                </div>
+                <label class="smax-toggle-sw" onclick="event.stopPropagation()">
                   <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''}>
-                  ${label}
+                  <span class="smax-toggle-track"></span>
                 </label>
-              `).join('')}
-            </div>
+              </div>
+            `).join('')}
+            <div class="smax-module-group-label" style="margin-top:6px;">🎫 Tela de Chamado (interno)</div>
+            ${[
+              ['zenModeOn',         '🧘', 'Zen Mode',              'Oculta campos desnecessários no formulário de chamado'],
+              ['enlargeCommentsOn', '💬', 'Comentários expandidos','Exibe todos os comentários sem limite de altura'],
+              ['collapseOn',        '📂', 'Recolher seções',       'Recolhe automaticamente seções desnecessárias'],
+            ].map(([key, icon, label, tip]) => `
+              <div class="smax-module-row${prefs[key] ? ' smax-active' : ''}" data-key="${key}">
+                <div class="smax-module-icon">${icon}</div>
+                <div class="smax-module-info">
+                  <div class="smax-module-name">${label}</div>
+                  <div class="smax-module-desc">${tip}</div>
+                </div>
+                <label class="smax-toggle-sw" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''}>
+                  <span class="smax-toggle-track"></span>
+                </label>
+              </div>
+            `).join('')}
           </div>
         </div>`;
     };
@@ -3963,15 +3999,25 @@
         triadorSearch.addEventListener('blur', () => setTimeout(() => { triadorResults.style.display = 'none'; }, 200));
       }
 
+      // Row click (outside the pill) toggles the switch
+      container.querySelectorAll('.smax-module-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('.smax-toggle-sw')) return;
+          const cb = row.querySelector('.smax-pref-toggle');
+          if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+        });
+      });
+      // Checkbox change: save state and update row style
       container.querySelectorAll('.smax-pref-toggle').forEach(cb => {
         cb.addEventListener('change', () => {
           const key = cb.dataset.key;
-          if (key in prefs) {
-            prefs[key] = cb.checked;
-            savePrefs();
-            if (key === 'zenModeOn') ZenMode.apply();
-            if (key === 'radarOn' && cb.checked) RadarRevisar.query();
-          }
+          if (!(key in prefs)) return;
+          prefs[key] = cb.checked;
+          savePrefs();
+          const row = cb.closest('.smax-module-row');
+          if (row) row.classList.toggle('smax-active', cb.checked);
+          if (key === 'zenModeOn') ZenMode.apply();
+          if (key === 'radarOn' && cb.checked) RadarRevisar.query();
         });
       });
     };
@@ -4057,7 +4103,9 @@
             const tpl = Templates.load(tplActiveDisc)[idx];
             if (!tpl) return;
             if (Templates.insertIntoEditor(tpl.html)) {
-              container.style.display = 'none'; // fecha settings ao inserir
+              container.style.display = 'none';
+              const bd = document.getElementById('smax-settings-backdrop');
+              if (bd) bd.style.display = 'none';
             } else {
               navigator.clipboard?.writeText(tpl.html).catch(() => {});
               alert('Editor não encontrado — conteúdo copiado para a área de transferência.');
@@ -4218,6 +4266,8 @@
         launchBtn.addEventListener('mouseleave', () => { launchBtn.style.transform = ''; launchBtn.style.boxShadow = ''; });
         launchBtn.addEventListener('click', () => {
           container.style.display = 'none';
+          const bd = document.getElementById('smax-settings-backdrop');
+          if (bd) bd.style.display = 'none';
           TriageHUD.open();
         });
       }
@@ -4269,7 +4319,11 @@
       const themeToggleBtn = container.querySelector('#smax-theme-toggle-btn');
       if (themeToggleBtn) themeToggleBtn.addEventListener('click', ThemeManager.toggle);
       const panelCloseBtn = container.querySelector('#smax-settings-close-btn');
-      if (panelCloseBtn) panelCloseBtn.addEventListener('click', () => { container.style.display = 'none'; });
+      if (panelCloseBtn) panelCloseBtn.addEventListener('click', () => {
+        container.style.display = 'none';
+        const bd = document.getElementById('smax-settings-backdrop');
+        if (bd) bd.style.display = 'none';
+      });
 
       // Sidebar navigation
       container.querySelectorAll('.smax-sidebar-item').forEach(btn => {
@@ -4300,16 +4354,24 @@
       Object.assign(toggleBtn.style, { position: 'fixed', right: '12px', bottom: '12px', zIndex: 999999, border: 'none' });
       document.body.appendChild(toggleBtn);
 
+      const backdropEl = document.createElement('div');
+      backdropEl.id = 'smax-settings-backdrop';
+      backdropEl.style.cssText = 'position:fixed;inset:0;z-index:999998;display:none;background:rgba(0,0,0,0.38);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);transition:opacity .2s;';
+      document.body.appendChild(backdropEl);
+
       container = document.createElement('div');
       container.id = 'smax-settings';
       Object.assign(container.style, {
         position: 'fixed',
-        inset: '0',
-        width: '100vw',
+        top: '0',
+        right: '0',
+        bottom: '0',
+        left: 'auto',
+        width: '50vw',
         height: '100vh',
         zIndex: '999999',
         borderRadius: '0',
-        boxShadow: 'none',
+        boxShadow: '-6px 0 40px rgba(0,0,0,0.45)',
         display: 'none',
         fontSize: '14px',
         flexDirection: 'column',
@@ -4317,16 +4379,24 @@
       });
       document.body.appendChild(container);
 
+      const openPanel = () => {
+        DataRepository.ensurePeopleLoaded();
+        reloadConfig();
+        renderPanel();
+        container.style.display = 'flex';
+        backdropEl.style.display = 'block';
+        ThemeManager.init();
+      };
+      const closePanel = () => {
+        container.style.display = 'none';
+        backdropEl.style.display = 'none';
+      };
+
+      backdropEl.addEventListener('click', closePanel);
+
       toggleBtn.addEventListener('click', () => {
         const visible = container.style.display === 'flex';
-        if (!visible) {
-          DataRepository.ensurePeopleLoaded();
-          reloadConfig();
-          renderPanel();
-          container.style.display = 'flex';
-        } else {
-          container.style.display = 'none';
-        }
+        if (!visible) openPanel(); else closePanel();
       });
     };
 
