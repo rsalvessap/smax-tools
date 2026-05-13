@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.21
+// @version      1.22
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -930,12 +930,22 @@
     const locateSolutionEditor = () => {
       const ck = getPageCKEditor();
       if (!(ck && ck.instances)) return null;
-      return Object.values(ck.instances).find((inst) => {
+      const instances = Object.values(ck.instances);
+      // 1) Try specific field names first
+      const specific = instances.find((inst) => {
         const el = inst.element && inst.element.$;
         if (!el) return false;
         const id = el.id || '';
         const name = el.getAttribute && el.getAttribute('name') || '';
-        return /solution|solucao|plCkeditor/i.test(`${id} ${name}`);
+        return /solution|solucao|plCkeditor|resposta|reply|answer|discussion/i.test(`${id} ${name}`);
+      });
+      if (specific) return specific;
+      // 2) Fallback: any visible (non-detached) CKEditor instance
+      return instances.find(inst => {
+        try {
+          const el = inst.element && inst.element.$;
+          return el && document.body.contains(el) && el.offsetParent !== null;
+        } catch { return false; }
       }) || null;
     };
 
@@ -7018,80 +7028,59 @@
    * =======================================================*/
   const BlackHeader = (() => {
     const STYLE_ID = 'smax-header-preto';
-    // Covers Bootstrap 3 (.navbar-fixed-top) and Bootstrap 4 (.fixed-top),
-    // plus SMAX-specific ids and generic nav/header roles
-    const KNOWN_SELS = [
-      '.navbar',
-      'nav.navbar',
-      '.navbar-fixed-top',
-      '.navbar.fixed-top',
-      '.navbar-header',
-      '.navbar-collapse',
-      '.customBrandLogoContainer',
-      '#menu-categories',
-      '#menu-categories .menu-right-section',
-      'header[role="banner"]',
-      '[id="header"]',
-      '[id="app-header"]',
-      '[id="main-header"]',
-    ];
 
     const paintEl = (el) => {
       el.style.setProperty('background', '#000', 'important');
       el.style.setProperty('background-color', '#000', 'important');
     };
 
-    // Known selectors
-    const applyKnown = () => KNOWN_SELS.forEach(sel => {
-      try { document.querySelectorAll(sel).forEach(paintEl); } catch {}
-    });
-
-    // Heuristic: paint any fixed/sticky full-width short bar sitting at the top
+    // Broad heuristic: scan body's first 3 levels of descendants looking for
+    // any fixed/sticky element spanning the full width at the very top of the
+    // viewport. Needed because SMAX Angular uses custom component tags
+    // (e.g. <menu-main>, <app-nav>) that no class-based selector can predict.
     const applyHeuristic = () => {
       try {
         const W = window.innerWidth;
-        document.querySelectorAll('nav, header, [role="navigation"], [role="banner"]').forEach(el => {
-          const r = el.getBoundingClientRect();
-          if (r.top < 10 && r.height > 20 && r.height < 120 && r.width > W * 0.5) {
+        // body > * covers direct Angular root children (app-root, etc.)
+        // body > * > * covers one level deeper (actual nav component)
+        // body > * > * > * covers one more level in case of wrappers
+        document.querySelectorAll('body > *, body > * > *, body > * > * > *').forEach(el => {
+          try {
             const s = window.getComputedStyle(el);
-            if (s.position === 'fixed' || s.position === 'sticky' || r.top === 0) paintEl(el);
-          }
+            if (s.position !== 'fixed' && s.position !== 'sticky') return;
+            const r = el.getBoundingClientRect();
+            if (r.top >= -2 && r.top <= 15 && r.height > 25 && r.height < 150 && r.width > W * 0.6) {
+              paintEl(el);
+            }
+          } catch {}
         });
       } catch {}
     };
 
-    const applyAll = () => { applyKnown(); applyHeuristic(); };
+    const applyAll = () => { applyHeuristic(); };
 
     const init = () => {
-      // CSS stylesheet: covers elements not yet affected by Angular's style binding
+      // CSS fallback for known Bootstrap/SMAX class names
       if (!document.getElementById(STYLE_ID)) {
         const s = document.createElement('style');
         s.id = STYLE_ID;
         s.textContent = `
           .navbar, nav.navbar, .navbar-fixed-top, .navbar.fixed-top,
-          .navbar-header, .navbar-collapse,
-          .customBrandLogoContainer,
-          #menu-categories, #menu-categories .menu-right-section,
+          .customBrandLogoContainer, #menu-categories,
           header[role="banner"], #header, #app-header, #main-header {
             background: #000 !important;
             background-color: #000 !important;
           }
-          .navbar .nav > li > a:hover,
-          .navbar .nav > li > a:focus { border-bottom: 3px solid #3b82f6 !important; }
         `;
         (document.head || document.documentElement).appendChild(s);
       }
-      // Apply at 0 / 400ms / 1200ms / 2500ms / 4000ms — Angular bootstrap is slow
-      applyAll();
-      [400, 1200, 2500, 4000].forEach(t => setTimeout(applyAll, t));
-      // MutationObserver: re-apply whenever Angular re-renders/re-styles the header area
-      const obs = new MutationObserver(Utils.debounce(applyAll, 150));
-      obs.observe(document.documentElement, {
-        childList: true, subtree: true,
-        attributes: true, attributeFilter: ['style', 'class'],
-      });
-      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
+      // Multiple retries — Angular bootstrap is slow and re-renders the nav
+      [0, 300, 800, 1500, 3000, 5000].forEach(t => setTimeout(applyAll, t));
+      // Keep reapplying: Angular style bindings can reset inline styles on each
+      // change-detection cycle, overriding our earlier setProperty calls
+      setInterval(applyAll, 2500);
     };
+
     return { init };
   })();
 
@@ -7398,6 +7387,158 @@
   })();
 
   /* =========================================================
+   * CellHighlighter — destaque de palavras-chave nas células da
+   * grade de chamados (apenas na tela de lista)
+   * Baseado no script SMAX SGS 221 do Adriano Cardoso
+   * =======================================================*/
+  const CellHighlighter = (() => {
+    const escapeReg = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Grupos de palavras-chave e suas cores
+    const GROUPS = {
+      amarelo: {
+        cls: 'smax-hl-yellow',
+        whole: ['jurisprudência','jurisprudencia','distribuidor','DJEN','Diário Eletrônico',
+                'automatização','ceman','Central de Mandados','mandado','mandados',
+                'movimentar','dois fatores','Renajud','Sisbajud',
+                'Autenticador','carta','evento','automação','automações',
+                'migrar','migrador','migração','perito','perita',
+                'localizadores','localizador'],
+        substr: ['mail'],
+        custom: [],
+      },
+      vermelho: {
+        cls: 'smax-hl-red',
+        whole: ['ERRO_AGENDAMENTO_EVENTO','ERRO_ENVIO_INTIMACAO_DJEN','Cookie not found',
+                'Item 04 do Comunicado 435/2025','Erro ao gerar o Documento Comprobatório Renajud'],
+        substr: ['erro','errado','réu revel','Urgente','urgência','Plantão'],
+        custom: [],
+      },
+      verde: {
+        cls: 'smax-hl-green',
+        whole: ['taxa','taxas','custa','custas','restituir','restituição',
+                'guia','diligência','diligencia','justiça gratuíta',
+                'parcelamento','parcelamento das custas'],
+        substr: [],
+        custom: [],
+      },
+      azul: {
+        cls: 'smax-hl-blue',
+        whole: ['magistrado','magistrada','acesso','acessar','cadastro','senha','login','2fa','autenticação'],
+        substr: ['acess'],
+        custom: [/\bju[ií]z(?:a|es)?\b/gi],
+      },
+      rosa: {
+        cls: 'smax-hl-pink',
+        whole: ['BdOrigem'],
+        substr: ['BdOrigem'],
+        custom: [],
+      },
+    };
+
+    const GROUP_ORDER = ['vermelho','rosa','amarelo','verde','azul'];
+
+    const buildRegexes = (g) => {
+      const regs = [];
+      if (g.whole?.length) {
+        regs.push(new RegExp(`(?<![\\p{L}\\d_])(${g.whole.map(escapeReg).join('|')})(?![\\p{L}\\d_])`, 'giu'));
+      }
+      if (g.substr?.length) {
+        regs.push(new RegExp(`(${g.substr.map(escapeReg).join('|')})`, 'giu'));
+      }
+      if (g.custom?.length) {
+        regs.push(...g.custom.map(r => new RegExp(r.source, r.flags || 'giu')));
+      }
+      return regs;
+    };
+
+    const ORDERED_GROUPS = GROUP_ORDER.map(name => ({
+      cls: GROUPS[name].cls,
+      regexes: buildRegexes(GROUPS[name]),
+    }));
+
+    const HL_CLS = ['smax-hl-yellow','smax-hl-red','smax-hl-green','smax-hl-blue','smax-hl-pink'];
+
+    const injectStyles = () => {
+      if (document.getElementById('smax-cellhl-styles')) return;
+      const s = document.createElement('style');
+      s.id = 'smax-cellhl-styles';
+      s.textContent = `
+        .smax-hl-yellow { background:#ffeb3b !important; color:#000 !important; font-weight:700; border-radius:5px; padding:0 .14em; }
+        .smax-hl-red    { background:#d32f2f !important; color:#fff !important; font-weight:700; border-radius:3px; padding:0 .16em; }
+        .smax-hl-green  { background:#2e7d32 !important; color:#fff !important; font-weight:700; border-radius:3px; padding:0 .14em; }
+        .smax-hl-blue   { background:#1e88e5 !important; color:#fff !important; font-weight:700; border-radius:3px; padding:0 .14em; }
+        .smax-hl-pink   { background:#000    !important; color:#ffeb3b !important; font-weight:700; border-radius:3px; padding:0 .14em; }
+      `;
+      (document.head || document.documentElement).appendChild(s);
+    };
+
+    const unwrap = (root) => {
+      root.querySelectorAll(HL_CLS.map(c => `.${c}`).join(','))
+          .forEach(span => span.replaceWith(document.createTextNode(span.textContent || '')));
+    };
+
+    const highlightWithRegex = (container, regex, cls) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          const pe = node.parentElement;
+          if (!pe) return NodeFilter.FILTER_ACCEPT;
+          if (HL_CLS.some(c => pe.classList?.contains(c))) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      const nodes = [];
+      for (let n; (n = walker.nextNode()); ) nodes.push(n);
+      for (const textNode of nodes) {
+        if (!textNode.parentNode) continue;
+        const text = textNode.nodeValue;
+        if (!regex.test(text)) { regex.lastIndex = 0; continue; }
+        regex.lastIndex = 0;
+        const frag = document.createDocumentFragment();
+        let last = 0, m;
+        while ((m = regex.exec(text)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          const span = document.createElement('span');
+          span.className = cls;
+          span.textContent = m[0];
+          frag.appendChild(span);
+          last = m.index + m[0].length;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        textNode.parentNode.replaceChild(frag, textNode);
+      }
+    };
+
+    const processCell = (cell) => {
+      const current = (cell.textContent || '').trim();
+      const last = cell.getAttribute('data-smax-hl-last') || '';
+      if (current === last) return; // unchanged — skip
+      unwrap(cell);
+      for (const g of ORDERED_GROUPS) {
+        for (const re of g.regexes) highlightWithRegex(cell, re, g.cls);
+      }
+      cell.setAttribute('data-smax-hl-last', (cell.textContent || '').trim());
+    };
+
+    const applyAll = () => {
+      if (!Utils.isListPage()) return;
+      document.querySelectorAll('.slick-cell').forEach(processCell);
+    };
+
+    const init = () => {
+      injectStyles();
+      applyAll();
+      const obs = new MutationObserver(Utils.debounce(applyAll, 120));
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+      setInterval(applyAll, 1500);
+      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
+    };
+
+    return { init, applyAll };
+  })();
+
+  /* =========================================================
    * Boot
    * =======================================================*/
   const boot = () => {
@@ -7409,6 +7550,7 @@
     GridTracker.init();
     TriageHUD.init();
     HighlightUser.init();
+    CellHighlighter.init();
     ZenMode.init();
     RadarRevisar.init();
     Templates.init();
