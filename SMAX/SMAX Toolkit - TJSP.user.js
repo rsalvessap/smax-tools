@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.23
+// @version      1.24
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6493,7 +6493,7 @@
       `;
       document.body.appendChild(backdrop);
 
-      startBtn.addEventListener('click', openHud);
+      if (startBtn) startBtn.addEventListener('click', openHud);
       backdrop.querySelector('#smax-triage-close').addEventListener('click', closeHud);
       backdrop.addEventListener('click', (event) => {
         if (event.target === backdrop) {
