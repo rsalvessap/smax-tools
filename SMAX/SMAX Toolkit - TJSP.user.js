@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.22
+// @version      1.23
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7027,29 +7027,31 @@
    * BlackHeader — barra de navegação preta
    * =======================================================*/
   const BlackHeader = (() => {
-    const STYLE_ID = 'smax-header-preto';
-
     const paintEl = (el) => {
       el.style.setProperty('background', '#000', 'important');
       el.style.setProperty('background-color', '#000', 'important');
     };
 
-    // Broad heuristic: scan body's first 3 levels of descendants looking for
-    // any fixed/sticky element spanning the full width at the very top of the
-    // viewport. Needed because SMAX Angular uses custom component tags
-    // (e.g. <menu-main>, <app-nav>) that no class-based selector can predict.
+    // document.elementsFromPoint(x, y) returns every element stacked at that
+    // screen coordinate, from topmost to root — it does NOT care about class
+    // names, tag names, or position CSS. It finds whatever is actually rendered
+    // there. We sample several y values to cover the full nav height.
     const applyHeuristic = () => {
       try {
         const W = window.innerWidth;
-        // body > * covers direct Angular root children (app-root, etc.)
-        // body > * > * covers one level deeper (actual nav component)
-        // body > * > * > * covers one more level in case of wrappers
-        document.querySelectorAll('body > *, body > * > *, body > * > * > *').forEach(el => {
+        const found = new Set();
+        [2, 12, 28, 50].forEach(y => {
           try {
-            const s = window.getComputedStyle(el);
-            if (s.position !== 'fixed' && s.position !== 'sticky') return;
+            (document.elementsFromPoint(W / 2, y) || []).forEach(el => found.add(el));
+          } catch {}
+        });
+        found.forEach(el => {
+          if (el === document.body || el === document.documentElement) return;
+          try {
             const r = el.getBoundingClientRect();
-            if (r.top >= -2 && r.top <= 15 && r.height > 25 && r.height < 150 && r.width > W * 0.6) {
+            // Must span ≥70 % of viewport (full-width bar, not a nav item inside it)
+            // and sit at the very top (top < 80px, height 20-200px)
+            if (r.width > W * 0.7 && r.height > 20 && r.height < 200 && r.top < 80) {
               paintEl(el);
             }
           } catch {}
@@ -7057,28 +7059,11 @@
       } catch {}
     };
 
-    const applyAll = () => { applyHeuristic(); };
-
     const init = () => {
-      // CSS fallback for known Bootstrap/SMAX class names
-      if (!document.getElementById(STYLE_ID)) {
-        const s = document.createElement('style');
-        s.id = STYLE_ID;
-        s.textContent = `
-          .navbar, nav.navbar, .navbar-fixed-top, .navbar.fixed-top,
-          .customBrandLogoContainer, #menu-categories,
-          header[role="banner"], #header, #app-header, #main-header {
-            background: #000 !important;
-            background-color: #000 !important;
-          }
-        `;
-        (document.head || document.documentElement).appendChild(s);
-      }
-      // Multiple retries — Angular bootstrap is slow and re-renders the nav
-      [0, 300, 800, 1500, 3000, 5000].forEach(t => setTimeout(applyAll, t));
-      // Keep reapplying: Angular style bindings can reset inline styles on each
-      // change-detection cycle, overriding our earlier setProperty calls
-      setInterval(applyAll, 2500);
+      // Apply at several points after page load — Angular bootstrap is async
+      [0, 300, 800, 1500, 3000, 5000, 8000].forEach(t => setTimeout(applyHeuristic, t));
+      // Keep reapplying every 2 s: Angular change-detection may reset inline styles
+      setInterval(applyHeuristic, 2000);
     };
 
     return { init };
@@ -7344,30 +7329,50 @@
       });
     };
 
+    // CKEditor 4 renders content inside an <iframe> even in view mode.
+    // document.body TreeWalker can't cross into iframes — scan them explicitly.
+    const scanIframes = () => {
+      if (!Utils.isTicketDetailPage()) return;
+      try {
+        document.querySelectorAll('iframe').forEach(iframe => {
+          try {
+            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (doc && doc.body) processNode(doc.body);
+          } catch {} // cross-origin iframes throw SecurityError — ignore
+        });
+      } catch {}
+    };
+
+    const fullScan = () => {
+      if (!Utils.isTicketDetailPage()) return;
+      processNode(document.body);
+      scanDescFields();
+      scanIframes();
+    };
+
     // Re-scan após navegação SPA (pushState / popstate)
     const onNavigate = Utils.debounce(() => {
-      if (!Utils.isTicketDetailPage()) return; // apenas na tela de chamado
       // Múltiplas tentativas — Angular + SMAX renderizam conteúdo de forma assíncrona
-      setTimeout(() => { processNode(document.body); scanDescFields(); }, 800);
-      setTimeout(() => { processNode(document.body); scanDescFields(); }, 2000);
-      setTimeout(() => { processNode(document.body); scanDescFields(); }, 4000);
+      [800, 2000, 4000, 7000].forEach(t => setTimeout(fullScan, t));
     }, 300);
 
     const init = () => {
-      // Scan inicial com múltiplas tentativas para o primeiro render do Angular
-      setTimeout(() => { processNode(document.body); scanDescFields(); }, 500);
-      setTimeout(() => { processNode(document.body); scanDescFields(); }, 1500);
-      setTimeout(() => { processNode(document.body); scanDescFields(); }, 3500);
+      // Scan inicial
+      [500, 1500, 3500, 6000].forEach(t => setTimeout(fullScan, t));
+
+      // Periodic sweep: catches content rendered after initial retries
+      // (SMAX may poll for updates and re-render the description)
+      setInterval(fullScan, 4000);
 
       // MutationObserver: captura nós adicionados E alterações de texto (characterData)
       const obs = new MutationObserver((mutations) => {
+        if (!Utils.isTicketDetailPage()) return;
         for (const mut of mutations) {
           if (mut.type === 'childList') {
             for (const node of mut.addedNodes) {
               if (node.nodeType === Node.ELEMENT_NODE) queue(node);
             }
           } else if (mut.type === 'characterData') {
-            // Angular às vezes atualiza textContent de nós existentes em vez de adicionar novos
             const parent = mut.target.parentElement;
             if (parent && !parent.dataset.smaxProc) queue(parent);
           }
