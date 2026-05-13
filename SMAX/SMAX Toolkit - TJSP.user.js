@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.20
+// @version      1.21
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -849,6 +849,10 @@
 
     const getGridViewport = (root = document) => root.querySelector('.slick-viewport') || root;
 
+    // Ticket detail URL: /saw/Request/<ID>/... — ID is alphanumeric, not just "Request"
+    const isTicketDetailPage = () => /\/Request\/[A-Za-z0-9]{8,}/.test(window.location.href);
+    const isListPage = () => !isTicketDetailPage();
+
     const parseSmaxDateTime = (str) => {
       if (!str) return null;
       const match = str.trim().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -1154,6 +1158,8 @@
     return {
       debounce,
       getGridViewport,
+      isTicketDetailPage,
+      isListPage,
       parseDigitRanges,
       digitsToRangeString,
       parseSmaxDateTime,
@@ -4615,48 +4621,42 @@
   const HighlightUser = (() => {
     const isHighlighted = (nameRaw) => {
       const key = Utils.normalizeText(nameRaw);
-      if (!key) return false;
-      const list = (personal.myDestaque || []).map(Utils.normalizeText);
-      return list.some(d => d === key || (key.length >= 8 && (key.includes(d) || d.includes(key))));
+      if (!key || key.length < 3) return false;
+      const list = (personal.myDestaque || []).map(Utils.normalizeText).filter(Boolean);
+      return list.some(d => d === key || (key.length >= 8 && d.length >= 4 && (key.includes(d) || d.includes(key))));
     };
 
-    const applyPersonItem = (personItem) => {
+    // Applies (or removes) amber highlight on a single .slick-row.
+    // SlickGrid reuses row elements during scroll — so we always re-evaluate, never cache on the row.
+    const applyRow = (row) => {
       try {
-        if (!(personItem instanceof HTMLElement)) return;
-        if (personItem.dataset.smaxDestApplied === '1') return; // already processed this exact span
-
-        // Extract leading text node (after any image/icon element)
-        const clone = personItem.cloneNode(true);
-        while (clone.firstChild) {
-          if (clone.firstChild.nodeType === Node.ELEMENT_NODE) clone.removeChild(clone.firstChild);
-          else break;
-        }
-        // Also try full textContent as fallback (handles nested spans)
-        const leading = clone.textContent.trim() || personItem.textContent.trim();
-        if (!isHighlighted(leading)) return;
-
-        personItem.dataset.smaxDestApplied = '1';
-        personItem.style.setProperty('color', '#f59e0b', 'important');
-        personItem.style.fontWeight = '600';
-
-        // Highlight the entire grid row — no guard, SlickGrid reuses row elements
-        // so we always re-apply when we find a highlighted person
-        const slickRow = personItem.closest('.slick-row');
-        if (slickRow) {
-          slickRow.style.setProperty('background', 'linear-gradient(90deg, rgba(251,191,36,.18) 0%, rgba(245,158,11,.07) 100%)', 'important');
-          slickRow.style.setProperty('box-shadow', 'inset 3px 0 0 #f59e0b', 'important');
+        if (!(row instanceof HTMLElement)) return;
+        const cells = row.querySelectorAll('.slick-cell');
+        let found = false;
+        cells.forEach(cell => {
+          if (found) return;
+          const text = (cell.textContent || '').trim();
+          if (text && isHighlighted(text)) found = true;
+        });
+        if (found) {
+          row.style.setProperty('background', 'linear-gradient(90deg, rgba(251,191,36,.18) 0%, rgba(245,158,11,.07) 100%)', 'important');
+          row.style.setProperty('box-shadow', 'inset 3px 0 0 #f59e0b', 'important');
+        } else {
+          row.style.removeProperty('background');
+          row.style.removeProperty('box-shadow');
         }
       } catch { }
     };
 
     const applyAll = () => {
       if (!prefs.flagSkullOn) return;
-      document.querySelectorAll('span.pl-person-item').forEach(applyPersonItem);
+      if (!Utils.isListPage()) return; // only on list page, not on ticket detail
+      Utils.getGridViewport().querySelectorAll('.slick-row').forEach(applyRow);
     };
 
     const init = () => {
       // Observer always registered — pref check is inside applyAll
-      const obs = new MutationObserver(() => applyAll());
+      const obs = new MutationObserver(Utils.debounce(applyAll, 200));
       obs.observe(document.body, { childList: true, subtree: true });
       applyAll();
       window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
@@ -7287,6 +7287,7 @@
     const hasCNJ = (text) => { CNJ_RE.lastIndex = 0; return CNJ_RE.test(text); };
 
     const processNode = (root) => {
+      if (!Utils.isTicketDetailPage()) return; // apenas na tela de chamado, não na lista
       if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
       if (root.dataset.smaxProc) return; // o próprio nó já é um link
       if (root.closest && root.closest('#smax-triage-hud-backdrop')) return; // HUD cuida do próprio
@@ -7346,6 +7347,7 @@
       '.ql-editor', '[contenteditable]',
     ];
     const scanDescFields = () => {
+      if (!Utils.isTicketDetailPage()) return; // apenas na tela de chamado
       DESC_SELS.forEach(sel => {
         try { document.querySelectorAll(sel).forEach(el => {
           if (!el.closest('#smax-triage-hud-backdrop')) processNode(el);
@@ -7355,6 +7357,7 @@
 
     // Re-scan após navegação SPA (pushState / popstate)
     const onNavigate = Utils.debounce(() => {
+      if (!Utils.isTicketDetailPage()) return; // apenas na tela de chamado
       // Múltiplas tentativas — Angular + SMAX renderizam conteúdo de forma assíncrona
       setTimeout(() => { processNode(document.body); scanDescFields(); }, 800);
       setTimeout(() => { processNode(document.body); scanDescFields(); }, 2000);
