@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.17
+// @version      1.18
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -107,9 +107,9 @@
   const PersonalStore = (() => {
     const STORAGE_KEY = 'smax_personal_prefs';
     const defaults = {
-      myColors:     {},  // { "NOME NORMALIZADO": { bg: "#hex", fg: "#hex" } }
-      myDetratores: [],  // ["NOME NORMALIZADO", ...]
-      themeMode:    'dark', // 'dark' | 'light'
+      myColors:    {},  // { "NOME NORMALIZADO": { bg: "#hex", fg: "#hex" } }
+      myDestaque:  [],  // ["NOME NORMALIZADO", ...] — usuários em destaque (pessoal)
+      themeMode:   'dark', // 'dark' | 'light'
     };
 
     const state = JSON.parse(JSON.stringify(defaults));
@@ -119,6 +119,11 @@
         const saved = GM_getValue(STORAGE_KEY);
         if (!saved) return;
         const parsed = JSON.parse(saved);
+        // One-time migration from old key name
+        if (Array.isArray(parsed.myDetratores) && !parsed.myDestaque) {
+          parsed.myDestaque = parsed.myDetratores;
+          delete parsed.myDetratores;
+        }
         Object.assign(state, defaults, parsed || {});
       } catch (err) {
         console.warn('[SMAX] PersonalStore load error:', err);
@@ -3146,7 +3151,7 @@
       { id: 'geral',         icon: '⚙️',  label: 'Geral' },
       { id: 'equipes',       icon: '👥',  label: 'Equipes' },
       { id: 'especialistas', icon: '👤',  label: 'Especialistas' },
-      { id: 'detratores',    icon: '💀',  label: 'Detratores' },
+      { id: 'destaque',      icon: '⭐',  label: 'Destaque' },
       { id: 'templates',     icon: '📋',  label: 'Templates' },
       { id: 'triagem',       icon: '🎯',  label: 'Triagem' },
     ];
@@ -3755,7 +3760,7 @@
             <div class="smax-module-group-label">📋 Tela de Lista (fila de chamados)</div>
             ${[
               ['radarOn',      '📡', 'Radar de pendentes',  'Badge com chamados rejeitados ou aguardando aceite'],
-              ['flagSkullOn',  '💀', 'Caveira detratores',  'Marca visualmente pessoas da sua lista de detratores'],
+              ['flagSkullOn',  '⭐', 'Usuários Destaque',   'Destaca linha inteira do chamado para usuários da lista de destaque'],
               ['nameBadgesOn', '🏷️', 'Badges na grid',      'Exibe o responsável ao lado do chamado na lista'],
             ].map(([key, icon, label, tip]) => `
               <div class="smax-module-row${prefs[key] ? ' smax-active' : ''}" data-key="${key}">
@@ -3827,28 +3832,28 @@
         </div>`;
     };
 
-    const renderSectionDetratores = () => `
+    const renderSectionDestaque = () => `
       <div class="smax-sp-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div>
-            <div class="smax-sp-section-title" style="margin-bottom:2px;">💀 Meus Detratores</div>
-            <div class="smax-sp-muted">Lista pessoal — não compartilhada com a equipe</div>
+            <div class="smax-sp-section-title" style="margin-bottom:2px;">⭐ Usuários Destaque</div>
+            <div class="smax-sp-muted">Lista pessoal — não compartilhada com a equipe. A linha inteira do chamado é destacada na fila.</div>
           </div>
-          <button type="button" id="smax-det-add-btn" style="font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:var(--sp-danger-bg);color:var(--sp-danger-text);cursor:pointer;border:1px solid var(--sp-danger-border);">+ Adicionar</button>
+          <button type="button" id="smax-det-add-btn" style="font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:rgba(245,158,11,.12);color:#f59e0b;cursor:pointer;border:1px solid rgba(245,158,11,.3);">+ Adicionar</button>
         </div>
         <div id="smax-det-list" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;margin-bottom:4px;">
-          ${(personal.myDetratores || []).length === 0
-            ? `<div style="font-size:12px;color:var(--sp-text-dim);text-align:center;padding:24px;">Nenhum detrator pessoal cadastrado.</div>`
-            : (personal.myDetratores || []).map((name, i) => `
+          ${(personal.myDestaque || []).length === 0
+            ? `<div style="font-size:12px;color:var(--sp-text-dim);text-align:center;padding:24px;">Nenhum usuário destaque cadastrado.</div>`
+            : (personal.myDestaque || []).map((name, i) => `
               <div class="smax-det-item">
-                <span>${Utils.escapeHtml(name)}</span>
+                <span>⭐ ${Utils.escapeHtml(name)}</span>
                 <button class="smax-det-del" data-idx="${i}">✕</button>
               </div>`).join('')
           }
         </div>
         <div id="smax-det-input-row" style="display:none;margin-top:8px;gap:6px;">
-          <input type="text" id="smax-det-input" placeholder="Nome completo do detrator" style="flex:1;padding:7px 10px;border-radius:6px;font-size:12px;min-width:0;">
-          <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;cursor:pointer;flex-shrink:0;">Salvar</button>
+          <input type="text" id="smax-det-input" placeholder="Nome completo do usuário" style="flex:1;padding:7px 10px;border-radius:6px;font-size:12px;min-width:0;">
+          <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:12px;cursor:pointer;flex-shrink:0;">Salvar</button>
           <button type="button" id="smax-det-cancel" style="padding:7px 10px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>
         </div>
       </div>`;
@@ -3941,7 +3946,7 @@
         case 'geral':         return renderSectionGeral();
         case 'equipes':       return renderSectionEquipes();
         case 'especialistas': return renderSectionEspecialistas();
-        case 'detratores':    return renderSectionDetratores();
+        case 'destaque':      return renderSectionDestaque();
         case 'templates':     return renderSectionTemplates();
         case 'triagem':       return renderSectionTriagem();
         default:              return renderSectionGeral();
@@ -4007,7 +4012,7 @@
           if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
         });
       });
-      // Checkbox change: save state and update row style
+      // Checkbox change: save state, update row style, trigger module
       container.querySelectorAll('.smax-pref-toggle').forEach(cb => {
         cb.addEventListener('change', () => {
           const key = cb.dataset.key;
@@ -4016,8 +4021,12 @@
           savePrefs();
           const row = cb.closest('.smax-module-row');
           if (row) row.classList.toggle('smax-active', cb.checked);
-          if (key === 'zenModeOn') ZenMode.apply();
+          if (key === 'zenModeOn')         ZenMode.apply();
           if (key === 'radarOn' && cb.checked) RadarRevisar.query();
+          if (key === 'flagSkullOn')       HighlightUser.applyAll();
+          if (key === 'nameBadgesOn')      NameBadges.apply();
+          if (key === 'enlargeCommentsOn') CommentExpander.expandAll();
+          if (key === 'collapseOn')        SectionTweaks.applyAll();
         });
       });
     };
@@ -4041,7 +4050,7 @@
       });
     };
 
-    const wireDetratoresEvents = () => {
+    const wireDestaqueEvents = () => {
       if (!container) return;
       const detAddBtn   = container.querySelector('#smax-det-add-btn');
       const detInputRow = container.querySelector('#smax-det-input-row');
@@ -4053,8 +4062,8 @@
       if (detConfirm) detConfirm.addEventListener('click', () => {
         const name = (detInput?.value || '').trim();
         if (!name) return;
-        if (!Array.isArray(personal.myDetratores)) personal.myDetratores = [];
-        if (!personal.myDetratores.includes(name)) personal.myDetratores.push(name);
+        if (!Array.isArray(personal.myDestaque)) personal.myDestaque = [];
+        if (!personal.myDestaque.includes(name)) personal.myDestaque.push(name);
         savePersonal();
         renderPanel();
       });
@@ -4062,7 +4071,7 @@
       container.querySelectorAll('.smax-det-del').forEach(btn => {
         btn.addEventListener('click', () => {
           const idx = parseInt(btn.dataset.idx, 10);
-          if (!isNaN(idx)) { personal.myDetratores.splice(idx, 1); savePersonal(); renderPanel(); }
+          if (!isNaN(idx)) { personal.myDestaque.splice(idx, 1); savePersonal(); renderPanel(); }
         });
       });
     };
@@ -4339,7 +4348,7 @@
         case 'geral':         wireGeralEvents();         break;
         case 'equipes':       wireTeamEvents();          break;
         case 'especialistas': wireEspecialistasEvents(); break;
-        case 'detratores':    wireDetratoresEvents();    break;
+        case 'destaque':      wireDestaqueEvents();      break;
         case 'templates':     wireTemplatesEvents();     break;
         case 'triagem':       wireTriagemEvents();       break;
       }
@@ -4407,9 +4416,18 @@
    * Comment auto height
    * =======================================================*/
   const CommentExpander = (() => {
-    const init = () => {
+    const expandAll = () => {
       if (!prefs.enlargeCommentsOn) return;
+      document.querySelectorAll('.comment-items').forEach(el => {
+        el.style.height = 'auto';
+        el.style.maxHeight = 'none';
+      });
+    };
+
+    const init = () => {
+      // Observer always registered — pref check is inside callback
       const obs = new MutationObserver((mutations) => {
+        if (!prefs.enlargeCommentsOn) return;
         mutations.forEach((mutation) => {
           mutation.addedNodes.forEach((node) => {
             if (!(node instanceof HTMLElement)) return;
@@ -4426,64 +4444,66 @@
         });
       });
       obs.observe(document.body, { childList: true, subtree: true });
+      expandAll();
       window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
     };
-    return { init };
+    return { init, expandAll };
   })();
 
   /* =========================================================
    * Section tweaks (collapse catalogue block)
    * =======================================================*/
   const SectionTweaks = (() => {
+    const SECTION_SELECTOR = '#form-section-5, [data-aid="section-catalog-offering"]';
+    const IDS_TO_REMOVE = ['form-section-1', 'form-section-7', 'form-section-8'];
+    const collapsedOnce = new WeakSet();
+
+    const isOpen = (section) => {
+      const content = section?.querySelector?.('.pl-entity-page-component-content');
+      return !!content && !content.classList.contains('ng-hide');
+    };
+
+    const fixAria = (header, section) => {
+      if (!header || !section) return;
+      if (header.getAttribute('aria-expanded') !== 'false') header.setAttribute('aria-expanded', 'false');
+      const sr = section.querySelector('.pl-entity-page-component-header-sr');
+      if (sr && /Expandido/i.test(sr.textContent || '')) sr.textContent = sr.textContent.replace(/Expandido/ig, 'Recolhido');
+      const icon = header.querySelector('[pl-bidi-collapse-arrow]') || header.querySelector('.icon-arrow-med-down, .icon-arrow-med-right');
+      if (icon) {
+        icon.classList.remove('icon-arrow-med-down');
+        icon.classList.add('icon-arrow-med-right');
+      }
+    };
+
+    const collapseSectionOnce = (section) => {
+      if (section.dataset.userInteracted === '1') return;
+      if (collapsedOnce.has(section)) return;
+      const header = section.querySelector('.pl-entity-page-component-header[role="button"]');
+      if (!header) return;
+      if (isOpen(section)) {
+        header.click();
+        setTimeout(() => fixAria(header, section), 0);
+      } else {
+        fixAria(header, section);
+      }
+      collapsedOnce.add(section);
+    };
+
+    const removeSections = () => {
+      IDS_TO_REMOVE.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.parentNode) el.remove();
+      });
+    };
+
+    const applyAll = () => {
+      if (!prefs.collapseOn) return; // pref check here, not in init
+      document.querySelectorAll(SECTION_SELECTOR).forEach(collapseSectionOnce);
+      removeSections();
+    };
+
     const init = () => {
-      if (!prefs.collapseOn) return;
-      const SECTION_SELECTOR = '#form-section-5, [data-aid="section-catalog-offering"]';
-      const IDS_TO_REMOVE = ['form-section-1', 'form-section-7', 'form-section-8'];
-      const collapsedOnce = new WeakSet();
-
-      const isOpen = (section) => {
-        const content = section?.querySelector?.('.pl-entity-page-component-content');
-        return !!content && !content.classList.contains('ng-hide');
-      };
-
-      const fixAria = (header, section) => {
-        if (!header || !section) return;
-        if (header.getAttribute('aria-expanded') !== 'false') header.setAttribute('aria-expanded', 'false');
-        const sr = section.querySelector('.pl-entity-page-component-header-sr');
-        if (sr && /Expandido/i.test(sr.textContent || '')) sr.textContent = sr.textContent.replace(/Expandido/ig, 'Recolhido');
-        const icon = header.querySelector('[pl-bidi-collapse-arrow]') || header.querySelector('.icon-arrow-med-down, .icon-arrow-med-right');
-        if (icon) {
-          icon.classList.remove('icon-arrow-med-down');
-          icon.classList.add('icon-arrow-med-right');
-        }
-      };
-
-      const collapseSectionOnce = (section) => {
-        if (section.dataset.userInteracted === '1') return;
-        if (collapsedOnce.has(section)) return;
-        const header = section.querySelector('.pl-entity-page-component-header[role="button"]');
-        if (!header) return;
-        if (isOpen(section)) {
-          header.click();
-          setTimeout(() => fixAria(header, section), 0);
-        } else {
-          fixAria(header, section);
-        }
-        collapsedOnce.add(section);
-      };
-
-      const removeSections = () => {
-        IDS_TO_REMOVE.forEach((id) => {
-          const el = document.getElementById(id);
-          if (el && el.parentNode) el.remove();
-        });
-      };
-
-      const applyAll = () => {
-        document.querySelectorAll(SECTION_SELECTOR).forEach(collapseSectionOnce);
-        removeSections();
-      };
-
+      // Click tracking: mark sections the user manually interacted with
       document.addEventListener('click', (event) => {
         const header = event.target.closest('.pl-entity-page-component-header[role="button"]');
         if (!header) return;
@@ -4491,6 +4511,7 @@
         if (section) section.dataset.userInteracted = '1';
       }, { capture: true });
 
+      // Observer always registered — pref check is inside applyAll
       const schedule = Utils.debounce(applyAll, 100);
       const obs = new MutationObserver(() => schedule());
       setTimeout(applyAll, 300);
@@ -4498,7 +4519,7 @@
       window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
     };
 
-    return { init };
+    return { init, applyAll };
   })();
 
   /* =========================================================
@@ -4506,8 +4527,13 @@
    * =======================================================*/
   const Orchestrator = (() => {
     const runAll = () => {
-      if ('requestIdleCallback' in window) requestIdleCallback(NameBadges.apply, { timeout: 500 });
-      else setTimeout(NameBadges.apply, 0);
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(NameBadges.apply, { timeout: 500 });
+        requestIdleCallback(HighlightUser.applyAll, { timeout: 500 });
+      } else {
+        setTimeout(NameBadges.apply, 0);
+        setTimeout(HighlightUser.applyAll, 0);
+      }
     };
 
     const schedule = Utils.debounce(runAll, 80);
@@ -4536,58 +4562,59 @@
   })();
 
   /* =========================================================
-   * Skull flag for detractor users
+   * Highlight user — destaque âmbar na lista de chamados
    * =======================================================*/
-  const SkullFlag = (() => {
-    // Lista base (equipe) — hardcoded e não editável individualmente
-    const FLAG_SET = new Set([
-      'Adriano Zilli', 'Adriana Da Silva Ferreira Oliveira', 'Alessandra Sousa Nunes', 'Bruna Marques Dos Santos', 'Breno Medeiros Malfati', 'Carlos Henrique Scala De Almeida', 'Cassia Santos Alves De Lima', 'Dalete Rodrigues Silva', 'David Lopes De Oliveira', 'Davi Dos Reis Garcia', 'Deaulas De Campos Salviano', 'Diego Oliveira Da Silva', 'Diogo Mendonça Aniceto', 'Elaine Moriya', 'Ester Naili Dos Santos', 'Fabiano Barbosa Dos Reis', 'Fabricio Christiano Tanobe Lyra', 'Gabriel Teixeira Ludvig', 'Gilberto Sintoni Junior', 'Giovanna Coradini Teixeira', 'Gislene Ferreira Sant\'Ana Ramos', 'Guilherme Cesar De Sousa', 'Gustavo De Meira Gonçalves', 'Jackson Alcantara Santana', 'Janaina Dos Passos Silvestre', 'Jefferson Silva De Carvalho Soares', 'Joyce Da Silva Oliveira', 'Juan Campos De Souza', 'Juliana Lino Dos Santos Rosa', 'Karina Nicolau Samaan', 'Karine Barbara Vitor De Lima Souza', 'Kaue Nunes Silva Farrelly', 'Kelly Ferreira De Freitas', 'Larissa Ferreira Fumero', 'Lucas Alves Dos Santos', 'Lucas Carneiro Peres Ferreira', 'Marcos Paulo Silva Madalena', 'Maria Fernanda De Oliveira Bento', 'Natalia Yurie Shiba', 'Paulo Roberto Massoca', 'Pedro Henrique Palacio Baritti', 'Rafaella Silva Lima Petrolini', 'Renata Aparecida Mendes Bonvechio', 'Rodrigo Silva Oliveira', 'Ryan Souza Carvalho', 'Tatiana Lourenço Da Costa Antunes', 'Tatiane Araujo Da Cruz', 'Thiago Tadeu Faustino De Oliveira', 'Tiago Carvalho De Freitas Meneses', 'Victor Viana Roca'
-    ].map(Utils.normalizeText));
-
-    // Verifica lista base + lista pessoal do usuário (personal.myDetratores)
-    const isDetratore = (nameRaw) => {
+  const HighlightUser = (() => {
+    const isHighlighted = (nameRaw) => {
       const key = Utils.normalizeText(nameRaw);
       if (!key) return false;
-      if (FLAG_SET.has(key)) return true;
-      const personal_list = (personal.myDetratores || []).map(Utils.normalizeText);
-      return personal_list.some(d => d === key || (key.length >= 8 && (key.includes(d) || d.includes(key))));
+      const list = (personal.myDestaque || []).map(Utils.normalizeText);
+      return list.some(d => d === key || (key.length >= 8 && (key.includes(d) || d.includes(key))));
     };
 
-    const apply = (personItem) => {
+    const applyPersonItem = (personItem) => {
       try {
         if (!(personItem instanceof HTMLElement)) return;
+        // Extract text content ignoring child elements
         const clone = personItem.cloneNode(true);
         while (clone.firstChild) {
           if (clone.firstChild.nodeType === Node.ELEMENT_NODE) clone.removeChild(clone.firstChild);
           else break;
         }
         const leading = clone.textContent || '';
-        if (!isDetratore(leading)) return;
-        const img = personItem.querySelector('img.ts-avatar, img.pl-shared-item-img, img.ts-image') || personItem.querySelector('img');
-        if (img && img.dataset.__g1Applied !== '1') {
-          img.dataset.__g1Applied = '1';
-          img.src = 'https://cdn-icons-png.flaticon.com/512/564/564619.png';
-          img.alt = 'Alerta de Usuário Detrator';
-          img.title = 'Alerta de Usuário Detrator';
-          Object.assign(img.style, { border: '3px solid #ff0000', borderRadius: '50%', padding: '2px', backgroundColor: '#ff000022', boxShadow: '0 0 10px #ff0000' });
+        if (!isHighlighted(leading)) return;
+
+        // Mark the person item itself
+        if (personItem.dataset.__smaxDest !== '1') {
+          personItem.dataset.__smaxDest = '1';
+          personItem.style.color = '#f59e0b';
+          personItem.style.fontWeight = '600';
         }
-        personItem.style.color = '#ff0000';
+
+        // Highlight the entire grid row if inside the ticket list
+        const slickRow = personItem.closest('.slick-row');
+        if (slickRow && slickRow.dataset.__smaxDestRow !== '1') {
+          slickRow.dataset.__smaxDestRow = '1';
+          slickRow.style.setProperty('background', 'linear-gradient(90deg, rgba(251,191,36,.18) 0%, rgba(245,158,11,.07) 100%)', 'important');
+          slickRow.style.boxShadow = 'inset 3px 0 0 #f59e0b';
+        }
       } catch { }
     };
 
-    const init = () => {
+    const applyAll = () => {
       if (!prefs.flagSkullOn) return;
-      const obs = new MutationObserver(() => document.querySelectorAll('span.pl-person-item').forEach(apply));
+      document.querySelectorAll('span.pl-person-item').forEach(applyPersonItem);
+    };
+
+    const init = () => {
+      // Observer always registered — pref check is inside applyAll
+      const obs = new MutationObserver(() => applyAll());
       obs.observe(document.body, { childList: true, subtree: true });
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('span.pl-person-item').forEach(apply));
-      } else {
-        document.querySelectorAll('span.pl-person-item').forEach(apply);
-      }
+      applyAll();
       window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
     };
 
-    return { init };
+    return { init, applyAll };
   })();
 
   /* =========================================================
@@ -7260,7 +7287,7 @@
     SettingsPanel.init();
     GridTracker.init();
     TriageHUD.init();
-    SkullFlag.init();
+    HighlightUser.init();
     ZenMode.init();
     RadarRevisar.init();
     Templates.init();
