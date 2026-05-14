@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.40
+// @version      1.41
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6806,7 +6806,9 @@
     let selectedPersonId = '';
     let selectedPersonName = '';
     const selectedStatuses = new Set(); // vazio = sem filtro de status (mostra todos)
+    const selectedTeamIds = new Set();  // equipes selecionadas para busca por GSE
     let ticketList = [];
+    let allFetchedEntries = []; // todos os resultados da última busca (antes do filtro de status)
     let selectedTicketIds = new Set();
     let activeTicketId = '';
     let personSearchTimeout = null;
@@ -6863,7 +6865,7 @@
       listEl.innerHTML = ticketList.map(t => {
         const isActive = t.id === activeTicketId;
         const isChecked = selectedTicketIds.has(t.id);
-        const statusLabel = STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
+        const statusLabel = t.statusSCCD || STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
         return `
           <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
             <div class="smax-resp-tick-sel" data-id="${Utils.escapeHtml(t.id)}" title="Selecionar para lote"
@@ -7002,79 +7004,123 @@
       }
     };
 
-    const fetchTickets = () => {
-      const ids = DataRepository.getTriageQueueSnapshot();
-      if (!ids.length) {
-        setStatusMsg('Nenhum chamado na lista atual. Carregue a fila no SMAX primeiro.', '#fca5a5');
+    const renderStatusPills = (entries) => {
+      const statusSection = backdrop?.querySelector('#smax-resp-status-section');
+      const filterEl = backdrop?.querySelector('#smax-resp-status-filters');
+      if (!filterEl) return;
+      const statusesPresentes = [...new Set(entries.map(e => e.statusSCCD).filter(Boolean))].sort();
+      if (!statusesPresentes.length) {
+        if (statusSection) statusSection.style.display = 'none';
+        return;
+      }
+      if (statusSection) statusSection.style.display = '';
+      filterEl.innerHTML = statusesPresentes.map(s => {
+        const active = selectedStatuses.has(s);
+        return `<button class="smax-resp-status-pill" data-status="${Utils.escapeHtml(s)}"
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
+          ${Utils.escapeHtml(s)}
+        </button>`;
+      }).join('');
+      filterEl.querySelectorAll('.smax-resp-status-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const s = pill.dataset.status;
+          if (selectedStatuses.has(s)) selectedStatuses.delete(s);
+          else selectedStatuses.add(s);
+          const active = selectedStatuses.has(s);
+          pill.style.border = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
+          pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
+          pill.style.color = active ? '#93c5fd' : '#9ca3af';
+          const dot = pill.querySelector('span');
+          if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+          applyFilters();
+        });
+      });
+    };
+
+    const applyFilters = () => {
+      ticketList = allFetchedEntries.filter(e =>
+        selectedStatuses.size === 0 || selectedStatuses.has(e.statusSCCD)
+      );
+      const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
+      if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
+      setStatusMsg('', '');
+      renderTicketList();
+      updateBatchBar();
+      if (ticketList.length && !activeTicketId) loadTicket(ticketList[0].id);
+    };
+
+    const fetchTickets = async () => {
+      // Coletar GSE IDs das equipes selecionadas (ou todas se nenhuma selecionada)
+      const teams = TeamsConfig.getTeams().filter(t => !t.isDefault);
+      const teamsToSearch = selectedTeamIds.size > 0
+        ? teams.filter(t => selectedTeamIds.has(t.id))
+        : teams;
+
+      const gseIdSet = new Set();
+      for (const t of teamsToSearch) {
+        (t.gseRules || []).forEach(r => { if (r.id) gseIdSet.add(r.id); });
+        (t.gseIds || []).forEach(id => { if (id) gseIdSet.add(id); });
+      }
+      const gseIds = [...gseIdSet];
+
+      if (!gseIds.length) {
+        setStatusMsg('Nenhuma GSE configurada nas equipes.', '#fca5a5');
         return;
       }
 
+      // Resetar estado
       ticketList = [];
+      allFetchedEntries = [];
       selectedTicketIds.clear();
       activeTicketId = '';
+      selectedStatuses.clear();
 
       const noTicket = backdrop?.querySelector('#smax-resp-no-ticket');
       const detailPanel = backdrop?.querySelector('#smax-resp-detail');
       if (noTicket) noTicket.style.display = 'flex';
       if (detailPanel) detailPanel.style.display = 'none';
 
-      // Primeiro passe: coletar todos os chamados sem filtro para descobrir status presentes
-      const allEntries = [];
-      for (const snap of ids) {
-        const id = snap.idText || String(snap);
-        const entry = DataRepository.triageCache.get(id);
-        if (!entry) continue;
-        allEntries.push(entry);
-      }
-
-      // Gerar pills de status dinamicamente com os valores encontrados
-      const statusesPresentes = [...new Set(allEntries.map(e => e.status).filter(Boolean))];
-      const filterEl = backdrop?.querySelector('#smax-resp-status-filters');
-      if (filterEl && statusesPresentes.length) {
-        filterEl.innerHTML = statusesPresentes.map(s => {
-          const active = selectedStatuses.has(s);
-          const label = STATUS_LABELS[s] || s.replace('RequestStatus', '');
-          return `<button class="smax-resp-status-pill" data-status="${Utils.escapeHtml(s)}" style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
-            <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
-            ${Utils.escapeHtml(label)}
-          </button>`;
-        }).join('');
-        // Re-wire pills
-        filterEl.querySelectorAll('.smax-resp-status-pill').forEach(pill => {
-          pill.addEventListener('click', () => {
-            const s = pill.dataset.status;
-            if (selectedStatuses.has(s)) selectedStatuses.delete(s);
-            else selectedStatuses.add(s);
-            const nowActive = selectedStatuses.has(s);
-            pill.style.border = `1px solid ${nowActive ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
-            pill.style.background = nowActive ? 'rgba(59,130,246,.25)' : 'transparent';
-            pill.style.color = nowActive ? '#93c5fd' : '#9ca3af';
-            const dot = pill.querySelector('span');
-            if (dot) { dot.style.background = nowActive ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${nowActive ? '#3b82f6' : '#6b7280'}`; }
-            // Reaplicar filtro na lista atual
-            ticketList = allEntries
-              .filter(e => selectedStatuses.size === 0 || selectedStatuses.has(e.status))
-              .map(e => ({ id: e.idText, subject: e.subjectText || '', status: e.status || '' }));
-            const ce = backdrop?.querySelector('#smax-resp-ticket-count');
-            if (ce) ce.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
-            renderTicketList();
-            updateBatchBar();
-          });
-        });
-      }
-
-      // Segundo passe: aplicar filtro de status
-      for (const entry of allEntries) {
-        if (selectedStatuses.size > 0 && !selectedStatuses.has(entry.status)) continue;
-        ticketList.push({ id: entry.idText, subject: entry.subjectText || '', status: entry.status || '' });
-      }
-
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
-      if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
-      setStatusMsg('', '');
-      renderTicketList();
-      updateBatchBar();
-      if (ticketList.length) loadTicket(ticketList[0].id);
+      if (countEl) countEl.textContent = '';
+      setStatusMsg(`Buscando em ${gseIds.length} GSE(s)...`, '#93c5fd');
+
+      const filterParts = gseIds.map(id => `ExpertGroup='${id}'`);
+      const filter = filterParts.length === 1 ? filterParts[0] : `(${filterParts.join(' or ')})`;
+      const layout = 'Id,Status,Description,Solution,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
+
+      try {
+        const data = await ApiClient.ems.collection('Request', { filter, layout, size: 1000 });
+        const entities = data?.entities || [];
+
+        allFetchedEntries = entities.map(e => {
+          const p = e.properties || {};
+          const rawId = (p.Id || '').replace(/^IMRfc:/, '');
+          if (!rawId) return null;
+          // Extrair texto da descrição (campo é HTML)
+          const tmp = document.createElement('div');
+          tmp.innerHTML = p.Description || '';
+          const subject = (tmp.textContent || tmp.innerText || '').trim().slice(0, 80);
+          return {
+            id: rawId,
+            subject,
+            status: p.Status || '',
+            statusSCCD: p.StatusSCCDSMAX_c || '',
+            gse: p.ExpertGroup || '',
+            assignee: p.ExpertAssignee || '',
+          };
+        }).filter(Boolean);
+
+        // Gerar pills de status operacional
+        renderStatusPills(allFetchedEntries);
+
+        // Aplicar filtros (status vazio = mostrar todos)
+        applyFilters();
+
+      } catch (err) {
+        setStatusMsg(`Erro: ${err.message}`, '#fca5a5');
+        console.error('[SMAX ResponseHUD] fetchTickets error:', err);
+      }
     };
 
     const loadScripts = async () => {
@@ -7220,9 +7266,13 @@
           <!-- Left: filter + ticket list -->
           <div id="smax-resp-hud-list">
             <div id="smax-resp-filter-panel">
-              <div style="font-size:10px;color:#6b7280;margin-bottom:10px;line-height:1.4;">Use os filtros do SMAX na tela de chamados e clique <b style="color:#9ca3af;">Carregar</b>.</div>
-              <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:4px;"></div>
-              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:8px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar lista</button>
+              <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Equipes</div>
+              <div id="smax-resp-team-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+              <div id="smax-resp-status-section" style="display:none;">
+                <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Status Operacional</div>
+                <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+              </div>
+              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:4px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar</button>
             </div>
             <div style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
               <span id="smax-resp-ticket-count" style="font-size:12px;font-weight:700;color:#60a5fa;"></span>
@@ -7292,6 +7342,37 @@
         </div>`;
 
       document.body.appendChild(backdrop);
+
+      // Populate team pills
+      const teamFilterEl = backdrop.querySelector('#smax-resp-team-filters');
+      if (teamFilterEl) {
+        const teams = TeamsConfig.getTeams().filter(t => !t.isDefault);
+        if (teams.length) {
+          teamFilterEl.innerHTML = teams.map(t => {
+            const active = selectedTeamIds.has(t.id);
+            return `<button class="smax-resp-team-pill" data-team-id="${Utils.escapeHtml(t.id)}"
+              style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+              <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
+              ${Utils.escapeHtml(t.name || t.id)}
+            </button>`;
+          }).join('');
+          teamFilterEl.querySelectorAll('.smax-resp-team-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+              const id = pill.dataset.teamId;
+              if (selectedTeamIds.has(id)) selectedTeamIds.delete(id);
+              else selectedTeamIds.add(id);
+              const active = selectedTeamIds.has(id);
+              pill.style.border = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
+              pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
+              pill.style.color = active ? '#93c5fd' : '#9ca3af';
+              const dot = pill.querySelector('span');
+              if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+            });
+          });
+        } else {
+          teamFilterEl.innerHTML = '<div style="font-size:11px;color:#6b7280;">Nenhuma equipe configurada.</div>';
+        }
+      }
 
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
