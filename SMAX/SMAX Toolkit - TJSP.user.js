@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.25
-// @description  Conjunto de ferramentas para o SMAX TJSP: triagem, templates, radar, Zen Mode e consulta de processos no eProc
+// @version      1.26
+// @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
+// @match        https://davidpestilli.github.io/gerenciador-chamados/*
 // @run-at       document-start
 // @grant        GM_addStyle
 // @grant        GM_getValue
@@ -22,8 +23,24 @@
 
   if (window.top && window.top !== window.self) return;
 
+  /* ── Integração com o Gerenciador de Chamados ── */
+  if (window.location.hostname === 'davidpestilli.github.io') {
+    // Captura o equipeId assim que o localStorage estiver disponível
+    const captureEquipeId = () => {
+      const id = localStorage.getItem('equipeId');
+      if (id) { GM_setValue('smax_gerenciador_equipe_id', id); }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', captureEquipeId);
+    else captureEquipeId();
+    return; // Não executa o restante do toolkit nesta página
+  }
+
   // Código SMAX roda apenas no domínio do SMAX
   if (window.location.hostname !== 'suporte.tjsp.jus.br') return;
+
+  /* Supabase — Gerenciador de Chamados (chave pública exposta no bundle do app) */
+  const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
+  const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const getPageCKEditor = () => (pageWindow && pageWindow.CKEDITOR ? pageWindow.CKEDITOR : null);
@@ -517,6 +534,45 @@
     #smax-attachment-modal img { max-width:90vw; max-height:90vh; border-radius:10px; box-shadow:0 20px 45px rgba(0,0,0,0.65); }
     #smax-attachment-modal button { position:absolute; top:18px; right:18px; border:none; width:40px; height:40px; border-radius:50%; background:rgba(15,23,42,0.85); color:#f8fafc; font-size:22px; cursor:pointer; }
     #smax-attachment-modal .smax-attachment-caption { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); color:#e2e8f0; font-size:14px; text-align:center; max-width:90vw; }
+
+    /* ── Response HUD ── */
+    #smax-resp-hud-backdrop { position:fixed; inset:0; padding:24px; background:linear-gradient(180deg,rgba(0,0,0,0.7) 0%,rgba(0,0,0,0.5) 100%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:999997; display:none; align-items:center; justify-content:center; }
+    #smax-resp-hud { position:relative; background:#0f172a; color:#e5e7eb; border-radius:16px; width:100%; max-width:1300px; height:calc(100vh - 48px); max-height:860px; box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08) inset; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display:flex; overflow:hidden; }
+    #smax-resp-hud-list { width:270px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,.07); background:rgba(2,6,23,.6); overflow:hidden; }
+    #smax-resp-filter-panel { padding:14px 12px; border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0; }
+    #smax-resp-ticket-list { flex:1; overflow-y:auto; }
+    .smax-resp-ticket-item { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05); transition:background .12s; }
+    .smax-resp-ticket-item:hover { background:rgba(255,255,255,.04); }
+    .smax-resp-ticket-item.active { background:rgba(59,130,246,.12); border-left:3px solid #3b82f6; }
+    .smax-resp-ticket-cb { margin-top:2px; flex-shrink:0; accent-color:#3b82f6; cursor:pointer; }
+    .smax-resp-ticket-info { flex:1; min-width:0; }
+    .smax-resp-ticket-id { font-size:11px; font-weight:700; color:#60a5fa; }
+    .smax-resp-ticket-subject { font-size:11px; color:#d1d5db; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .smax-resp-ticket-status { font-size:10px; color:#6b7280; margin-top:2px; }
+    #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+    #smax-resp-hud-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%); flex-shrink:0; }
+    #smax-resp-hud-body { flex:1; display:flex; min-height:0; overflow:hidden; }
+    #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow-y:auto; min-width:0; }
+    #smax-resp-desc-panel { background:rgba(2,6,23,.7); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:10px 12px; flex-shrink:0; }
+    #smax-resp-desc-content { font-size:12px; color:#d1d5db; overflow-y:auto; max-height:110px; line-height:1.5; }
+    #smax-resp-desc-content img { max-width:100%; height:auto; border-radius:4px; }
+    #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex:1; min-height:0; }
+    #smax-resp-solution-textarea { flex:1; min-height:120px; resize:none; width:100%; box-sizing:border-box; background:#0a0f1e; border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:10px 12px; color:#e5e7eb; font-size:13px; line-height:1.6; outline:none; font-family:inherit; transition:border-color .15s; }
+    #smax-resp-solution-textarea:focus { border-color:#3b82f6; }
+    #smax-resp-hud-discussions { width:300px; flex-shrink:0; border-left:1px solid rgba(255,255,255,.07); display:flex; flex-direction:column; overflow:hidden; background:rgba(2,6,23,.5); }
+    #smax-resp-discussions-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:8px; }
+    .smax-resp-discussion-item { border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:8px 10px; background:rgba(15,23,42,.7); font-size:12px; }
+    .smax-resp-disc-meta { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; font-size:10px; color:#6b7280; }
+    .smax-resp-disc-author { color:#94a3b8; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
+    .smax-resp-disc-body { color:#d1d5db; line-height:1.45; font-size:11px; max-height:80px; overflow-y:auto; }
+    .smax-resp-disc-body p { margin:0 0 4px; }
+    #smax-resp-hud-footer { padding:10px 16px; border-top:1px solid rgba(255,255,255,.07); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; background:rgba(2,6,23,.4); }
+    #smax-resp-script-picker { display:none; position:absolute; left:0; right:0; bottom:100%; z-index:20; background:#0d1117; border:1px solid rgba(255,255,255,.15); border-radius:10px; margin-bottom:6px; box-shadow:0 8px 28px rgba(0,0,0,.55); overflow:hidden; }
+    .smax-resp-script-item { padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05); font-size:12px; color:#d1d5db; transition:background .1s; }
+    .smax-resp-script-item:hover { background:rgba(59,130,246,.15); color:#93c5fd; }
+    .smax-resp-person-pick { transition:background .1s; }
+    #smax-resp-no-ticket { color:#4b5563; font-size:14px; text-align:center; }
+    #smax-resp-detail { flex-direction:column; }
 
     #smax-activity-log-panel { margin-top:14px; padding:10px 12px; border:1px solid #ddd; border-radius:6px; background:#f8fafc; }
     #smax-activity-log-panel h4 { margin:0 0 8px; font-size:13px; font-weight:600; color:#1f2937; }
@@ -3214,8 +3270,9 @@
       { id: 'equipes',       icon: '👥',  label: 'Equipes' },
       { id: 'especialistas', icon: '👤',  label: 'Especialistas' },
       { id: 'destaque',      icon: '⭐',  label: 'Destaque' },
-      { id: 'templates',     icon: '📋',  label: 'Templates' },
+      { id: 'templates',     icon: '📋',  label: 'Scripts' },
       { id: 'triagem',       icon: '🎯',  label: 'Triagem' },
+      { id: 'respostas',     icon: '📨',  label: 'Respostas' },
     ];
 
     // Load fresh config from prefs
@@ -3923,11 +3980,12 @@
       <div style="display:flex;flex-direction:column;gap:12px;">
         <div class="smax-sp-card">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-            <div class="smax-sp-section-title" style="margin-bottom:0;">📋 Templates de Resposta</div>
+            <div class="smax-sp-section-title" style="margin-bottom:0;">📋 Scripts de Respostas</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <button id="smax-tpl-clip-btn" title="Colar HTML do clipboard (OneNote, Word, etc.)" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📎 Do clipboard</button>
               <button id="smax-tpl-export-btn" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📤 Exportar JSON</button>
               <button id="smax-tpl-import-btn" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📥 Importar JSON</button>
+              <button id="smax-tpl-sync-btn" title="Importar scripts do Gerenciador de Chamados" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">☁️ Do Gerenciador</button>
               <button id="smax-tpl-new-btn" style="padding:6px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">+ Novo</button>
             </div>
           </div>
@@ -3940,17 +3998,17 @@
           </div>
         </div>
         <div id="smax-tpl-sp-form" class="smax-sp-card" style="display:none;flex-direction:column;gap:10px;">
-          <div class="smax-sp-section-title" style="margin-bottom:4px;">✏️ <span id="smax-tpl-sp-form-title-lbl">Novo template</span></div>
-          <input id="smax-tpl-sp-title" type="text" placeholder="Título do template..." style="padding:8px 10px;border-radius:6px;font-size:13px;width:100%;box-sizing:border-box;">
+          <div class="smax-sp-section-title" style="margin-bottom:4px;">✏️ <span id="smax-tpl-sp-form-title-lbl">Novo script</span></div>
+          <input id="smax-tpl-sp-title" type="text" placeholder="Título do script..." style="padding:8px 10px;border-radius:6px;font-size:13px;width:100%;box-sizing:border-box;">
           <div class="smax-sp-muted">Conteúdo (aceita HTML. Cole diretamente do OneNote, Word ou qualquer editor rico):</div>
           <textarea id="smax-tpl-sp-body" placeholder="Cole o conteúdo aqui ou escreva HTML..." style="min-height:140px;resize:vertical;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Segoe UI',system-ui,sans-serif;width:100%;box-sizing:border-box;line-height:1.5;"></textarea>
           <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
             <button id="smax-tpl-sp-cancel" style="padding:7px 14px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;">Cancelar</button>
-            <button id="smax-tpl-sp-save" style="padding:7px 18px;border-radius:6px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Salvar template</button>
+            <button id="smax-tpl-sp-save" style="padding:7px 18px;border-radius:6px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Salvar script</button>
           </div>
         </div>
         <div id="smax-tpl-import-area" class="smax-sp-card" style="display:none;flex-direction:column;gap:8px;">
-          <div class="smax-sp-section-title" style="margin-bottom:4px;">📥 Importar templates (JSON)</div>
+          <div class="smax-sp-section-title" style="margin-bottom:4px;">📥 Importar scripts (JSON)</div>
           <div class="smax-sp-muted">Cole o JSON exportado anteriormente:</div>
           <textarea id="smax-tpl-import-json-input" style="min-height:100px;resize:vertical;padding:8px 10px;border-radius:6px;font-size:11px;font-family:monospace;width:100%;box-sizing:border-box;"></textarea>
           <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -4016,6 +4074,29 @@
         </div>
       </div>`;
 
+    const renderSectionRespostas = () => `
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📨 Módulo de Respostas</div>
+          <div class="smax-sp-muted" style="margin-bottom:14px;">
+            Abre o painel de respostas. Selecione um colaborador e filtre por status para ver os chamados, redija a solução, use scripts prontos e envie em lote.
+          </div>
+          <button id="smax-launch-resp-btn" style="padding:12px 32px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:linear-gradient(135deg,#8b5cf6 0%,#6d28d9 100%);color:#fff;box-shadow:0 6px 20px rgba(139,92,246,.4),0 0 0 1px rgba(255,255,255,.1) inset;transition:transform .15s,box-shadow .15s;">
+            📨 Abrir Respostas
+          </button>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📖 Como usar</div>
+          <ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--sp-text);line-height:1.7;">
+            <li>Busque um colaborador para ver os chamados dele.</li>
+            <li>Filtre por status (Ativo, Em Andamento, Aguardando…).</li>
+            <li>Clique num chamado para ver descrição, discussões e redigir a solução.</li>
+            <li>Use "📋 Scripts" para inserir um script de resposta pronto.</li>
+            <li>Marque vários chamados e clique "ENVIAR EM LOTE" para responder todos de uma vez.</li>
+          </ul>
+        </div>
+      </div>`;
+
     const renderSectionContent = () => {
       switch (activeSection) {
         case 'geral':         return renderSectionGeral();
@@ -4024,6 +4105,7 @@
         case 'destaque':      return renderSectionDestaque();
         case 'templates':     return renderSectionTemplates();
         case 'triagem':       return renderSectionTriagem();
+        case 'respostas':     return renderSectionRespostas();
         default:              return renderSectionGeral();
       }
     };
@@ -4164,7 +4246,7 @@
         if (!listEl) return;
         const items = Templates.load(tplActiveDisc);
         if (!items.length) {
-          listEl.innerHTML = `<div style="color:var(--sp-text-dim);font-size:12px;text-align:center;padding:20px;">Nenhum template. Clique em "+ Novo" para criar.</div>`;
+          listEl.innerHTML = `<div style="color:var(--sp-text-dim);font-size:12px;text-align:center;padding:20px;">Nenhum script. Clique em "+ Novo" para criar.</div>`;
           return;
         }
         listEl.innerHTML = items.map((t, i) => `
@@ -4234,7 +4316,7 @@
         if (!formEl) return;
         const arr = Templates.load(tplActiveDisc);
         const tpl = idx !== null ? arr[idx] : null;
-        formEl.querySelector('#smax-tpl-sp-form-title-lbl').textContent = idx !== null ? 'Editar template' : 'Novo template';
+        formEl.querySelector('#smax-tpl-sp-form-title-lbl').textContent = idx !== null ? 'Editar script' : 'Novo script';
         formEl.querySelector('#smax-tpl-sp-title').value = tpl?.title || '';
         formEl.querySelector('#smax-tpl-sp-body').value  = tpl?.html  || '';
         formEl.style.display = 'flex';
@@ -4252,7 +4334,7 @@
         const formEl = getForm(); if (!formEl) return;
         const title = (formEl.querySelector('#smax-tpl-sp-title').value || '').trim();
         const html  = (formEl.querySelector('#smax-tpl-sp-body').value  || '').trim();
-        if (!title) { alert('Informe um título para o template.'); return; }
+        if (!title) { alert('Informe um título para o script.'); return; }
         const arr = Templates.load(tplActiveDisc);
         if (tplEditingIdx !== null) arr[tplEditingIdx] = { title, html };
         else arr.push({ title, html });
@@ -4310,6 +4392,39 @@
         }
       });
 
+      // Sync from Gerenciador de Chamados (Supabase)
+      container.querySelector('#smax-tpl-sync-btn')?.addEventListener('click', async () => {
+        const btn = container.querySelector('#smax-tpl-sync-btn');
+        const origLabel = btn?.textContent;
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Importando...'; }
+        try {
+          const equipeId = await GM_getValue('smax_gerenciador_equipe_id', null);
+          let url = `${SMAX_SB_URL}/rest/v1/scripts_customizados?select=nome,conteudo_bruto&deletado=eq.false&order=nome`;
+          if (equipeId) url += `&equipe_id=eq.${equipeId}`;
+          const resp = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${SMAX_SB_KEY}`, 'apikey': SMAX_SB_KEY, 'Accept': 'application/json' }
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const scripts = await resp.json();
+          if (!Array.isArray(scripts)) throw new Error('Resposta inesperada da API');
+          const arr = Templates.load(tplActiveDisc);
+          let added = 0;
+          scripts.forEach(s => {
+            if (s.nome && s.conteudo_bruto && !arr.find(t => t.title === s.nome)) {
+              arr.push({ title: s.nome, html: s.conteudo_bruto });
+              added++;
+            }
+          });
+          Templates.save(tplActiveDisc, arr);
+          renderTplList();
+          alert(`✅ ${added} script(s) importado(s). ${scripts.length - added} já existiam.`);
+        } catch(e) {
+          alert('Erro ao importar do Gerenciador: ' + e.message + (e.message.includes('equipe') ? '\n\nDica: abra o Gerenciador de Chamados uma vez para sincronizar sua equipe.' : ''));
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+        }
+      });
+
       // Export JSON
       container.querySelector('#smax-tpl-export-btn')?.addEventListener('click', () => {
         const data = { sol: Templates.load(false), disc: Templates.load(true) };
@@ -4347,7 +4462,7 @@
           }
           const imp = getImport(); if (imp) imp.style.display = 'none';
           renderTplList();
-          alert('Templates importados com sucesso!');
+          alert('Scripts importados com sucesso!');
         } catch(e) { alert('JSON inválido: ' + e.message); }
       });
 
@@ -4419,6 +4534,21 @@
       });
     };
 
+    const wireRespostasEvents = () => {
+      if (!container) return;
+      const launchBtn = container.querySelector('#smax-launch-resp-btn');
+      if (launchBtn) {
+        launchBtn.addEventListener('mouseenter', () => { launchBtn.style.transform = 'translateY(-2px)'; launchBtn.style.boxShadow = '0 10px 28px rgba(139,92,246,.55),0 0 0 1px rgba(255,255,255,.15) inset'; });
+        launchBtn.addEventListener('mouseleave', () => { launchBtn.style.transform = ''; launchBtn.style.boxShadow = ''; });
+        launchBtn.addEventListener('click', () => {
+          container.style.display = 'none';
+          const bd = document.getElementById('smax-settings-backdrop');
+          if (bd) bd.style.display = 'none';
+          ResponseHUD.open();
+        });
+      }
+    };
+
     /* ── Main render ── */
 
     const renderPanel = () => {
@@ -4461,6 +4591,7 @@
         case 'destaque':      wireDestaqueEvents();      break;
         case 'templates':     wireTemplatesEvents();     break;
         case 'triagem':       wireTriagemEvents();       break;
+        case 'respostas':     wireRespostasEvents();     break;
       }
     };
 
@@ -6665,6 +6796,549 @@
   })();
 
   /* =========================================================
+   * ResponseHUD — painel de respostas a chamados
+   * =======================================================*/
+  const ResponseHUD = (() => {
+    let backdrop = null;
+
+    // State
+    let selectedPersonId = '';
+    let selectedPersonName = '';
+    const selectedStatuses = new Set(['RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer']);
+    let ticketList = [];
+    let selectedTicketIds = new Set();
+    let activeTicketId = '';
+    let personSearchTimeout = null;
+    let scriptsCache = null;
+
+    const STATUS_LABELS = {
+      RequestStatusActive: 'Ativo',
+      RequestStatusInProgress: 'Em Andamento',
+      RequestStatusSuspended: 'Suspenso',
+      RequestStatusComplete: 'Concluído',
+      RequestStatusPendingCustomer: 'Aguardando Solicitante',
+      RequestStatusClassify: 'Classificar',
+      RequestStatusPending: 'Usuário Final Pendente',
+      RequestStatusReject: 'Rejeitado',
+      RequestStatusReady: 'Pronto',
+      RequestStatusPendingApproval: 'Aguardando Aprovação',
+      RequestStatusPendingChange: 'Aguardando Mudança',
+    };
+
+    const FILTER_STATUSES = [
+      'RequestStatusActive',
+      'RequestStatusInProgress',
+      'RequestStatusPendingCustomer',
+      'RequestStatusSuspended',
+      'RequestStatusClassify',
+      'RequestStatusPending',
+    ];
+
+    const close = () => { if (backdrop) backdrop.style.display = 'none'; };
+
+    const setStatusMsg = (msg, color) => {
+      const el = backdrop?.querySelector('#smax-resp-status-msg');
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = color || '#9ca3af';
+    };
+
+    const updateBatchBar = () => {
+      const bar = backdrop?.querySelector('#smax-resp-batch-bar');
+      if (!bar) return;
+      const count = selectedTicketIds.size;
+      bar.style.display = count > 1 ? 'flex' : 'none';
+      const countEl = bar.querySelector('#smax-resp-batch-count');
+      if (countEl) countEl.textContent = `${count} selecionados`;
+    };
+
+    const renderTicketList = () => {
+      const listEl = backdrop?.querySelector('#smax-resp-ticket-list');
+      if (!listEl) return;
+      if (!ticketList.length) {
+        listEl.innerHTML = '<div style="padding:16px 10px;color:#6b7280;font-size:12px;text-align:center;">Nenhum chamado encontrado.</div>';
+        return;
+      }
+      listEl.innerHTML = ticketList.map(t => {
+        const isActive = t.id === activeTicketId;
+        const isChecked = selectedTicketIds.has(t.id);
+        const statusLabel = STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
+        return `
+          <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}">
+            <input type="checkbox" class="smax-resp-ticket-cb" data-id="${Utils.escapeHtml(t.id)}" ${isChecked ? 'checked' : ''}>
+            <div class="smax-resp-ticket-info">
+              <div class="smax-resp-ticket-id">#${Utils.escapeHtml(t.id)}</div>
+              <div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml((t.subject || '').slice(0, 55))}</div>
+              <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
+            </div>
+          </div>`;
+      }).join('');
+
+      listEl.querySelectorAll('.smax-resp-ticket-cb').forEach(cb => {
+        cb.addEventListener('change', e => {
+          e.stopPropagation();
+          if (cb.checked) selectedTicketIds.add(cb.dataset.id);
+          else selectedTicketIds.delete(cb.dataset.id);
+          updateBatchBar();
+        });
+      });
+
+      listEl.querySelectorAll('.smax-resp-ticket-item').forEach(row => {
+        row.addEventListener('click', e => {
+          if (e.target.type === 'checkbox') return;
+          loadTicket(row.dataset.id);
+        });
+      });
+    };
+
+    const resolveSubmitterName = (entry) => {
+      if (!entry) return '';
+      if (entry.submitterPersonId && DataRepository.peopleCache.has(entry.submitterPersonId)) {
+        const person = DataRepository.peopleCache.get(entry.submitterPersonId);
+        if (person && person.name) return person.name;
+      }
+      return entry.submitterDisplay || '';
+    };
+
+    const renderDiscussions = (discussions) => {
+      const el = backdrop?.querySelector('#smax-resp-discussions-list');
+      if (!el) return;
+      if (!discussions || !discussions.length) {
+        el.innerHTML = '<div style="color:#6b7280;font-size:11px;padding:8px;">Sem discussões.</div>';
+        return;
+      }
+      el.innerHTML = discussions.map(d => {
+        const dateStr = d.createdTs ? new Date(d.createdTs).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const submitter = resolveSubmitterName(d);
+        return `
+          <div class="smax-resp-discussion-item">
+            <div class="smax-resp-disc-meta">
+              <span class="smax-resp-disc-author">${Utils.escapeHtml(submitter)}</span>
+              <span>${Utils.escapeHtml(dateStr)}</span>
+            </div>
+            <div class="smax-resp-disc-body">${d.bodyHtml || Utils.escapeHtml(d.body || '')}</div>
+          </div>`;
+      }).join('');
+    };
+
+    const renderTicketDetail = (entry) => {
+      if (!backdrop) return;
+      const noTicket = backdrop.querySelector('#smax-resp-no-ticket');
+      const detailPanel = backdrop.querySelector('#smax-resp-detail');
+      if (!entry) {
+        if (noTicket) noTicket.style.display = 'flex';
+        if (detailPanel) detailPanel.style.display = 'none';
+        return;
+      }
+      if (noTicket) noTicket.style.display = 'none';
+      if (detailPanel) detailPanel.style.display = 'flex';
+
+      const idLink = backdrop.querySelector('#smax-resp-ticket-id-link');
+      if (idLink) {
+        idLink.textContent = `#${entry.idText}`;
+        const tenantId = ApiClient.getTenantId ? ApiClient.getTenantId() : '';
+        idLink.href = tenantId
+          ? `/webmf/index.jsp#tenantId=${tenantId}/Requests/Edit/${entry.idText}`
+          : `/webmf/index.jsp#/Requests/Edit/${entry.idText}`;
+      }
+
+      const openerEl = backdrop.querySelector('#smax-resp-opener');
+      if (openerEl) openerEl.textContent = entry.requestedForName ? `👤 ${entry.requestedForName}` : '';
+
+      const statusLabel = backdrop.querySelector('#smax-resp-status-label');
+      if (statusLabel) statusLabel.textContent = STATUS_LABELS[entry.status] || (entry.status || '').replace('RequestStatus', '') || '';
+
+      const gseLabel = backdrop.querySelector('#smax-resp-gse-label');
+      if (gseLabel) gseLabel.textContent = entry.assignmentGroupName || '';
+
+      const descEl = backdrop.querySelector('#smax-resp-desc-content');
+      if (descEl) descEl.innerHTML = entry.descriptionHtml || '<em style="color:#6b7280;">Sem descrição.</em>';
+
+      const solEl = backdrop.querySelector('#smax-resp-solution-textarea');
+      if (solEl) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = entry.solutionHtml || '';
+        solEl.value = (tmp.textContent || tmp.innerText || '').trim();
+      }
+
+      renderDiscussions(entry.discussions || []);
+    };
+
+    const loadTicket = async (id) => {
+      if (!id) return;
+      activeTicketId = id;
+      backdrop?.querySelectorAll('.smax-resp-ticket-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.id === id);
+      });
+      setStatusMsg('Carregando chamado...', '#93c5fd');
+      try {
+        const entry = await DataRepository.ensureRequestPayload(id, { force: true });
+        renderTicketDetail(entry || DataRepository.triageCache.get(id) || null);
+        setStatusMsg('', '');
+      } catch (e) {
+        setStatusMsg('Erro ao carregar chamado.', '#fca5a5');
+      }
+    };
+
+    const fetchTickets = async () => {
+      if (!selectedPersonId) { setStatusMsg('Selecione um usuário.', '#fca5a5'); return; }
+      const statusesArr = [...selectedStatuses];
+      if (!statusesArr.length) { setStatusMsg('Selecione pelo menos um status.', '#fca5a5'); return; }
+
+      setStatusMsg('Buscando chamados...', '#93c5fd');
+      const btn = backdrop?.querySelector('#smax-resp-fetch-btn');
+      if (btn) btn.disabled = true;
+
+      try {
+        const statusFilter = statusesArr.map(s => `Status = '${s}'`).join(' or ');
+        const filter = `OwnedByPerson/Id = '${selectedPersonId}' and (${statusFilter})`;
+        const layout = 'Id,Status,DisplayLabel,Description,Solution,CreateTime';
+        const payload = await ApiClient.request('ems/Request', {
+          method: 'GET',
+          searchParams: { filter, layout, size: 100, order: 'CreateTime desc' },
+          includeTenantParam: true
+        });
+
+        ticketList = [];
+        selectedTicketIds.clear();
+        activeTicketId = '';
+
+        const noTicket = backdrop?.querySelector('#smax-resp-no-ticket');
+        const detailPanel = backdrop?.querySelector('#smax-resp-detail');
+        if (noTicket) noTicket.style.display = 'flex';
+        if (detailPanel) detailPanel.style.display = 'none';
+
+        const entities = Array.isArray(payload?.entities) ? payload.entities : [];
+        for (const ent of entities) {
+          const props = ent.properties || {};
+          const id = props.Id != null ? String(props.Id) : '';
+          if (!id) continue;
+          DataRepository.upsertTriageEntryFromProps(props, ent.related_properties || {});
+          const cached = DataRepository.triageCache.get(id);
+          ticketList.push({
+            id,
+            subject: cached?.subjectText || props.DisplayLabel || '',
+            status: props.Status || ''
+          });
+        }
+
+        setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, '#4ade80');
+        renderTicketList();
+        updateBatchBar();
+
+        if (ticketList.length) loadTicket(ticketList[0].id);
+      } catch (e) {
+        setStatusMsg('Erro: ' + e.message, '#fca5a5');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+
+    const loadScripts = async () => {
+      if (scriptsCache) return scriptsCache;
+      try {
+        const equipeId = GM_getValue('smax_gerenciador_equipe_id', null);
+        let url = `${SMAX_SB_URL}/rest/v1/scripts_customizados?select=id,nome,conteudo_bruto&deletado=eq.false&order=nome`;
+        if (equipeId) url += `&equipe_id=eq.${equipeId}`;
+        const resp = await fetch(url, {
+          headers: {
+            apikey: SMAX_SB_KEY,
+            Authorization: `Bearer ${SMAX_SB_KEY}`,
+            'Accept-Profile': 'public'
+          }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        scriptsCache = await resp.json();
+        return scriptsCache;
+      } catch (e) {
+        console.warn('[SMAX] ResponseHUD: falha ao carregar scripts:', e);
+        return [];
+      }
+    };
+
+    const openScriptPicker = async () => {
+      const picker = backdrop?.querySelector('#smax-resp-script-picker');
+      if (!picker) return;
+      const isOpen = picker.style.display !== 'none';
+      if (isOpen) { picker.style.display = 'none'; return; }
+      picker.innerHTML = '<div style="padding:10px 12px;color:#9ca3af;font-size:12px;">Carregando scripts...</div>';
+      picker.style.display = 'block';
+      const scripts = await loadScripts();
+      if (!scripts.length) {
+        picker.innerHTML = '<div style="padding:10px 12px;color:#9ca3af;font-size:12px;">Nenhum script disponível.</div>';
+        return;
+      }
+      picker.innerHTML = `
+        <div style="padding:8px;border-bottom:1px solid rgba(255,255,255,.08);">
+          <input id="smax-resp-script-search" type="text" placeholder="Buscar script..." autocomplete="off"
+            style="width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:5px 8px;color:#e5e7eb;font-size:12px;outline:none;">
+        </div>
+        <div id="smax-resp-script-list" style="max-height:220px;overflow-y:auto;">
+          ${scripts.map(s => `<div class="smax-resp-script-item" data-content="${Utils.escapeHtml(s.conteudo_bruto || '')}">${Utils.escapeHtml(s.nome)}</div>`).join('')}
+        </div>`;
+
+      picker.querySelectorAll('.smax-resp-script-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
+          if (solEl) { solEl.value = item.dataset.content; solEl.focus(); }
+          picker.style.display = 'none';
+        });
+      });
+
+      const search = picker.querySelector('#smax-resp-script-search');
+      const list = picker.querySelector('#smax-resp-script-list');
+      if (search && list) {
+        search.focus();
+        search.addEventListener('input', () => {
+          const q = search.value.toLowerCase();
+          list.querySelectorAll('.smax-resp-script-item').forEach(item => {
+            item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+          });
+        });
+      }
+
+      const closeOnOutside = (e) => {
+        const scriptsBtn = backdrop?.querySelector('#smax-resp-scripts-btn');
+        if (!picker.contains(e.target) && e.target !== scriptsBtn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside);
+        }
+      };
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside), 0);
+    };
+
+    const commitTicket = async (id) => {
+      if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
+      const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
+      const solutionRaw = (solEl?.value || '').trim();
+      if (!solutionRaw) return { ok: false, msg: 'Solução vazia.' };
+      const solutionHtml = solutionRaw.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+      const body = {
+        entities: [{ entity_type: 'Request', properties: { Id: id, Solution: `<p>${solutionHtml}</p>` } }],
+        operation: 'UPDATE'
+      };
+      try {
+        const result = await ApiClient.ems.bulk(body);
+        const outcome = Api.summarizeBulkOutcome(result);
+        return outcome;
+      } catch (e) {
+        return { ok: false, msg: e.message };
+      }
+    };
+
+    const commitAll = async () => {
+      const targets = selectedTicketIds.size > 1
+        ? [...selectedTicketIds]
+        : (activeTicketId ? [activeTicketId] : []);
+      if (!targets.length) { setStatusMsg('Nenhum chamado selecionado.', '#fca5a5'); return; }
+
+      if (!prefs.enableRealWrites) {
+        setStatusMsg('⚠️ Escritas reais desativadas. Ative em Configurações → Geral.', '#facc15');
+        return;
+      }
+
+      const sendBtn = backdrop?.querySelector('#smax-resp-send-btn');
+      const batchBtn = backdrop?.querySelector('#smax-resp-batch-send-btn');
+      if (sendBtn) sendBtn.disabled = true;
+      if (batchBtn) batchBtn.disabled = true;
+
+      setStatusMsg(`Enviando ${targets.length} chamado(s)...`, '#93c5fd');
+      let ok = 0, fail = 0;
+      for (const id of targets) {
+        const r = await commitTicket(id);
+        if (r?.ok !== false) ok++;
+        else fail++;
+      }
+      if (sendBtn) sendBtn.disabled = false;
+      if (batchBtn) batchBtn.disabled = false;
+      if (fail === 0) setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).`, '#4ade80');
+      else setStatusMsg(`${ok} ok, ${fail} com erro.`, '#fca5a5');
+    };
+
+    const open = () => {
+      if (!backdrop) return;
+      DataRepository.ensurePeopleLoaded();
+      backdrop.style.display = 'flex';
+      if (prefs.myPersonId && !selectedPersonId) {
+        selectedPersonId = prefs.myPersonId;
+        selectedPersonName = prefs.myPersonName || prefs.myPersonId;
+        const displayEl = backdrop.querySelector('#smax-resp-person-display');
+        if (displayEl) displayEl.textContent = selectedPersonName;
+      }
+    };
+
+    const init = () => {
+      if (backdrop) return;
+
+      backdrop = document.createElement('div');
+      backdrop.id = 'smax-resp-hud-backdrop';
+      backdrop.innerHTML = `
+        <div id="smax-resp-hud">
+          <!-- Left: filter + ticket list -->
+          <div id="smax-resp-hud-list">
+            <div id="smax-resp-filter-panel">
+              <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Colaborador</div>
+              <div style="position:relative;">
+                <input id="smax-resp-person-search" type="text" placeholder="Buscar colaborador..." autocomplete="off"
+                  style="width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 8px;color:#e5e7eb;font-size:12px;outline:none;transition:border-color .15s;">
+                <div id="smax-resp-person-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:10;background:#0d1117;border:1px solid rgba(255,255,255,.12);border-radius:6px;margin-top:3px;max-height:140px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.4);"></div>
+              </div>
+              <div id="smax-resp-person-display" style="margin-top:4px;font-size:11px;color:#60a5fa;min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+              <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-top:10px;margin-bottom:5px;">Status</div>
+              <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;">
+                ${FILTER_STATUSES.map(s => `
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:#d1d5db;">
+                    <input type="checkbox" class="smax-resp-status-cb" data-status="${s}" ${selectedStatuses.has(s) ? 'checked' : ''} style="accent-color:#3b82f6;cursor:pointer;">
+                    ${STATUS_LABELS[s] || s.replace('RequestStatus', '')}
+                  </label>`).join('')}
+              </div>
+              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:10px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">🔍 Buscar</button>
+            </div>
+            <div style="padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);">
+              <span id="smax-resp-status-msg" style="font-size:11px;"></span>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#9ca3af;">
+                <input type="checkbox" id="smax-resp-select-all" style="accent-color:#3b82f6;cursor:pointer;"> Todos
+              </label>
+            </div>
+            <div id="smax-resp-ticket-list"></div>
+            <div id="smax-resp-batch-bar" style="display:none;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;justify-content:space-between;gap:8px;background:rgba(2,6,23,.6);">
+              <span id="smax-resp-batch-count" style="font-size:11px;color:#9ca3af;"></span>
+              <button id="smax-resp-batch-send-btn" style="padding:5px 12px;border:none;border-radius:6px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">ENVIAR EM LOTE</button>
+            </div>
+          </div>
+
+          <!-- Right: detail -->
+          <div id="smax-resp-hud-main">
+            <div id="smax-resp-hud-header">
+              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;overflow:hidden;">
+                <a id="smax-resp-ticket-id-link" href="#" target="_blank" style="font-size:14px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;opacity:.9;">—</a>
+                <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;"></span>
+                <span id="smax-resp-gse-label" style="font-size:11px;color:rgba(255,255,255,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:180px;"></span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <input type="text" id="smax-resp-global-id" placeholder="Global ID" inputmode="numeric" autocomplete="off"
+                  style="width:86px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 8px;color:#fff;font-size:11px;outline:none;">
+                <button type="button" id="smax-resp-close-btn" title="Fechar" style="border:none;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);font-size:14px;width:28px;height:28px;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,.2);">✕</button>
+              </div>
+            </div>
+
+            <div id="smax-resp-hud-body">
+              <div id="smax-resp-content-area">
+                <div id="smax-resp-no-ticket" style="flex:1;display:flex;align-items:center;justify-content:center;">
+                  <span>Selecione um chamado para começar.</span>
+                </div>
+                <div id="smax-resp-detail" style="display:none;">
+                  <div id="smax-resp-desc-panel">
+                    <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
+                    <div id="smax-resp-desc-content"></div>
+                  </div>
+                  <div id="smax-resp-solution-panel">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                      <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;">✏️ Solução</span>
+                      <button id="smax-resp-scripts-btn" type="button" style="font-size:11px;padding:3px 10px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.06);color:#d1d5db;cursor:pointer;transition:background .15s;">📋 Scripts</button>
+                    </div>
+                    <div style="position:relative;">
+                      <textarea id="smax-resp-solution-textarea" placeholder="Digite aqui a solução do chamado..."></textarea>
+                      <div id="smax-resp-script-picker"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <aside id="smax-resp-hud-discussions">
+                <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;padding:10px 12px 8px;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;">💬 Discussões</div>
+                <div id="smax-resp-discussions-list"></div>
+              </aside>
+            </div>
+
+            <div id="smax-resp-hud-footer">
+              <div style="font-size:11px;color:#6b7280;">Escritas reais: <span style="color:${prefs.enableRealWrites ? '#4ade80' : '#f87171'}">${prefs.enableRealWrites ? 'ativadas' : 'desativadas'}</span></div>
+              <button id="smax-resp-send-btn" type="button" style="padding:8px 28px;border:none;border-radius:8px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);transition:transform .12s,box-shadow .12s;">ENVIAR</button>
+            </div>
+          </div>
+        </div>`;
+
+      document.body.appendChild(backdrop);
+
+      // Close
+      backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
+      backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+      // Person search
+      const personSearch = backdrop.querySelector('#smax-resp-person-search');
+      const personResults = backdrop.querySelector('#smax-resp-person-results');
+      if (personSearch) {
+        personSearch.addEventListener('input', () => {
+          clearTimeout(personSearchTimeout);
+          personSearchTimeout = setTimeout(() => {
+            const q = Utils.normalizeText(personSearch.value).toLowerCase().trim();
+            if (!q || q.length < 2) { personResults.style.display = 'none'; return; }
+            const people = [...DataRepository.peopleCache.values()];
+            const matches = people.filter(p =>
+              Utils.normalizeText(p.name || '').toLowerCase().includes(q) ||
+              (p.upn || '').toLowerCase().includes(q)
+            ).slice(0, 10);
+            personResults.style.display = matches.length ? 'block' : 'none';
+            personResults.innerHTML = matches.map(p => `
+              <div class="smax-resp-person-pick" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(p.name)}"
+                style="padding:6px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid rgba(255,255,255,.06);">
+                <div style="font-weight:500;color:#e5e7eb;">${Utils.escapeHtml(p.name)}</div>
+                <div style="color:#6b7280;font-size:10px;">${Utils.escapeHtml(p.upn || p.id)}</div>
+              </div>`).join('');
+            personResults.querySelectorAll('.smax-resp-person-pick').forEach(el => {
+              el.addEventListener('mouseenter', () => el.style.background = 'rgba(59,130,246,.15)');
+              el.addEventListener('mouseleave', () => el.style.background = '');
+              el.addEventListener('click', () => {
+                selectedPersonId = el.dataset.id;
+                selectedPersonName = el.dataset.name;
+                personSearch.value = '';
+                personResults.style.display = 'none';
+                const displayEl = backdrop.querySelector('#smax-resp-person-display');
+                if (displayEl) displayEl.textContent = selectedPersonName;
+              });
+            });
+          }, 200);
+        });
+        personSearch.addEventListener('keydown', e => {
+          if (e.key === 'Enter') backdrop.querySelector('#smax-resp-fetch-btn')?.click();
+        });
+      }
+
+      // Status checkboxes
+      backdrop.querySelectorAll('.smax-resp-status-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+          if (cb.checked) selectedStatuses.add(cb.dataset.status);
+          else selectedStatuses.delete(cb.dataset.status);
+        });
+      });
+
+      // Fetch button
+      backdrop.querySelector('#smax-resp-fetch-btn')?.addEventListener('click', fetchTickets);
+
+      // Select all
+      const selectAll = backdrop.querySelector('#smax-resp-select-all');
+      if (selectAll) {
+        selectAll.addEventListener('change', () => {
+          if (selectAll.checked) ticketList.forEach(t => selectedTicketIds.add(t.id));
+          else selectedTicketIds.clear();
+          renderTicketList();
+          updateBatchBar();
+        });
+      }
+
+      // Scripts picker
+      backdrop.querySelector('#smax-resp-scripts-btn')?.addEventListener('click', openScriptPicker);
+
+      // Send buttons
+      backdrop.querySelector('#smax-resp-send-btn')?.addEventListener('click', commitAll);
+      backdrop.querySelector('#smax-resp-batch-send-btn')?.addEventListener('click', commitAll);
+    };
+
+    return { init, open };
+  })();
+
+  /* =========================================================
    * ZenMode — oculta campos desnecessários do formulário
    * =======================================================*/
   const ZenMode = (() => {
@@ -6831,7 +7505,7 @@
       if (!listEl) return;
 
       listEl.innerHTML = list.length === 0
-        ? `<div class="smax-tpl-empty">Nenhum template. Clique em "+ Novo" para criar.</div>`
+        ? `<div class="smax-tpl-empty">Nenhum script. Clique em "+ Novo" para criar.</div>`
         : list.map((t, i) => `
           <div class="smax-tpl-item" data-idx="${i}">
             <div class="smax-tpl-item-title">${Utils.escapeHtml(t.title)}</div>
@@ -6899,7 +7573,7 @@
       const formEl = modalEl.querySelector('.smax-tpl-form');
       const title = (formEl.querySelector('.smax-tpl-form-title').value || '').trim();
       const html  = (formEl.querySelector('.smax-tpl-form-html').value  || '').trim();
-      if (!title) { alert('Informe um título para o template.'); return; }
+      if (!title) { alert('Informe um título para o script.'); return; }
       const arr = load(activeDisc);
       if (editingIdx !== null) arr[editingIdx] = { title, html };
       else arr.push({ title, html });
@@ -6929,15 +7603,15 @@
       modalEl.id = 'smax-tpl-modal';
       modalEl.innerHTML = `
         <div id="smax-tpl-box">
-          <h3>📋 Templates de Resposta</h3>
+          <h3>📋 Scripts de Respostas</h3>
           <div class="smax-tpl-tabs">
             <div class="smax-tpl-tab active" data-disc="false">Solução</div>
             <div class="smax-tpl-tab" data-disc="true">Discussão</div>
           </div>
           <div class="smax-tpl-list"></div>
-          <button class="smax-tpl-add-btn">+ Novo template</button>
+          <button class="smax-tpl-add-btn">+ Novo script</button>
           <div class="smax-tpl-form" style="display:none;">
-            <input class="smax-tpl-form-title" type="text" placeholder="Título do template">
+            <input class="smax-tpl-form-title" type="text" placeholder="Título do script">
             <textarea class="smax-tpl-form-html" placeholder="Conteúdo HTML (ou texto simples)"></textarea>
             <div class="smax-tpl-form-actions">
               <button class="smax-tpl-cancel-btn">Cancelar</button>
@@ -7750,6 +8424,7 @@
     SettingsPanel.init();
     GridTracker.init();
     TriageHUD.init();
+    ResponseHUD.init();
     HighlightUser.init();
     CellHighlighter.init();
     ZenMode.init();
