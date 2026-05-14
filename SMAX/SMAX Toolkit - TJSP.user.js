@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.35
+// @version      1.36
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6980,64 +6980,33 @@
       }
     };
 
-    const fetchTickets = async () => {
-      if (!selectedPersonId) { setStatusMsg('Selecione um usuário.', '#fca5a5'); return; }
-      const statusesArr = [...selectedStatuses];
-      if (!statusesArr.length) { setStatusMsg('Selecione pelo menos um status.', '#fca5a5'); return; }
-
-      setStatusMsg('Buscando chamados...', '#93c5fd');
-      const btn = backdrop?.querySelector('#smax-resp-fetch-btn');
-      if (btn) btn.disabled = true;
-
-      try {
-        const tenantId = ApiClient.getTenantId();
-        if (!tenantId) throw new Error('TenantId não disponível.');
-
-        const statusFilter = statusesArr.map(s => `Status='${s}'`).join(' or ');
-        const filterExpr = `(ExpertAssignee='${selectedPersonId}' and (${statusFilter}))`;
-        const layout = 'Id,Status,Description,Solution,CreateTime,RequestedForPerson';
-        const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filterExpr)}&layout=${encodeURIComponent(layout)}&size=100&order=CreateTime+desc`;
-
-        console.log('[SMAX ResponseHUD] url:', url);
-        const res = await fetch(url, { credentials: 'include' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const payload = await res.json();
-        console.log('[SMAX ResponseHUD] status:', payload?.meta?.completion_status, '| total:', payload?.meta?.total_count, '| entities:', payload?.entities?.length ?? 0);
-        if (payload?.entities?.length) console.log('[SMAX ResponseHUD] amostra status:', payload.entities.slice(0,3).map(e => e.properties?.Status));
-
-        ticketList = [];
-        selectedTicketIds.clear();
-        activeTicketId = '';
-
-        const noTicket = backdrop?.querySelector('#smax-resp-no-ticket');
-        const detailPanel = backdrop?.querySelector('#smax-resp-detail');
-        if (noTicket) noTicket.style.display = 'flex';
-        if (detailPanel) detailPanel.style.display = 'none';
-
-        const entities = Array.isArray(payload?.entities) ? payload.entities : [];
-        for (const ent of entities) {
-          const props = ent.properties || {};
-          const id = props.Id != null ? String(props.Id) : '';
-          if (!id) continue;
-          DataRepository.upsertTriageEntryFromProps(props, ent.related_properties || {});
-          const cached = DataRepository.triageCache.get(id);
-          ticketList.push({
-            id,
-            subject: cached?.subjectText || props.DisplayLabel || '',
-            status: props.Status || ''
-          });
-        }
-
-        setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
-        renderTicketList();
-        updateBatchBar();
-
-        if (ticketList.length) loadTicket(ticketList[0].id);
-      } catch (e) {
-        setStatusMsg('Erro: ' + e.message, '#fca5a5');
-      } finally {
-        if (btn) btn.disabled = false;
+    const fetchTickets = () => {
+      const ids = DataRepository.getTriageQueueSnapshot();
+      if (!ids.length) {
+        setStatusMsg('Nenhum chamado na lista atual. Carregue a fila no SMAX primeiro.', '#fca5a5');
+        return;
       }
+
+      ticketList = [];
+      selectedTicketIds.clear();
+      activeTicketId = '';
+
+      const noTicket = backdrop?.querySelector('#smax-resp-no-ticket');
+      const detailPanel = backdrop?.querySelector('#smax-resp-detail');
+      if (noTicket) noTicket.style.display = 'flex';
+      if (detailPanel) detailPanel.style.display = 'none';
+
+      for (const id of ids) {
+        const entry = DataRepository.triageCache.get(id);
+        if (!entry) continue;
+        if (selectedStatuses.size > 0 && !selectedStatuses.has(entry.status)) continue;
+        ticketList.push({ id: entry.idText, subject: entry.subjectText || '', status: entry.status || '' });
+      }
+
+      setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
+      renderTicketList();
+      updateBatchBar();
+      if (ticketList.length) loadTicket(ticketList[0].id);
     };
 
     const loadScripts = async () => {
@@ -7183,14 +7152,8 @@
           <!-- Left: filter + ticket list -->
           <div id="smax-resp-hud-list">
             <div id="smax-resp-filter-panel">
-              <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Colaborador</div>
-              <div style="position:relative;">
-                <input id="smax-resp-person-search" type="text" placeholder="Buscar colaborador..." autocomplete="off"
-                  style="width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 8px;color:#e5e7eb;font-size:12px;outline:none;transition:border-color .15s;">
-                <div id="smax-resp-person-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:10;background:#0d1117;border:1px solid rgba(255,255,255,.12);border-radius:6px;margin-top:3px;max-height:140px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.4);"></div>
-              </div>
-              <div id="smax-resp-person-display" style="margin-top:4px;font-size:11px;color:#60a5fa;min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-              <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-top:10px;margin-bottom:5px;">Status</div>
+              <div style="font-size:10px;color:#6b7280;margin-bottom:10px;line-height:1.4;">Filtre os chamados na tela do SMAX e clique em <b style="color:#9ca3af;">Carregar</b> para trazer a lista atual.</div>
+              <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;">Status</div>
               <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:4px;">
                 ${FILTER_STATUSES.map(s => {
                   const active = selectedStatuses.has(s);
@@ -7200,7 +7163,7 @@
                   </button>`;
                 }).join('')}
               </div>
-              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:10px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">🔍 Buscar</button>
+              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:10px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar lista</button>
             </div>
             <div style="padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);">
               <span id="smax-resp-status-msg" style="font-size:11px;"></span>
@@ -7272,46 +7235,6 @@
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
       backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-
-      // Person search
-      const personSearch = backdrop.querySelector('#smax-resp-person-search');
-      const personResults = backdrop.querySelector('#smax-resp-person-results');
-      if (personSearch) {
-        personSearch.addEventListener('input', () => {
-          clearTimeout(personSearchTimeout);
-          personSearchTimeout = setTimeout(() => {
-            const q = Utils.normalizeText(personSearch.value).toLowerCase().trim();
-            if (!q || q.length < 2) { personResults.style.display = 'none'; return; }
-            const people = [...DataRepository.peopleCache.values()];
-            const matches = people.filter(p =>
-              Utils.normalizeText(p.name || '').toLowerCase().includes(q) ||
-              (p.upn || '').toLowerCase().includes(q)
-            ).slice(0, 10);
-            personResults.style.display = matches.length ? 'block' : 'none';
-            personResults.innerHTML = matches.map(p => `
-              <div class="smax-resp-person-pick" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(p.name)}"
-                style="padding:6px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid rgba(255,255,255,.06);">
-                <div style="font-weight:500;color:#e5e7eb;">${Utils.escapeHtml(p.name)}</div>
-                <div style="color:#6b7280;font-size:10px;">${Utils.escapeHtml(p.upn || p.id)}</div>
-              </div>`).join('');
-            personResults.querySelectorAll('.smax-resp-person-pick').forEach(el => {
-              el.addEventListener('mouseenter', () => el.style.background = 'rgba(59,130,246,.15)');
-              el.addEventListener('mouseleave', () => el.style.background = '');
-              el.addEventListener('click', () => {
-                selectedPersonId = el.dataset.id;
-                selectedPersonName = el.dataset.name;
-                personSearch.value = '';
-                personResults.style.display = 'none';
-                const displayEl = backdrop.querySelector('#smax-resp-person-display');
-                if (displayEl) displayEl.textContent = selectedPersonName;
-              });
-            });
-          }, 200);
-        });
-        personSearch.addEventListener('keydown', e => {
-          if (e.key === 'Enter') backdrop.querySelector('#smax-resp-fetch-btn')?.click();
-        });
-      }
 
       // Status pills toggle
       backdrop.querySelectorAll('.smax-resp-status-pill').forEach(pill => {
