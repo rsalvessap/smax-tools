@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.32
+// @version      1.33
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6998,9 +6998,12 @@
         const layout = 'Id,Status,DisplayLabel,Description,Solution,CreateTime,RequestedForName,ExpertGroup';
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filterExpr)}&layout=${encodeURIComponent(layout)}&size=100&order=CreateTime+desc`;
 
+        console.log('[SMAX ResponseHUD] url:', url);
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const payload = await res.json();
+        console.log('[SMAX ResponseHUD] status:', payload?.meta?.completion_status, '| total:', payload?.meta?.total_count, '| entities:', payload?.entities?.length ?? 0);
+        if (payload?.entities?.length) console.log('[SMAX ResponseHUD] amostra status:', payload.entities.slice(0,3).map(e => e.properties?.Status));
 
         ticketList = [];
         selectedTicketIds.clear();
