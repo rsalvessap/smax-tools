@@ -6991,8 +6991,8 @@
 
       try {
         const statusFilter = statusesArr.map(s => `Status = '${s}'`).join(' or ');
-        const filter = `OwnedByPerson/Id = '${selectedPersonId}' and (${statusFilter})`;
-        const layout = 'Id,Status,DisplayLabel,Description,Solution,CreateTime';
+        const filter = `ExpertAssignee = '${selectedPersonId}' and (${statusFilter})`;
+        const layout = 'Id,Status,DisplayLabel,Description,Solution,CreateTime,RequestedForName,ExpertGroup.item';
         const payload = await ApiClient.request('ems/Request', {
           method: 'GET',
           searchParams: { filter, layout, size: 100, order: 'CreateTime desc' },
