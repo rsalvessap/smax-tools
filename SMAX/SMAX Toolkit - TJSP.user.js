@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.38
+// @version      1.39
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -536,8 +536,8 @@
     #smax-attachment-modal .smax-attachment-caption { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); color:#e2e8f0; font-size:14px; text-align:center; max-width:90vw; }
 
     /* ── Response HUD ── */
-    #smax-resp-hud-backdrop { position:fixed; inset:0; padding:24px; background:linear-gradient(180deg,rgba(0,0,0,0.7) 0%,rgba(0,0,0,0.5) 100%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:999997; display:none; align-items:center; justify-content:center; }
-    #smax-resp-hud { position:relative; background:#0f172a; color:#e5e7eb; border-radius:16px; width:100%; max-width:1300px; height:calc(100vh - 48px); max-height:860px; box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08) inset; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display:flex; overflow:hidden; }
+    #smax-resp-hud-backdrop { position:fixed; inset:0; padding:8px; background:linear-gradient(180deg,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.55) 100%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:999997; display:none; align-items:center; justify-content:center; }
+    #smax-resp-hud { position:relative; background:#0f172a; color:#e5e7eb; border-radius:12px; width:100%; max-width:1800px; height:calc(100vh - 16px); box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08) inset; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display:flex; overflow:hidden; }
     #smax-resp-hud-list { width:270px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,.07); background:rgba(2,6,23,.6); overflow:hidden; }
     #smax-resp-filter-panel { padding:14px 12px; border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0; }
     #smax-resp-ticket-list { flex:1; overflow-y:auto; }
@@ -2152,7 +2152,8 @@
         processNumber,
         locationId,
         locationName,
-        status
+        status,
+        statusSCCD: props.StatusSCCDSMAX_c || existing.statusSCCD || ''
       }));
     };
 
@@ -6847,9 +6848,9 @@
       const bar = backdrop?.querySelector('#smax-resp-batch-bar');
       if (!bar) return;
       const count = selectedTicketIds.size;
-      bar.style.display = count > 1 ? 'flex' : 'none';
+      bar.style.display = count >= 1 ? 'flex' : 'none';
       const countEl = bar.querySelector('#smax-resp-batch-count');
-      if (countEl) countEl.textContent = `${count} selecionados`;
+      if (countEl) countEl.textContent = `${count} selecionado${count !== 1 ? 's' : ''}`;
     };
 
     const renderTicketList = () => {
@@ -6936,10 +6937,7 @@
       const idLink = backdrop.querySelector('#smax-resp-ticket-id-link');
       if (idLink) {
         idLink.textContent = `#${entry.idText}`;
-        const tenantId = ApiClient.getTenantId ? ApiClient.getTenantId() : '';
-        idLink.href = tenantId
-          ? `/webmf/index.jsp#tenantId=${tenantId}/Requests/Edit/${entry.idText}`
-          : `/webmf/index.jsp#/Requests/Edit/${entry.idText}`;
+        idLink.href = `https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(entry.idText)}/general`;
       }
 
       const openerEl = backdrop.querySelector('#smax-resp-opener');
@@ -6947,6 +6945,17 @@
 
       const statusLabel = backdrop.querySelector('#smax-resp-status-label');
       if (statusLabel) statusLabel.textContent = STATUS_LABELS[entry.status] || (entry.status || '').replace('RequestStatus', '') || '';
+
+      const sccdLabel = backdrop.querySelector('#smax-resp-sccd-label');
+      if (sccdLabel) {
+        const sccdVal = entry.statusSCCD || '';
+        if (sccdVal) {
+          sccdLabel.textContent = sccdVal.replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
+          sccdLabel.style.display = '';
+        } else {
+          sccdLabel.style.display = 'none';
+        }
+      }
 
       const gseLabel = backdrop.querySelector('#smax-resp-gse-label');
       if (gseLabel) gseLabel.textContent = entry.assignmentGroupName || '';
@@ -6982,7 +6991,6 @@
 
     const fetchTickets = () => {
       const ids = DataRepository.getTriageQueueSnapshot();
-      console.log('[SMAX ResponseHUD] snapshot:', ids.length, '| selectedStatuses:', [...selectedStatuses]);
       if (!ids.length) {
         setStatusMsg('Nenhum chamado na lista atual. Carregue a fila no SMAX primeiro.', '#fca5a5');
         return;
@@ -6997,14 +7005,55 @@
       if (noTicket) noTicket.style.display = 'flex';
       if (detailPanel) detailPanel.style.display = 'none';
 
+      // Primeiro passe: coletar todos os chamados sem filtro para descobrir status presentes
+      const allEntries = [];
       for (const snap of ids) {
         const id = snap.idText || String(snap);
         const entry = DataRepository.triageCache.get(id);
         if (!entry) continue;
+        allEntries.push(entry);
+      }
+
+      // Gerar pills de status dinamicamente com os valores encontrados
+      const statusesPresentes = [...new Set(allEntries.map(e => e.status).filter(Boolean))];
+      const filterEl = backdrop?.querySelector('#smax-resp-status-filters');
+      if (filterEl && statusesPresentes.length) {
+        filterEl.innerHTML = statusesPresentes.map(s => {
+          const active = selectedStatuses.has(s);
+          const label = STATUS_LABELS[s] || s.replace('RequestStatus', '');
+          return `<button class="smax-resp-status-pill" data-status="${Utils.escapeHtml(s)}" style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
+            ${Utils.escapeHtml(label)}
+          </button>`;
+        }).join('');
+        // Re-wire pills
+        filterEl.querySelectorAll('.smax-resp-status-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            const s = pill.dataset.status;
+            if (selectedStatuses.has(s)) selectedStatuses.delete(s);
+            else selectedStatuses.add(s);
+            const nowActive = selectedStatuses.has(s);
+            pill.style.border = `1px solid ${nowActive ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
+            pill.style.background = nowActive ? 'rgba(59,130,246,.25)' : 'transparent';
+            pill.style.color = nowActive ? '#93c5fd' : '#9ca3af';
+            const dot = pill.querySelector('span');
+            if (dot) { dot.style.background = nowActive ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${nowActive ? '#3b82f6' : '#6b7280'}`; }
+            // Reaplicar filtro na lista atual
+            ticketList = allEntries
+              .filter(e => selectedStatuses.size === 0 || selectedStatuses.has(e.status))
+              .map(e => ({ id: e.idText, subject: e.subjectText || '', status: e.status || '' }));
+            setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
+            renderTicketList();
+            updateBatchBar();
+          });
+        });
+      }
+
+      // Segundo passe: aplicar filtro de status
+      for (const entry of allEntries) {
         if (selectedStatuses.size > 0 && !selectedStatuses.has(entry.status)) continue;
         ticketList.push({ id: entry.idText, subject: entry.subjectText || '', status: entry.status || '' });
       }
-      console.log('[SMAX ResponseHUD] ticketList:', ticketList.length, '| statuses encontrados:', [...new Set(ticketList.map(t => t.status))]);
 
       setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
       renderTicketList();
@@ -7168,16 +7217,16 @@
               </div>
               <button id="smax-resp-fetch-btn" style="width:100%;margin-top:10px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar lista</button>
             </div>
-            <div style="padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);">
-              <span id="smax-resp-status-msg" style="font-size:11px;"></span>
+            <div style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
+              <span id="smax-resp-status-msg" style="font-size:11px;font-weight:600;"></span>
               <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#9ca3af;">
                 <input type="checkbox" id="smax-resp-select-all" style="accent-color:#3b82f6;cursor:pointer;"> Todos
               </label>
             </div>
-            <div id="smax-resp-ticket-list"></div>
-            <div id="smax-resp-batch-bar" style="display:none;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;justify-content:space-between;gap:8px;background:rgba(2,6,23,.6);">
-              <span id="smax-resp-batch-count" style="font-size:11px;color:#9ca3af;"></span>
-              <button id="smax-resp-batch-send-btn" style="padding:5px 12px;border:none;border-radius:6px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">ENVIAR EM LOTE</button>
+            <div id="smax-resp-ticket-list" style="flex:1;overflow-y:auto;"></div>
+            <div id="smax-resp-batch-bar" style="display:none;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;justify-content:space-between;gap:8px;background:rgba(59,130,246,.08);">
+              <span id="smax-resp-batch-count" style="font-size:11px;color:#93c5fd;"></span>
+              <button id="smax-resp-batch-send-btn" style="padding:5px 14px;border:none;border-radius:6px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">ENVIAR EM LOTE</button>
             </div>
           </div>
 
@@ -7187,7 +7236,8 @@
               <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;overflow:hidden;">
                 <a id="smax-resp-ticket-id-link" href="#" target="_blank" style="font-size:14px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;opacity:.9;">—</a>
                 <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-                <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;"></span>
+                <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;" title="Status SMAX"></span>
+                <span id="smax-resp-sccd-label" style="font-size:10px;background:rgba(245,158,11,.2);color:#fcd34d;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(245,158,11,.4);flex-shrink:0;display:none;" title="Status Operacional"></span>
                 <span id="smax-resp-gse-label" style="font-size:11px;color:rgba(255,255,255,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:180px;"></span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
@@ -7210,7 +7260,7 @@
                   <div id="smax-resp-solution-panel">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                       <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;">✏️ Solução</span>
-                      <button id="smax-resp-scripts-btn" type="button" style="font-size:11px;padding:3px 10px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.06);color:#d1d5db;cursor:pointer;transition:background .15s;">📋 Scripts</button>
+                      <button id="smax-resp-scripts-btn" type="button" style="font-size:11px;padding:3px 10px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.06);color:#d1d5db;cursor:pointer;transition:background .15s;">📋 Scripts de Respostas</button>
                     </div>
                     <div style="position:relative;">
                       <textarea id="smax-resp-solution-textarea" placeholder="Digite aqui a solução do chamado..."></textarea>
@@ -7238,25 +7288,6 @@
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
       backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-
-      // Status pills toggle
-      backdrop.querySelectorAll('.smax-resp-status-pill').forEach(pill => {
-        pill.addEventListener('click', () => {
-          const s = pill.dataset.status;
-          const active = selectedStatuses.has(s);
-          if (active) selectedStatuses.delete(s);
-          else selectedStatuses.add(s);
-          const nowActive = selectedStatuses.has(s);
-          pill.style.border = `1px solid ${nowActive ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
-          pill.style.background = nowActive ? 'rgba(59,130,246,.25)' : 'transparent';
-          pill.style.color = nowActive ? '#93c5fd' : '#9ca3af';
-          const dot = pill.querySelector('span');
-          if (dot) {
-            dot.style.background = nowActive ? '#3b82f6' : 'transparent';
-            dot.style.border = `1.5px solid ${nowActive ? '#3b82f6' : '#6b7280'}`;
-          }
-        });
-      });
 
       // Fetch button
       backdrop.querySelector('#smax-resp-fetch-btn')?.addEventListener('click', fetchTickets);
