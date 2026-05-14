@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.41
+// @version      1.42
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7087,10 +7087,19 @@
 
       const filterParts = gseIds.map(id => `ExpertGroup='${id}'`);
       const filter = filterParts.length === 1 ? filterParts[0] : `(${filterParts.join(' or ')})`;
-      const layout = 'Id,Status,Description,Solution,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
+      // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
+      const layout = 'Id,Status,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
 
       try {
-        const data = await ApiClient.ems.collection('Request', { filter, layout, size: 1000 });
+        const tenantId = ApiClient.getTenantId() || '213963628';
+        const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filter)}&layout=${encodeURIComponent(layout)}&size=1000&TENANTID=${tenantId}`;
+        const resp = await fetch(url, { credentials: 'include' });
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          console.error('[SMAX ResponseHUD] fetchTickets HTTP', resp.status, body);
+          throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+        }
+        const data = await resp.json();
         const entities = data?.entities || [];
 
         allFetchedEntries = entities.map(e => {
