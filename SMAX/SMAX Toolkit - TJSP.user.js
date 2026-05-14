@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.39
+// @version      1.40
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6865,28 +6865,41 @@
         const isChecked = selectedTicketIds.has(t.id);
         const statusLabel = STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
         return `
-          <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}">
-            <input type="checkbox" class="smax-resp-ticket-cb" data-id="${Utils.escapeHtml(t.id)}" ${isChecked ? 'checked' : ''}>
-            <div class="smax-resp-ticket-info">
+          <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
+            <div class="smax-resp-tick-sel" data-id="${Utils.escapeHtml(t.id)}" title="Selecionar para lote"
+              style="flex-shrink:0;width:16px;height:16px;border-radius:4px;margin-top:2px;border:1.5px solid ${isChecked ? '#3b82f6' : 'rgba(255,255,255,.25)'};background:${isChecked ? '#3b82f6' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;transition:all .12s;cursor:pointer;">
+              ${isChecked ? '✓' : ''}
+            </div>
+            <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
               <div class="smax-resp-ticket-id">#${Utils.escapeHtml(t.id)}</div>
-              <div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml((t.subject || '').slice(0, 55))}</div>
+              <div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml((t.subject || '').slice(0, 60))}</div>
               <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
             </div>
           </div>`;
       }).join('');
 
-      listEl.querySelectorAll('.smax-resp-ticket-cb').forEach(cb => {
-        cb.addEventListener('change', e => {
+      listEl.querySelectorAll('.smax-resp-tick-sel').forEach(sel => {
+        sel.addEventListener('click', e => {
           e.stopPropagation();
-          if (cb.checked) selectedTicketIds.add(cb.dataset.id);
-          else selectedTicketIds.delete(cb.dataset.id);
+          const id = sel.dataset.id;
+          if (selectedTicketIds.has(id)) {
+            selectedTicketIds.delete(id);
+            sel.style.border = '1.5px solid rgba(255,255,255,.25)';
+            sel.style.background = 'transparent';
+            sel.textContent = '';
+          } else {
+            selectedTicketIds.add(id);
+            sel.style.border = '1.5px solid #3b82f6';
+            sel.style.background = '#3b82f6';
+            sel.textContent = '✓';
+          }
           updateBatchBar();
         });
       });
 
       listEl.querySelectorAll('.smax-resp-ticket-item').forEach(row => {
         row.addEventListener('click', e => {
-          if (e.target.type === 'checkbox') return;
+          if (e.target.closest('.smax-resp-tick-sel')) return;
           loadTicket(row.dataset.id);
         });
       });
@@ -7042,7 +7055,8 @@
             ticketList = allEntries
               .filter(e => selectedStatuses.size === 0 || selectedStatuses.has(e.status))
               .map(e => ({ id: e.idText, subject: e.subjectText || '', status: e.status || '' }));
-            setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
+            const ce = backdrop?.querySelector('#smax-resp-ticket-count');
+            if (ce) ce.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
             renderTicketList();
             updateBatchBar();
           });
@@ -7055,7 +7069,9 @@
         ticketList.push({ id: entry.idText, subject: entry.subjectText || '', status: entry.status || '' });
       }
 
-      setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
+      const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
+      if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
+      setStatusMsg('', '');
       renderTicketList();
       updateBatchBar();
       if (ticketList.length) loadTicket(ticketList[0].id);
@@ -7204,24 +7220,16 @@
           <!-- Left: filter + ticket list -->
           <div id="smax-resp-hud-list">
             <div id="smax-resp-filter-panel">
-              <div style="font-size:10px;color:#6b7280;margin-bottom:10px;line-height:1.4;">Filtre os chamados na tela do SMAX e clique em <b style="color:#9ca3af;">Carregar</b> para trazer a lista atual.</div>
-              <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;">Status</div>
-              <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:4px;">
-                ${FILTER_STATUSES.map(s => {
-                  const active = selectedStatuses.has(s);
-                  return `<button class="smax-resp-status-pill" data-status="${s}" style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
-                    <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;transition:all .15s;"></span>
-                    ${STATUS_LABELS[s] || s.replace('RequestStatus', '')}
-                  </button>`;
-                }).join('')}
-              </div>
-              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:10px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar lista</button>
+              <div style="font-size:10px;color:#6b7280;margin-bottom:10px;line-height:1.4;">Use os filtros do SMAX na tela de chamados e clique <b style="color:#9ca3af;">Carregar</b>.</div>
+              <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:4px;"></div>
+              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:8px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar lista</button>
             </div>
             <div style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
-              <span id="smax-resp-status-msg" style="font-size:11px;font-weight:600;"></span>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#9ca3af;">
-                <input type="checkbox" id="smax-resp-select-all" style="accent-color:#3b82f6;cursor:pointer;"> Todos
-              </label>
+              <span id="smax-resp-ticket-count" style="font-size:12px;font-weight:700;color:#60a5fa;"></span>
+              <span id="smax-resp-status-msg" style="font-size:10px;"></span>
+              <div id="smax-resp-select-all-btn" style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#9ca3af;padding:2px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.1);transition:background .12s;" title="Selecionar/desmarcar todos">
+                <span id="smax-resp-select-all-icon" style="font-size:13px;">☐</span> Todos
+              </div>
             </div>
             <div id="smax-resp-ticket-list" style="flex:1;overflow-y:auto;"></div>
             <div id="smax-resp-batch-bar" style="display:none;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;justify-content:space-between;gap:8px;background:rgba(59,130,246,.08);">
@@ -7292,16 +7300,17 @@
       // Fetch button
       backdrop.querySelector('#smax-resp-fetch-btn')?.addEventListener('click', fetchTickets);
 
-      // Select all
-      const selectAll = backdrop.querySelector('#smax-resp-select-all');
-      if (selectAll) {
-        selectAll.addEventListener('change', () => {
-          if (selectAll.checked) ticketList.forEach(t => selectedTicketIds.add(t.id));
-          else selectedTicketIds.clear();
-          renderTicketList();
-          updateBatchBar();
-        });
-      }
+      // Select all button
+      let allSelected = false;
+      backdrop.querySelector('#smax-resp-select-all-btn')?.addEventListener('click', () => {
+        allSelected = !allSelected;
+        if (allSelected) ticketList.forEach(t => selectedTicketIds.add(t.id));
+        else selectedTicketIds.clear();
+        const icon = backdrop.querySelector('#smax-resp-select-all-icon');
+        if (icon) icon.textContent = allSelected ? '☑' : '☐';
+        renderTicketList();
+        updateBatchBar();
+      });
 
       // Scripts picker
       backdrop.querySelector('#smax-resp-scripts-btn')?.addEventListener('click', openScriptPicker);
