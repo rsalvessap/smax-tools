@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.36
+// @version      1.37
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6804,7 +6804,7 @@
     // State
     let selectedPersonId = '';
     let selectedPersonName = '';
-    const selectedStatuses = new Set(['RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer']);
+    const selectedStatuses = new Set(); // vazio = sem filtro de status (mostra todos)
     let ticketList = [];
     let selectedTicketIds = new Set();
     let activeTicketId = '';
@@ -6982,6 +6982,7 @@
 
     const fetchTickets = () => {
       const ids = DataRepository.getTriageQueueSnapshot();
+      console.log('[SMAX ResponseHUD] snapshot:', ids.length, '| selectedStatuses:', [...selectedStatuses]);
       if (!ids.length) {
         setStatusMsg('Nenhum chamado na lista atual. Carregue a fila no SMAX primeiro.', '#fca5a5');
         return;
@@ -7002,6 +7003,7 @@
         if (selectedStatuses.size > 0 && !selectedStatuses.has(entry.status)) continue;
         ticketList.push({ id: entry.idText, subject: entry.subjectText || '', status: entry.status || '' });
       }
+      console.log('[SMAX ResponseHUD] ticketList:', ticketList.length, '| statuses encontrados:', [...new Set(ticketList.map(t => t.status))]);
 
       setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
       renderTicketList();
