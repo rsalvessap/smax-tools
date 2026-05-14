@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.29
+// @version      1.30
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7004,7 +7004,22 @@
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const payload = await res.json();
-        console.log('[SMAX ResponseHUD] payload:', payload);
+        console.log('[SMAX ResponseHUD] meta:', JSON.stringify(payload?.meta));
+        console.log('[SMAX ResponseHUD] entities count:', payload?.entities?.length ?? 0);
+
+        // Diagnóstico: se 0 resultados, tenta só ExpertAssignee sem filtro de fase
+        if (!payload?.entities?.length) {
+          const urlNoPhase = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(`(ExpertAssignee='${selectedPersonId}')`)}&layout=Id,Status,ExpertAssignee&size=5`;
+          const r2 = await fetch(urlNoPhase, { credentials: 'include' });
+          const p2 = r2.ok ? await r2.json() : null;
+          console.log('[SMAX ResponseHUD] diagnóstico (só ExpertAssignee) — total:', p2?.meta?.total_count, '| entities:', p2?.entities?.length, '| amostra:', JSON.stringify(p2?.entities?.slice(0,2)));
+
+          // Diagnóstico: amostra dos últimos chamados sem filtro para ver valores de ExpertAssignee
+          const urlSample = `/rest/${tenantId}/ems/Request?layout=Id,Status,ExpertAssignee&size=5&order=CreateTime+desc`;
+          const r3 = await fetch(urlSample, { credentials: 'include' });
+          const p3 = r3.ok ? await r3.json() : null;
+          console.log('[SMAX ResponseHUD] diagnóstico (sem filtro, 5 tickets) — ExpertAssignee samples:', JSON.stringify(p3?.entities?.map(e => ({id: e.properties?.Id, ea: e.properties?.ExpertAssignee}))));
+        }
 
         ticketList = [];
         selectedTicketIds.clear();
