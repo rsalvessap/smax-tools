@@ -6990,14 +6990,19 @@
       if (btn) btn.disabled = true;
 
       try {
-        const statusFilter = statusesArr.map(s => `Status = '${s}'`).join(' or ');
-        const filter = `ExpertAssignee = '${selectedPersonId}' and (${statusFilter})`;
+        const tenantId = ApiClient.getTenantId();
+        if (!tenantId) throw new Error('TenantId não disponível.');
+
+        const statusFilter = statusesArr.map(s => `Status='${s}'`).join(' or ');
+        const filterExpr = `(ExpertAssignee='${selectedPersonId}' and (${statusFilter}))`;
         const layout = 'Id,Status,DisplayLabel,Description,Solution,CreateTime,RequestedForName,ExpertGroup.item';
-        const payload = await ApiClient.request('ems/Request', {
-          method: 'GET',
-          searchParams: { filter, layout, size: 100, order: 'CreateTime desc' },
-          includeTenantParam: true
-        });
+        const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filterExpr)}&layout=${encodeURIComponent(layout)}&size=100&order=CreateTime+desc`;
+
+        console.log('[SMAX ResponseHUD] fetchTickets url:', url);
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const payload = await res.json();
+        console.log('[SMAX ResponseHUD] payload:', payload);
 
         ticketList = [];
         selectedTicketIds.clear();
@@ -7022,7 +7027,7 @@
           });
         }
 
-        setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, '#4ade80');
+        setStatusMsg(`${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`, ticketList.length ? '#4ade80' : '#9ca3af');
         renderTicketList();
         updateBatchBar();
 
