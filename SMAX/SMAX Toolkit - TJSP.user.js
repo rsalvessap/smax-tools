@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.33
+// @version      1.34
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6995,7 +6995,7 @@
 
         const statusFilter = statusesArr.map(s => `Status='${s}'`).join(' or ');
         const filterExpr = `(ExpertAssignee='${selectedPersonId}' and (${statusFilter}))`;
-        const layout = 'Id,Status,DisplayLabel,Description,Solution,CreateTime,RequestedForName,ExpertGroup';
+        const layout = 'Id,Status,Description,Solution,CreateTime,RequestedForName';
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filterExpr)}&layout=${encodeURIComponent(layout)}&size=100&order=CreateTime+desc`;
 
         console.log('[SMAX ResponseHUD] url:', url);
