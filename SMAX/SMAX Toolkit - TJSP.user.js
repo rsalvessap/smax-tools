@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.31
+// @version      1.32
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7188,12 +7188,14 @@
               </div>
               <div id="smax-resp-person-display" style="margin-top:4px;font-size:11px;color:#60a5fa;min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
               <div style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;margin-top:10px;margin-bottom:5px;">Status</div>
-              <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;">
-                ${FILTER_STATUSES.map(s => `
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:#d1d5db;">
-                    <input type="checkbox" class="smax-resp-status-cb" data-status="${s}" ${selectedStatuses.has(s) ? 'checked' : ''} style="accent-color:#3b82f6;cursor:pointer;">
+              <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:4px;">
+                ${FILTER_STATUSES.map(s => {
+                  const active = selectedStatuses.has(s);
+                  return `<button class="smax-resp-status-pill" data-status="${s}" style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+                    <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;transition:all .15s;"></span>
                     ${STATUS_LABELS[s] || s.replace('RequestStatus', '')}
-                  </label>`).join('')}
+                  </button>`;
+                }).join('')}
               </div>
               <button id="smax-resp-fetch-btn" style="width:100%;margin-top:10px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">🔍 Buscar</button>
             </div>
@@ -7308,11 +7310,22 @@
         });
       }
 
-      // Status checkboxes
-      backdrop.querySelectorAll('.smax-resp-status-cb').forEach(cb => {
-        cb.addEventListener('change', () => {
-          if (cb.checked) selectedStatuses.add(cb.dataset.status);
-          else selectedStatuses.delete(cb.dataset.status);
+      // Status pills toggle
+      backdrop.querySelectorAll('.smax-resp-status-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const s = pill.dataset.status;
+          const active = selectedStatuses.has(s);
+          if (active) selectedStatuses.delete(s);
+          else selectedStatuses.add(s);
+          const nowActive = selectedStatuses.has(s);
+          pill.style.border = `1px solid ${nowActive ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
+          pill.style.background = nowActive ? 'rgba(59,130,246,.25)' : 'transparent';
+          pill.style.color = nowActive ? '#93c5fd' : '#9ca3af';
+          const dot = pill.querySelector('span');
+          if (dot) {
+            dot.style.background = nowActive ? '#3b82f6' : 'transparent';
+            dot.style.border = `1.5px solid ${nowActive ? '#3b82f6' : '#6b7280'}`;
+          }
         });
       });
 
