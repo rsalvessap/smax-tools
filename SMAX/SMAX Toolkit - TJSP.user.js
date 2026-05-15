@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.45
+// @version      1.46
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7093,8 +7093,15 @@
         ? `ExpertGroup='${gseIds[0]}'`
         : `(${gseIds.map(id => `ExpertGroup='${id}'`).join(' or ')})`;
 
-      // Exclui apenas "Fechado" no Status Operacional — mantém todo o resto (aberto, pendente, etc.)
-      const filter = `(${gseFilter} and StatusSCCDSMAX_c!='Fechado')`;
+      // Filtro de status SMAX para evitar retornar >10k registros (excluir terminais)
+      // Exclusão de "Fechado" pelo StatusSCCDSMAX_c é feita no cliente (campo pode ser nulo)
+      const OPEN_STATUSES = [
+        'RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer',
+        'RequestStatusSuspended', 'RequestStatusClassify', 'RequestStatusPending',
+        'RequestStatusPendingApproval', 'RequestStatusPendingChange',
+      ];
+      const statusFilter = `(${OPEN_STATUSES.map(s => `Status='${s}'`).join(' or ')})`;
+      const filter = `(${gseFilter} and ${statusFilter})`;
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
       const layout = 'Id,Status,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
@@ -7116,19 +7123,19 @@
           const p = e.properties || {};
           const rawId = (p.Id || '').replace(/^IMRfc:/, '');
           if (!rawId) return null;
-          // Extrair texto da descrição (campo é HTML)
-          const tmp = document.createElement('div');
-          tmp.innerHTML = p.Description || '';
-          const subject = (tmp.textContent || tmp.innerText || '').trim().slice(0, 80);
+          const statusSCCD = p.StatusSCCDSMAX_c || '';
+          // Excluir "Fechado" no cliente (campo pode ser nulo na API, então o != não funciona no filtro)
+          if (statusSCCD.toLowerCase() === 'fechado') return null;
           return {
             id: rawId,
-            subject,
+            subject: rawId, // sem Description no layout; subject = ID até carregar detalhes
             status: p.Status || '',
-            statusSCCD: p.StatusSCCDSMAX_c || '',
+            statusSCCD,
             gse: p.ExpertGroup || '',
             assignee: p.ExpertAssignee || '',
           };
         }).filter(Boolean);
+        console.log('[SMAX ResponseHUD] entities:', entities.length, '→ após filtro cliente:', allFetchedEntries.length);
 
         // Gerar pills de status operacional
         renderStatusPills(allFetchedEntries);
