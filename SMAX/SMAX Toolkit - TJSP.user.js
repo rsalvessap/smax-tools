@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.47
+// @version      1.48
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -2537,8 +2537,23 @@
    * =======================================================*/
   const Network = (() => {
     let patched = false;
+    let _capturedPageFilter = null; // último filtro capturado da lista de chamados do SMAX
     const isRequestDetailUrl = (url = '') => /\/rest\/\d+\/ems\/Request\/\d+/i.test(url);
     const isRequestListUrl = (url = '') => /\/rest\/\d+\/ems\/Request(?:\?|$)/i.test(url) && !isRequestDetailUrl(url);
+
+    const tryCapurePageFilter = (url = '') => {
+      if (!isRequestListUrl(url)) return;
+      try {
+        const u = new URL(url, window.location.origin);
+        const f = u.searchParams.get('filter');
+        // Só captura se vier da página (não dos nossos próprios fetches identificados pelo layout)
+        const layout = u.searchParams.get('layout') || '';
+        if (f && !layout.includes('StatusSCCDSMAX_c')) {
+          _capturedPageFilter = f;
+          console.log('[SMAX] Filtro de lista capturado:', f.slice(0, 120));
+        }
+      } catch { }
+    };
 
     const patch = () => {
       if (patched) return;
@@ -2555,6 +2570,7 @@
             try {
               const url = this.__smaxUrl || this.responseURL || '';
               if (!/\/rest\/\d+\/ems\/(Request|Person|PersonGroup)/i.test(url)) return;
+              tryCapurePageFilter(url);
               if (!this.responseText) return;
               const json = JSON.parse(this.responseText);
               if (isRequestListUrl(url)) {
@@ -2578,6 +2594,7 @@
               try {
                 const url = resp.url || (typeof input === 'string' ? input : '');
                 if (!/\/rest\/\d+\/ems\/(Request|Person|PersonGroup)/i.test(url)) return resp;
+                tryCapurePageFilter(url);
                 const clone = resp.clone();
                 clone.text().then((txt) => {
                   try {
@@ -2604,7 +2621,8 @@
       }
     };
 
-    return { patch };
+    const getCapturedPageFilter = () => _capturedPageFilter;
+    return { patch, getCapturedPageFilter };
   })();
 
   Network.patch();
@@ -7087,13 +7105,8 @@
 
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
       if (countEl) countEl.textContent = '';
-      setStatusMsg(`Buscando em ${gseIds.length} GSE(s)...`, '#93c5fd');
-
-      // Diagnóstico: testar se ExpertGroup aceita prefixo PersonGroup: ou só numérico
-      // Tentar primeiro com prefixo "PersonGroup:" que é o formato interno do SMAX
-      const gseFilter = gseIds.length === 1
-        ? `ExpertGroup='PersonGroup:${gseIds[0]}'`
-        : `(${gseIds.map(id => `ExpertGroup='PersonGroup:${id}'`).join(' or ')})`;
+      const capturedOk = !!Network.getCapturedPageFilter();
+      setStatusMsg(capturedOk ? 'Buscando chamados...' : 'Buscando (filtro de equipe ainda não capturado)...', '#93c5fd');
 
       const OPEN_STATUSES = [
         'RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer',
@@ -7101,7 +7114,21 @@
         'RequestStatusPendingApproval', 'RequestStatusPendingChange',
       ];
       const statusFilter = `(${OPEN_STATUSES.map(s => `Status='${s}'`).join(' or ')})`;
-      const filter = `(${gseFilter} and ${statusFilter})`;
+
+      // ExpertGroup não funciona como filtro EMS — usar filtro capturado da página se disponível
+      const capturedFilter = Network.getCapturedPageFilter();
+      let filter;
+      if (capturedFilter) {
+        // Substituir filtros de status no filtro capturado, ou envolver com and status
+        filter = capturedFilter.includes('Status=')
+          ? capturedFilter
+          : `(${capturedFilter} and ${statusFilter})`;
+        console.log('[SMAX ResponseHUD] usando filtro capturado da página');
+      } else {
+        // Fallback: só Status (pode trazer tickets de todas as equipes)
+        filter = statusFilter;
+        console.log('[SMAX ResponseHUD] sem filtro de página capturado — usando apenas Status');
+      }
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
       const layout = 'Id,Status,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
