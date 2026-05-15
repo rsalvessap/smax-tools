@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.53
+// @version      1.54
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -539,7 +539,7 @@
     #smax-resp-hud-backdrop { position:fixed; inset:0; padding:8px; background:linear-gradient(180deg,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.55) 100%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:999997; display:none; align-items:center; justify-content:center; }
     #smax-resp-hud { position:relative; background:#0f172a; color:#e5e7eb; border-radius:12px; width:100%; max-width:1800px; height:calc(100vh - 16px); box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08) inset; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display:flex; overflow:hidden; }
     #smax-resp-hud-list { width:270px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,.07); background:rgba(2,6,23,.6); overflow:hidden; }
-    #smax-resp-filter-panel { padding:14px 12px; border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0; }
+    #smax-resp-filter-panel { padding:14px 12px; border-bottom:1px solid rgba(255,255,255,.07); overflow-y:auto; flex-shrink:1; min-height:0; }
     #smax-resp-ticket-list { flex:1; overflow-y:auto; }
     .smax-resp-ticket-item { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05); transition:background .12s; }
     .smax-resp-ticket-item:hover { background:rgba(255,255,255,.04); }
