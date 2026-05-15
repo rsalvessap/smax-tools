@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.49
+// @version      1.53
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -552,7 +552,7 @@
     #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
     #smax-resp-hud-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%); flex-shrink:0; }
     #smax-resp-hud-body { flex:1; display:flex; min-height:0; overflow:hidden; }
-    #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow-y:auto; min-width:0; }
+    #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow:hidden; min-width:0; }
     #smax-resp-desc-panel { background:rgba(2,6,23,.7); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:10px 12px; flex-shrink:0; }
     #smax-resp-desc-content { font-size:12px; color:#d1d5db; overflow-y:auto; max-height:110px; line-height:1.5; }
     #smax-resp-desc-content img { max-width:100%; height:auto; border-radius:4px; }
@@ -572,7 +572,7 @@
     .smax-resp-script-item:hover { background:rgba(59,130,246,.15); color:#93c5fd; }
     .smax-resp-person-pick { transition:background .1s; }
     #smax-resp-no-ticket { color:#4b5563; font-size:14px; text-align:center; }
-    #smax-resp-detail { flex-direction:column; }
+    #smax-resp-detail { display:flex; flex-direction:column; flex:1; min-height:0; }
 
     #smax-activity-log-panel { margin-top:14px; padding:10px 12px; border:1px solid #ddd; border-radius:6px; background:#f8fafc; }
     #smax-activity-log-panel h4 { margin:0 0 8px; font-size:13px; font-weight:600; color:#1f2937; }
@@ -6823,8 +6823,9 @@
     // State
     let selectedPersonId = '';
     let selectedPersonName = '';
-    const selectedStatuses = new Set(); // vazio = sem filtro de status (mostra todos)
-    const selectedTeamIds = new Set();  // equipes selecionadas para busca por GSE
+    const selectedStatuses  = new Set(); // vazio = sem filtro de status (mostra todos)
+    const selectedAssignees = new Set(); // vazio = sem filtro de designado (mostra todos); '' = nenhum
+    const selectedTeamIds   = new Set();  // equipes selecionadas para busca por GSE
     let ticketList = [];
     let allFetchedEntries = []; // todos os resultados da última busca (antes do filtro de status)
     let selectedTicketIds = new Set();
@@ -7056,9 +7057,50 @@
       });
     };
 
+    const renderAssigneePills = (entries) => {
+      const section = backdrop?.querySelector('#smax-resp-assignee-section');
+      const filterEl = backdrop?.querySelector('#smax-resp-assignee-filters');
+      if (!filterEl) return;
+      // Collect unique assignee IDs ('' = nenhum)
+      const ids = [...new Set(entries.map(e => e.assignee))].sort((a, b) => {
+        if (a === '') return -1;
+        if (b === '') return 1;
+        const na = DataRepository.peopleCache.get(a)?.name || a;
+        const nb = DataRepository.peopleCache.get(b)?.name || b;
+        return na.localeCompare(nb, 'pt');
+      });
+      if (!ids.length) { if (section) section.style.display = 'none'; return; }
+      if (section) section.style.display = '';
+      const pillHtml = (id) => {
+        const label = id === '' ? 'Nenhum' : (DataRepository.peopleCache.get(id)?.name || id);
+        const active = selectedAssignees.has(id);
+        return `<button class="smax-resp-assignee-pill" data-assignee="${Utils.escapeHtml(id)}"
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#a78bfa' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(167,139,250,.2)' : 'transparent'};color:${active ? '#c4b5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${active ? '#a78bfa' : 'transparent'};border:1.5px solid ${active ? '#a78bfa' : '#6b7280'};"></span>
+          ${Utils.escapeHtml(label)}
+        </button>`;
+      };
+      filterEl.innerHTML = ids.map(pillHtml).join('');
+      filterEl.querySelectorAll('.smax-resp-assignee-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const id = pill.dataset.assignee;
+          if (selectedAssignees.has(id)) selectedAssignees.delete(id);
+          else selectedAssignees.add(id);
+          const active = selectedAssignees.has(id);
+          pill.style.border = `1px solid ${active ? '#a78bfa' : 'rgba(255,255,255,.12)'}`;
+          pill.style.background = active ? 'rgba(167,139,250,.2)' : 'transparent';
+          pill.style.color = active ? '#c4b5fd' : '#9ca3af';
+          const dot = pill.querySelector('span');
+          if (dot) { dot.style.background = active ? '#a78bfa' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#a78bfa' : '#6b7280'}`; }
+          applyFilters();
+        });
+      });
+    };
+
     const applyFilters = () => {
       ticketList = allFetchedEntries.filter(e =>
-        selectedStatuses.size === 0 || selectedStatuses.has(e.statusSCCD)
+        (selectedStatuses.size === 0 || selectedStatuses.has(e.statusSCCD)) &&
+        (selectedAssignees.size === 0 || selectedAssignees.has(e.assignee))
       );
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
       if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
@@ -7069,18 +7111,17 @@
     };
 
     const fetchTickets = async () => {
-      // Coletar GSE IDs das equipes selecionadas (ou todas se nenhuma selecionada)
-      const teams = TeamsConfig.getTeams().filter(t => !t.isDefault);
-      console.log('[SMAX ResponseHUD] fetchTickets — teams:', teams.map(t => ({ id: t.id, gseRules: t.gseRules, gseIds: t.gseIds })));
-
+      // Coletar GSE IDs das equipes selecionadas
+      const teams = TeamsConfig.getTeams();
       const teamsToSearch = selectedTeamIds.size > 0
         ? teams.filter(t => selectedTeamIds.has(t.id))
         : teams;
 
       const gseIdSet = new Set();
+      const gseNameMap = {}; // id -> name
       for (const t of teamsToSearch) {
-        (t.gseRules || []).forEach(r => { if (r.id) gseIdSet.add(r.id); });
-        (t.gseIds || []).forEach(id => { if (id) gseIdSet.add(id); });
+        (t.gseRules || []).forEach(r => { if (r.id) { gseIdSet.add(r.id); gseNameMap[r.id] = r.name || r.id; } });
+        (t.gseIds || []).forEach(id => { if (id) { gseIdSet.add(id); if (!gseNameMap[id]) gseNameMap[id] = id; } });
       }
       const gseIds = [...gseIdSet];
       console.log('[SMAX ResponseHUD] gseIds coletados:', gseIds);
@@ -7097,6 +7138,7 @@
       selectedTicketIds.clear();
       activeTicketId = '';
       selectedStatuses.clear();
+      selectedAssignees.clear();
 
       const noTicket = backdrop?.querySelector('#smax-resp-no-ticket');
       const detailPanel = backdrop?.querySelector('#smax-resp-detail');
@@ -7148,11 +7190,29 @@
           };
         }).filter(Boolean);
         console.log('[SMAX ResponseHUD] entities:', entities.length, '→ após filtro cliente:', allFetchedEntries.length);
+        console.log('[SMAX ResponseHUD] equipes buscadas:', teamsToSearch.map(t => t.name || t.id), '| GSEs:', gseIds, '| total encontrado:', allFetchedEntries.length);
 
-        // Gerar pills de status operacional
+        // Exibir resumo do filtro no painel esquerdo
+        const infoEl = backdrop?.querySelector('#smax-resp-search-info');
+        if (infoEl) {
+          const teamLabels = teamsToSearch.map(t => t.name || t.id);
+          const gseLines = gseIds.map(id => `<div style="color:#d1d5db;padding-left:8px;font-size:10px;line-height:1.5;">${Utils.escapeHtml(gseNameMap[id] || id)} <span style="color:#4b5563;">(${id})</span></div>`).join('');
+          const section = (label) => `<div style="font-size:9px;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.06em;margin-top:8px;margin-bottom:2px;">${label}</div>`;
+          infoEl.innerHTML = section('Equipes buscadas')
+            + `<div style="color:#d1d5db;font-size:10px;line-height:1.5;">${Utils.escapeHtml(teamLabels.join(', ') || '—')}</div>`
+            + section(`GSEs (${gseIds.length})`)
+            + gseLines
+            + section('Filtros')
+            + `<div style="color:#d1d5db;font-size:10px;line-height:1.5;">Fase: excl. Close / Accept</div>`
+            + `<div style="color:#d1d5db;font-size:10px;line-height:1.5;">Status Op.: excl. Fechado</div>`;
+          infoEl.style.display = '';
+        }
+
+        // Gerar pills de filtro
         renderStatusPills(allFetchedEntries);
+        renderAssigneePills(allFetchedEntries);
 
-        // Aplicar filtros (status vazio = mostrar todos)
+        // Aplicar filtros (vazio = mostrar todos)
         applyFilters();
 
       } catch (err) {
@@ -7310,7 +7370,12 @@
                 <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Status Operacional</div>
                 <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
               </div>
+              <div id="smax-resp-assignee-section" style="display:none;">
+                <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Designado</div>
+                <div id="smax-resp-assignee-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+              </div>
               <button id="smax-resp-fetch-btn" style="width:100%;margin-top:4px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar</button>
+              <div id="smax-resp-search-info" style="display:none;margin-top:10px;padding:8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.07);"></div>
             </div>
             <div style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
               <span id="smax-resp-ticket-count" style="font-size:12px;font-weight:700;color:#60a5fa;"></span>
@@ -7358,7 +7423,7 @@
                       <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;">✏️ Solução</span>
                       <button id="smax-resp-scripts-btn" type="button" style="font-size:11px;padding:3px 10px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.06);color:#d1d5db;cursor:pointer;transition:background .15s;">📋 Scripts de Respostas</button>
                     </div>
-                    <div style="position:relative;">
+                    <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;">
                       <textarea id="smax-resp-solution-textarea" placeholder="Digite aqui a solução do chamado..."></textarea>
                       <div id="smax-resp-script-picker"></div>
                     </div>
@@ -7384,7 +7449,9 @@
       // Populate team pills
       const teamFilterEl = backdrop.querySelector('#smax-resp-team-filters');
       if (teamFilterEl) {
-        const teams = TeamsConfig.getTeams().filter(t => !t.isDefault);
+        const teams = TeamsConfig.getTeams();
+        // Pre-select all teams on first open
+        if (selectedTeamIds.size === 0) teams.forEach(t => selectedTeamIds.add(t.id));
         if (teams.length) {
           teamFilterEl.innerHTML = teams.map(t => {
             const active = selectedTeamIds.has(t.id);
