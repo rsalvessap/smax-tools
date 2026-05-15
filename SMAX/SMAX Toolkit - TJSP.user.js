@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.54
+// @version      1.57
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -539,7 +539,10 @@
     #smax-resp-hud-backdrop { position:fixed; inset:0; padding:8px; background:linear-gradient(180deg,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.55) 100%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:999997; display:none; align-items:center; justify-content:center; }
     #smax-resp-hud { position:relative; background:#0f172a; color:#e5e7eb; border-radius:12px; width:100%; max-width:1800px; height:calc(100vh - 16px); box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08) inset; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display:flex; overflow:hidden; }
     #smax-resp-hud-list { width:270px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,.07); background:rgba(2,6,23,.6); overflow:hidden; }
-    #smax-resp-filter-panel { padding:14px 12px; border-bottom:1px solid rgba(255,255,255,.07); overflow-y:auto; flex-shrink:1; min-height:0; }
+    #smax-resp-filter-panel { border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0; display:flex; flex-direction:column; }
+    #smax-resp-filter-header { padding:8px 12px 6px; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+    #smax-resp-filter-criteria { padding:0 12px 10px; overflow-y:auto; max-height:38vh; }
+    #smax-resp-filter-criteria.collapsed { display:none; }
     #smax-resp-ticket-list { flex:1; overflow-y:auto; }
     .smax-resp-ticket-item { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05); transition:background .12s; }
     .smax-resp-ticket-item:hover { background:rgba(255,255,255,.04); }
@@ -744,6 +747,22 @@
     body[data-smax-theme="light"] .smax-team-item {
       background: #f8fafc !important;
       border-color: rgba(0,0,0,.1) !important;
+    }
+    body[data-smax-theme="light"] .smax-team-item strong {
+      color: #1e293b !important;
+    }
+    body[data-smax-theme="light"] .smax-team-item .smax-team-prio-info {
+      color: #475569 !important;
+    }
+    body[data-smax-theme="light"] .smax-team-edit-btn {
+      color: #1e293b !important;
+      background: rgba(0,0,0,.06) !important;
+      border-color: rgba(0,0,0,.2) !important;
+    }
+    body[data-smax-theme="light"] .smax-team-del-btn {
+      color: #b91c1c !important;
+      background: rgba(220,38,38,.08) !important;
+      border-color: rgba(220,38,38,.25) !important;
     }
     body[data-smax-theme="light"] #smax-settings-sidebar {
       border-right-color: rgba(0,0,0,.1);
@@ -1559,11 +1578,17 @@
           if (team.gseIds.includes(gseId)) return team;
         }
 
-        // Check matchers (regex) - location-based matching
+        // Check matchers — scope: 'location' = só Local de Registro; 'text' = assunto+descrição; outros = qualquer campo
         if (team.matchers && Array.isArray(team.matchers)) {
           for (const m of team.matchers) {
             if (m.type === 'regex' && m._regex) {
-              if (m._regex.test(matchText)) return team;
+              const scope = m.scope || 'location';
+              const testStr = scope === 'location'
+                ? (ticket.locationName || '').toUpperCase()
+                : scope === 'text'
+                  ? [ticket.subjectText || '', ticket.descriptionText || ''].join(' ').toUpperCase()
+                  : matchText;
+              if (m._regex.test(testStr)) return team;
             }
           }
         }
@@ -3352,7 +3377,7 @@
               <div>
                 <strong style="font-size:13px;color:#f8fafc;">${Utils.escapeHtml(t.name || t.id || 'Sem nome')}</strong>
                 ${isDefault ? '<span style="font-size:10px;background:rgba(56,189,248,0.2);color:#38bdf8;padding:2px 6px;border-radius:999px;margin-left:6px;border:1px solid rgba(56,189,248,0.3);">Padrão</span>' : ''}
-                <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Prioridade: ${t.priority || 0} • Membros: ${t.workers ? t.workers.length : 0}</div>
+                <div class="smax-team-prio-info" style="font-size:11px;color:#94a3b8;margin-top:2px;">Prioridade: ${t.priority || 0} • Membros: ${t.workers ? t.workers.length : 0}</div>
               </div>
               <div style="display:flex;gap:6px;">
                 <button class="smax-team-edit-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;background:rgba(255,255,255,.05);color:#e5e7eb;border:1px solid rgba(255,255,255,.15);border-radius:6px;transition:all .15s ease;">Editar</button>
@@ -3388,16 +3413,19 @@
         </div>
       `).join('');
 
-      const matchersHtml = (team.matchers || []).filter(m => m.type === 'regex').map((m, idx) => {
+      const matcherRowHtml = (m) => {
         const displayText = m._displayText || m.pattern || '';
+        const scope = m.scope || 'location';
         return `
           <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:6px 8px;border-radius:8px;">
             <input type="hidden" class="smax-matcher-pattern" value="${Utils.escapeHtml(m.pattern || '')}">
+            <input type="hidden" class="smax-matcher-scope" value="${Utils.escapeHtml(scope)}">
             <span style="flex:1;font-size:11px;color:#94a3b8;">contém: <strong style="color:#e5e7eb;">${Utils.escapeHtml(displayText)}</strong></span>
-            <button class="smax-matcher-del-btn" data-idx="${idx}" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
-          </div>
-        `;
-      }).join('');
+            <button class="smax-matcher-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
+          </div>`;
+      };
+      const locationMatchersHtml = (team.matchers || []).filter(m => m.type === 'regex' && (m.scope || 'location') === 'location').map(matcherRowHtml).join('');
+      const textMatchersHtml    = (team.matchers || []).filter(m => m.type === 'regex' && m.scope === 'text').map(matcherRowHtml).join('');
 
       const workersHtml = (team.workers || []).map((w, idx) => {
         const normName = Utils.normalizeText(w.name || '');
@@ -3436,14 +3464,18 @@
               <input type="text" id="smax-edit-id" value="${Utils.escapeHtml(team.name || team.id || '')}" ${isGeneralTeam ? 'disabled' : ''} placeholder="Ex: JEC, Cível, Criminal..." style="width:100%;padding:8px 12px;border:1px solid #475569;border-radius:8px;background:${isGeneralTeam ? 'rgba(15,23,42,0.6)' : '#1e293b'};color:${isGeneralTeam ? '#94a3b8' : '#f8fafc'};font-size:13px;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;${isGeneralTeam ? 'cursor:not-allowed;' : ''}">
             </div>
             <div>
-              <label style="display:block;font-size:12px;font-weight:600;color:#cbd5e1;margin-bottom:4px;">Prioridade</label>
+              <label style="display:block;font-size:12px;font-weight:600;color:#cbd5e1;margin-bottom:2px;">Prioridade
+                <span title="Define a ordem de verificação na triagem automática. A equipe com maior prioridade é verificada primeiro. Use valores altos (ex: 10) para equipes específicas e baixos (ex: 1) para a equipe geral (fallback). Assim, chamados de um GSE específico vão para a equipe certa antes de cair no grupo geral." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+              </label>
               <input type="number" id="smax-edit-prio" value="${team.priority || 0}" style="width:100%;padding:8px 12px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f8fafc;font-size:13px;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;">
             </div>
           </div>
 
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#e5e7eb;">Quais GSE a equipe atende?</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#e5e7eb;">Quais GSE a equipe atende?
+              <span title="GSE = Grupo de Suporte Especializado (ExpertGroup no SMAX). Chamados atribuídos a esses grupos serão roteados automaticamente para esta equipe na triagem. Também são usados como filtro na janela de Consulta de Chamados." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+            </div>
             ${isGeneralTeam ? '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">⚠️ A equipe GERAL não permite edição de GSEs (aceita todos os grupos).</div>' : `
              <!-- GSE Search -->
             <div style="margin-bottom:8px;border:1px solid #475569;background:#1e293b;border-radius:8px;padding:8px;">
@@ -3456,22 +3488,43 @@
           </div>
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#e5e7eb;">Palavras-chave no campo "Local de Divulgação"</div>
-            ${isGeneralTeam ? '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">⚠️ A equipe GERAL não permite edição de locais (aceita todos os locais).</div>' : `
-            <div style="margin-bottom:6px;font-size:11px;color:#94a3b8;">Equipe será sugerida quando o local do chamado contiver o texto especificado (insensível a maiúsculas/minúsculas)</div>
-            
-            <!-- Location Matcher Input -->
-            <div style="margin-bottom:8px;border:1px solid #475569;background:#1e293b;border-radius:8px;padding:8px;display:flex;gap:6px;align-items:center;">
-              <input type="text" id="smax-team-location-input" placeholder="Ex: JUIZADO ESPECIAL CÍVEL" 
-                     style="flex:1;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
-              <button id="smax-add-location-matcher-btn" style="padding:6px 12px;background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s ease;">+ Adicionar</button>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#e5e7eb;">Palavras-chave para roteamento
+              <span title="Rota alternativa ao GSE: quando o chamado não bate com nenhum GSE configurado, o sistema verifica essas palavras-chave. Usado APENAS na triagem — não serve para o filtro de Consulta de Chamados." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+            </div>
+            ${isGeneralTeam ? '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">⚠️ A equipe GERAL não utiliza palavras-chave (é o fallback para tudo que não bateu em nenhuma regra).</div>' : `
+            <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">A equipe será sugerida quando o chamado contiver a palavra-chave no campo correspondente (insensível a maiúsculas/minúsculas).</div>
+
+            <!-- Local de Registro -->
+            <div style="margin-bottom:10px;border:1px solid #334155;border-radius:8px;padding:10px;background:rgba(15,23,42,0.5);">
+              <div style="font-size:11px;font-weight:600;color:#38bdf8;margin-bottom:6px;">📍 Local de Registro
+                <span style="font-weight:400;color:#64748b;margin-left:4px;">(campo RegisteredForLocation do chamado)</span>
+              </div>
+              <div style="display:flex;gap:6px;margin-bottom:6px;">
+                <input type="text" id="smax-team-location-input" placeholder="Ex: CAMPINAS, SANTOS, CAPITAL..."
+                       style="flex:1;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
+                <button id="smax-add-location-matcher-btn" style="padding:6px 12px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Adicionar</button>
+              </div>
+              <div id="smax-matchers-list-location">${locationMatchersHtml}</div>
             </div>
 
-            <div id="smax-matchers-list">${matchersHtml}</div>`}
+            <!-- Assunto / Descrição -->
+            <div style="border:1px solid #334155;border-radius:8px;padding:10px;background:rgba(15,23,42,0.5);">
+              <div style="font-size:11px;font-weight:600;color:#a78bfa;margin-bottom:6px;">📝 Assunto / Descrição
+                <span style="font-weight:400;color:#64748b;margin-left:4px;">(título e corpo do chamado)</span>
+              </div>
+              <div style="display:flex;gap:6px;margin-bottom:6px;">
+                <input type="text" id="smax-team-text-input" placeholder="Ex: IMPRESSORA, VPN, SENHA..."
+                       style="flex:1;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
+                <button id="smax-add-text-matcher-btn" style="padding:6px 12px;background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid rgba(167,139,250,.3);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Adicionar</button>
+              </div>
+              <div id="smax-matchers-list-text">${textMatchersHtml}</div>
+            </div>`}
           </div>
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#e5e7eb;">Membros e Distribuição</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#e5e7eb;">Membros e Distribuição
+              <span title="Cada membro recebe um intervalo de dígitos finais do ID do chamado (ex: '0-9' significa que chamados terminados em 0 a 9 são desse membro). A triagem usa isso para sugerir automaticamente quem deve atender. Marque 'Ausente' para que o sistema pule para o próximo par de dígitos ao sugerir responsável." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+            </div>
             
             <!-- Person Search for Adding Workers -->
             <div style="margin-bottom:8px;border:1px solid #475569;background:#1e293b;border-radius:8px;padding:8px;">
@@ -3563,22 +3616,19 @@
           // Sort workers alphabetically by name for better UX
           newWorkers.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
 
-          // Collect location matchers
+          // Collect matchers from both scope sections
           const newMatchers = [];
-          container.querySelectorAll('#smax-matchers-list > div').forEach(div => {
-            const patternInput = div.querySelector('.smax-matcher-pattern');
-            if (patternInput) {
-              const pattern = patternInput.value.trim();
-              if (pattern) {
-                // Store both pattern and original text for display
-                newMatchers.push({
-                  type: 'regex',
-                  pattern: pattern,
-                  _displayText: pattern.replace(/\\/g, '') // Store unescaped for display
-                });
+          const collectMatchers = (listId, scope) => {
+            container.querySelectorAll(`#${listId} > div`).forEach(div => {
+              const patternInput = div.querySelector('.smax-matcher-pattern');
+              if (patternInput) {
+                const pattern = patternInput.value.trim();
+                if (pattern) newMatchers.push({ type: 'regex', pattern, scope, _displayText: pattern.replace(/\\/g, '') });
               }
-            }
-          });
+            });
+          };
+          collectMatchers('smax-matchers-list-location', 'location');
+          collectMatchers('smax-matchers-list-text', 'text');
 
           // Update state
           if (editingTeamId === '__NEW__') {
@@ -3668,42 +3718,37 @@
         // Existing deletes for initial render
         container.querySelectorAll('.smax-gse-del-btn').forEach(b => b.addEventListener('click', e => e.target.closest('div').remove()));
 
-        // --- Location Matcher Logic ---
-        const locationInput = container.querySelector('#smax-team-location-input');
-        const addLocationBtn = container.querySelector('#smax-add-location-matcher-btn');
+        // --- Matcher Logic (location + text scopes) ---
+        const wireMatcherInput = (inputId, btnId, listId, scope) => {
+          const input = container.querySelector(`#${inputId}`);
+          const btn   = container.querySelector(`#${btnId}`);
+          const list  = container.querySelector(`#${listId}`);
+          if (!input || !btn || !list) return;
 
-        if (addLocationBtn && locationInput) {
-          addLocationBtn.addEventListener('click', () => {
-            const text = locationInput.value.trim();
+          const addRow = () => {
+            const text = input.value.trim();
             if (!text) return;
-
-            // Escape regex special characters except accents
-            // PT-BR: preserve á é í ó ú ã õ ç etc.
             const escapedPattern = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-            const list = container.querySelector('#smax-matchers-list');
-            const tempDiv = document.createElement('div');
-            tempDiv.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:6px 8px;border-radius:8px;';
-            tempDiv.innerHTML = `
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:6px 8px;border-radius:8px;';
+            row.innerHTML = `
               <input type="hidden" class="smax-matcher-pattern" value="${Utils.escapeHtml(escapedPattern)}">
+              <input type="hidden" class="smax-matcher-scope" value="${Utils.escapeHtml(scope)}">
               <span style="flex:1;font-size:11px;color:#94a3b8;">contém: <strong style="color:#e5e7eb;">${Utils.escapeHtml(text)}</strong></span>
-              <button class="smax-matcher-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
-            `;
-            tempDiv.querySelector('.smax-matcher-del-btn').addEventListener('click', () => tempDiv.remove());
-            if (list) list.appendChild(tempDiv);
-            locationInput.value = '';
-          });
+              <button class="smax-matcher-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>`;
+            row.querySelector('.smax-matcher-del-btn').addEventListener('click', () => row.remove());
+            list.appendChild(row);
+            input.value = '';
+          };
 
-          // Allow Enter key to add matcher
-          locationInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              addLocationBtn.click();
-            }
-          });
-        }
+          btn.addEventListener('click', addRow);
+          input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRow(); } });
+        };
 
-        // Existing matcher deletes for initial render
+        wireMatcherInput('smax-team-location-input', 'smax-add-location-matcher-btn', 'smax-matchers-list-location', 'location');
+        wireMatcherInput('smax-team-text-input',     'smax-add-text-matcher-btn',     'smax-matchers-list-text',     'text');
+
+        // Delete buttons for rows rendered on load
         container.querySelectorAll('.smax-matcher-del-btn').forEach(b => b.addEventListener('click', () => b.closest('div').remove()));
 
         // --- Person Search Logic (Existing) ---
@@ -7190,6 +7235,35 @@
           };
         }).filter(Boolean);
         console.log('[SMAX ResponseHUD] entities:', entities.length, '→ após filtro cliente:', allFetchedEntries.length);
+
+        // Complementar com entradas do triageCache para equipes sem GSE IDs explícitos
+        // (equipes que usam apenas matchers/regex não geram filtro de API, mas o suggestTeam funciona para elas)
+        const teamsWithNoGSE = teamsToSearch.filter(t =>
+          !((t.gseRules && t.gseRules.some(r => r.id)) || (t.gseIds && t.gseIds.length))
+        );
+        if (teamsWithNoGSE.length) {
+          const coveredIds = new Set(allFetchedEntries.map(e => e.id));
+          const CLOSED_STATUSES = new Set(['RequestStatusComplete', 'RequestStatusReject', 'RequestStatusCancel']);
+          for (const [cacheId, ce] of DataRepository.triageCache) {
+            if (coveredIds.has(cacheId)) continue;
+            if (CLOSED_STATUSES.has(ce.status)) continue;
+            const rawSCCD = (ce.statusSCCD || '').replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
+            if (rawSCCD === 'Fechado') continue;
+            const suggestedTeam = TeamsConfig.suggestTeam(ce);
+            if (!suggestedTeam || !teamsWithNoGSE.some(t => t.id === suggestedTeam.id)) continue;
+            coveredIds.add(cacheId);
+            allFetchedEntries.push({
+              id: cacheId,
+              subject: ce.subjectText || cacheId,
+              status: ce.status || '',
+              statusSCCD: rawSCCD,
+              gse: ce.assignmentGroupId || '',
+              assignee: '',
+            });
+          }
+          console.log('[SMAX ResponseHUD] após complemento triageCache (equipes sem GSE):', allFetchedEntries.length);
+        }
+
         console.log('[SMAX ResponseHUD] equipes buscadas:', teamsToSearch.map(t => t.name || t.id), '| GSEs:', gseIds, '| total encontrado:', allFetchedEntries.length);
 
         // Exibir resumo do filtro no painel esquerdo
@@ -7364,18 +7438,26 @@
           <!-- Left: filter + ticket list -->
           <div id="smax-resp-hud-list">
             <div id="smax-resp-filter-panel">
-              <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Equipes</div>
-              <div id="smax-resp-team-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
-              <div id="smax-resp-status-section" style="display:none;">
-                <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Status Operacional</div>
-                <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+              <div id="smax-resp-filter-header">
+                <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;">Filtros</span>
+                <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
+                  <button id="smax-resp-fetch-btn" style="padding:5px 10px;border:none;border-radius:6px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">↺ Carregar</button>
+                  <button id="smax-resp-toggle-criteria" title="Mostrar/ocultar critérios" style="padding:4px 7px;border:1px solid rgba(255,255,255,.12);border-radius:5px;background:transparent;color:#9ca3af;font-size:11px;cursor:pointer;line-height:1;">▲</button>
+                </div>
               </div>
-              <div id="smax-resp-assignee-section" style="display:none;">
-                <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Designado</div>
-                <div id="smax-resp-assignee-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+              <div id="smax-resp-filter-criteria">
+                <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Equipes</div>
+                <div id="smax-resp-team-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+                <div id="smax-resp-status-section" style="display:none;">
+                  <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Status Operacional</div>
+                  <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+                </div>
+                <div id="smax-resp-assignee-section" style="display:none;">
+                  <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Designado</div>
+                  <div id="smax-resp-assignee-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+                </div>
+                <div id="smax-resp-search-info" style="display:none;padding:8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.07);"></div>
               </div>
-              <button id="smax-resp-fetch-btn" style="width:100%;margin-top:4px;padding:7px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;">↺ Carregar</button>
-              <div id="smax-resp-search-info" style="display:none;margin-top:10px;padding:8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.07);"></div>
             </div>
             <div style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
               <span id="smax-resp-ticket-count" style="font-size:12px;font-weight:700;color:#60a5fa;"></span>
@@ -7455,10 +7537,15 @@
         if (teams.length) {
           teamFilterEl.innerHTML = teams.map(t => {
             const active = selectedTeamIds.has(t.id);
+            const hasGSE = (t.gseRules && t.gseRules.some(r => r.id)) || (t.gseIds && t.gseIds.length > 0);
+            const srcHint = hasGSE ? '🔵' : '🟡';
+            const srcTitle = hasGSE ? 'Busca por GSE na API' : 'Busca via fila local (sem GSE IDs configurados)';
             return `<button class="smax-resp-team-pill" data-team-id="${Utils.escapeHtml(t.id)}"
+              title="${Utils.escapeHtml(srcTitle)}"
               style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
               <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
-              ${Utils.escapeHtml(t.name || t.id)}
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.escapeHtml(t.name || t.id)}</span>
+              <span style="font-size:9px;opacity:.7;">${srcHint}</span>
             </button>`;
           }).join('');
           teamFilterEl.querySelectorAll('.smax-resp-team-pill').forEach(pill => {
@@ -7483,8 +7570,22 @@
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
       backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 
-      // Fetch button
-      backdrop.querySelector('#smax-resp-fetch-btn')?.addEventListener('click', fetchTickets);
+      // Toggle criteria visibility
+      const criteriaEl = backdrop.querySelector('#smax-resp-filter-criteria');
+      const toggleBtn  = backdrop.querySelector('#smax-resp-toggle-criteria');
+      const setCriteriaVisible = (visible) => {
+        if (!criteriaEl || !toggleBtn) return;
+        criteriaEl.classList.toggle('collapsed', !visible);
+        toggleBtn.textContent = visible ? '▲' : '▼';
+        toggleBtn.title = visible ? 'Ocultar critérios' : 'Mostrar critérios';
+      };
+      toggleBtn?.addEventListener('click', () => setCriteriaVisible(criteriaEl?.classList.contains('collapsed')));
+
+      // Fetch button — carregar e recolher critérios automaticamente
+      backdrop.querySelector('#smax-resp-fetch-btn')?.addEventListener('click', async () => {
+        await fetchTickets();
+        setCriteriaVisible(false);
+      });
 
       // Select all button
       let allSelected = false;
