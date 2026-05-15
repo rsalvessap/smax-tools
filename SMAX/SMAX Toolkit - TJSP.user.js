@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.48
+// @version      1.49
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7105,33 +7105,20 @@
 
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
       if (countEl) countEl.textContent = '';
-      const capturedOk = !!Network.getCapturedPageFilter();
-      setStatusMsg(capturedOk ? 'Buscando chamados...' : 'Buscando (filtro de equipe ainda não capturado)...', '#93c5fd');
+      setStatusMsg('Buscando chamados...', '#93c5fd');
 
-      const OPEN_STATUSES = [
-        'RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer',
-        'RequestStatusSuspended', 'RequestStatusClassify', 'RequestStatusPending',
-        'RequestStatusPendingApproval', 'RequestStatusPendingChange',
-      ];
-      const statusFilter = `(${OPEN_STATUSES.map(s => `Status='${s}'`).join(' or ')})`;
+      // Campo correto para filtrar por grupo é AssignedToGroup (ExpertGroup só funciona em updates)
+      const gseFilter = gseIds.length === 1
+        ? `AssignedToGroup='${gseIds[0]}'`
+        : `(${gseIds.map(id => `AssignedToGroup='${id}'`).join(' or ')})`;
 
-      // ExpertGroup não funciona como filtro EMS — usar filtro capturado da página se disponível
-      const capturedFilter = Network.getCapturedPageFilter();
-      let filter;
-      if (capturedFilter) {
-        // Substituir filtros de status no filtro capturado, ou envolver com and status
-        filter = capturedFilter.includes('Status=')
-          ? capturedFilter
-          : `(${capturedFilter} and ${statusFilter})`;
-        console.log('[SMAX ResponseHUD] usando filtro capturado da página');
-      } else {
-        // Fallback: só Status (pode trazer tickets de todas as equipes)
-        filter = statusFilter;
-        console.log('[SMAX ResponseHUD] sem filtro de página capturado — usando apenas Status');
-      }
+      // Excluir fechados pelo PhaseId (como o SMAX faz internamente) e pelo Status Operacional
+      // "or StatusSCCDSMAX_c=null" inclui chamados sem valor no campo (maioria dos abertos)
+      const filter = `(Active='true' and (PhaseId!='Close' and PhaseId!='Accept' or PhaseId=null) and ${gseFilter} and (StatusSCCDSMAX_c!='Fechado_c' or StatusSCCDSMAX_c=null))`;
+      console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
-      const layout = 'Id,Status,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
+      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup';
 
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
@@ -7150,15 +7137,13 @@
           const p = e.properties || {};
           const rawId = (p.Id || '').replace(/^IMRfc:/, '');
           if (!rawId) return null;
-          const statusSCCD = p.StatusSCCDSMAX_c || '';
-          // Excluir "Fechado" no cliente (campo pode ser nulo na API, então o != não funciona no filtro)
-          if (statusSCCD.toLowerCase() === 'fechado') return null;
+          const statusSCCD = (p.StatusSCCDSMAX_c || '').replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
           return {
             id: rawId,
             subject: rawId, // sem Description no layout; subject = ID até carregar detalhes
             status: p.Status || '',
             statusSCCD,
-            gse: p.ExpertGroup || '',
+            gse: p.AssignedToGroup || '',
             assignee: p.ExpertAssignee || '',
           };
         }).filter(Boolean);
