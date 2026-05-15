@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.43
+// @version      1.44
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7089,14 +7089,8 @@
         ? `ExpertGroup='${gseIds[0]}'`
         : `(${gseIds.map(id => `ExpertGroup='${id}'`).join(' or ')})`;
 
-      // Apenas chamados abertos — exclui Concluído e Rejeitado para ficar abaixo de 10k
-      const OPEN_STATUSES = [
-        'RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer',
-        'RequestStatusSuspended', 'RequestStatusClassify', 'RequestStatusPending',
-        'RequestStatusPendingApproval', 'RequestStatusPendingChange',
-      ];
-      const statusFilter = `(${OPEN_STATUSES.map(s => `Status='${s}'`).join(' or ')})`;
-      const filter = `(${gseFilter} and ${statusFilter})`;
+      // Exclui apenas "Fechado" no Status Operacional — mantém todo o resto (aberto, pendente, etc.)
+      const filter = `(${gseFilter} and StatusSCCDSMAX_c!='Fechado')`;
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
       const layout = 'Id,Status,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
