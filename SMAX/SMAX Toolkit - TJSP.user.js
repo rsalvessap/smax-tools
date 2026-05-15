@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.42
+// @version      1.43
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7085,8 +7085,19 @@
       if (countEl) countEl.textContent = '';
       setStatusMsg(`Buscando em ${gseIds.length} GSE(s)...`, '#93c5fd');
 
-      const filterParts = gseIds.map(id => `ExpertGroup='${id}'`);
-      const filter = filterParts.length === 1 ? filterParts[0] : `(${filterParts.join(' or ')})`;
+      const gseFilter = gseIds.length === 1
+        ? `ExpertGroup='${gseIds[0]}'`
+        : `(${gseIds.map(id => `ExpertGroup='${id}'`).join(' or ')})`;
+
+      // Apenas chamados abertos — exclui Concluído e Rejeitado para ficar abaixo de 10k
+      const OPEN_STATUSES = [
+        'RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer',
+        'RequestStatusSuspended', 'RequestStatusClassify', 'RequestStatusPending',
+        'RequestStatusPendingApproval', 'RequestStatusPendingChange',
+      ];
+      const statusFilter = `(${OPEN_STATUSES.map(s => `Status='${s}'`).join(' or ')})`;
+      const filter = `(${gseFilter} and ${statusFilter})`;
+
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
       const layout = 'Id,Status,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,ExpertGroup';
 
