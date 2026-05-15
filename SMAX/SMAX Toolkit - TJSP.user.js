@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.46
+// @version      1.47
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7089,12 +7089,12 @@
       if (countEl) countEl.textContent = '';
       setStatusMsg(`Buscando em ${gseIds.length} GSE(s)...`, '#93c5fd');
 
+      // Diagnóstico: testar se ExpertGroup aceita prefixo PersonGroup: ou só numérico
+      // Tentar primeiro com prefixo "PersonGroup:" que é o formato interno do SMAX
       const gseFilter = gseIds.length === 1
-        ? `ExpertGroup='${gseIds[0]}'`
-        : `(${gseIds.map(id => `ExpertGroup='${id}'`).join(' or ')})`;
+        ? `ExpertGroup='PersonGroup:${gseIds[0]}'`
+        : `(${gseIds.map(id => `ExpertGroup='PersonGroup:${id}'`).join(' or ')})`;
 
-      // Filtro de status SMAX para evitar retornar >10k registros (excluir terminais)
-      // Exclusão de "Fechado" pelo StatusSCCDSMAX_c é feita no cliente (campo pode ser nulo)
       const OPEN_STATUSES = [
         'RequestStatusActive', 'RequestStatusInProgress', 'RequestStatusPendingCustomer',
         'RequestStatusSuspended', 'RequestStatusClassify', 'RequestStatusPending',
