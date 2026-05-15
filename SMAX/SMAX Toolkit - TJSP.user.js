@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.44
+// @version      1.45
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7053,6 +7053,8 @@
     const fetchTickets = async () => {
       // Coletar GSE IDs das equipes selecionadas (ou todas se nenhuma selecionada)
       const teams = TeamsConfig.getTeams().filter(t => !t.isDefault);
+      console.log('[SMAX ResponseHUD] fetchTickets — teams:', teams.map(t => ({ id: t.id, gseRules: t.gseRules, gseIds: t.gseIds })));
+
       const teamsToSearch = selectedTeamIds.size > 0
         ? teams.filter(t => selectedTeamIds.has(t.id))
         : teams;
@@ -7063,9 +7065,11 @@
         (t.gseIds || []).forEach(id => { if (id) gseIdSet.add(id); });
       }
       const gseIds = [...gseIdSet];
+      console.log('[SMAX ResponseHUD] gseIds coletados:', gseIds);
 
       if (!gseIds.length) {
         setStatusMsg('Nenhuma GSE configurada nas equipes.', '#fca5a5');
+        console.warn('[SMAX ResponseHUD] Nenhum GSE ID encontrado nas equipes.');
         return;
       }
 
@@ -7098,6 +7102,7 @@
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filter)}&layout=${encodeURIComponent(layout)}&size=1000&TENANTID=${tenantId}`;
+        console.log('[SMAX ResponseHUD] GET', url);
         const resp = await fetch(url, { credentials: 'include' });
         if (!resp.ok) {
           const body = await resp.text().catch(() => '');
