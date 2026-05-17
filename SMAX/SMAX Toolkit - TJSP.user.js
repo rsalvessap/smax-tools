@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.57
+// @version      1.58
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -575,7 +575,20 @@
     .smax-resp-script-item:hover { background:rgba(59,130,246,.15); color:#93c5fd; }
     .smax-resp-person-pick { transition:background .1s; }
     #smax-resp-no-ticket { color:#4b5563; font-size:14px; text-align:center; }
-    #smax-resp-detail { display:flex; flex-direction:column; flex:1; min-height:0; }
+    #smax-resp-detail { display:flex; flex-direction:column; flex:1; min-height:0; gap:10px; }
+    #smax-resp-meta-bar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+    .smax-resp-meta-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:20px; border:1px solid rgba(255,255,255,.13); background:rgba(255,255,255,.05); color:#c4cdd8; font-size:11px; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+    .smax-resp-meta-chip:hover { border-color:rgba(255,255,255,.3); background:rgba(255,255,255,.1); color:#fff; }
+    .smax-resp-meta-chip.dirty { border-color:#f59e0b; background:rgba(245,158,11,.15); color:#fcd34d; }
+    .smax-resp-meta-chip .chip-edit { font-size:9px; opacity:.5; margin-left:2px; }
+    .smax-resp-field-picker { display:none; position:fixed; z-index:999999; background:#0d1117; border:1px solid rgba(255,255,255,.16); border-radius:10px; box-shadow:0 12px 36px rgba(0,0,0,.75); overflow:hidden; width:290px; }
+    .smax-resp-field-picker-search { display:block; width:100%; box-sizing:border-box; background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,.1); padding:9px 12px; color:#e5e7eb; font-size:12px; outline:none; font-family:inherit; }
+    .smax-resp-field-picker-list { max-height:230px; overflow-y:auto; }
+    .smax-resp-field-picker-item { padding:7px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.04); font-size:12px; color:#d1d5db; transition:background .1s; display:flex; align-items:center; gap:7px; }
+    .smax-resp-field-picker-item:hover { background:rgba(59,130,246,.18); color:#93c5fd; }
+    .smax-resp-field-picker-item.active { color:#60a5fa; font-weight:600; }
+    .smax-resp-field-picker-item .fpi-sub { font-size:10px; color:#6b7280; margin-left:auto; white-space:nowrap; }
+    .smax-resp-field-picker-empty { padding:10px 12px; color:#6b7280; font-size:11px; text-align:center; }
 
     #smax-activity-log-panel { margin-top:14px; padding:10px 12px; border:1px solid #ddd; border-radius:6px; background:#f8fafc; }
     #smax-activity-log-panel h4 { margin:0 0 8px; font-size:13px; font-weight:600; color:#1f2937; }
@@ -2158,6 +2171,7 @@
       if (!status && existing.status) status = existing.status;
 
       const { assignmentGroupId, assignmentGroupName } = pickAssignmentGroupMeta(props, rel);
+      const expertAssigneeId = props.ExpertAssignee ? String(props.ExpertAssignee) : (existing.expertAssigneeId || '');
       triageCache.set(id, Object.assign({}, existing, {
         idText: id,
         idNum: Number.isNaN(idNum) ? null : idNum,
@@ -2174,6 +2188,7 @@
         discussions,
         assignmentGroupId,
         assignmentGroupName,
+        expertAssigneeId,
         processNumber,
         locationId,
         locationName,
@@ -6877,6 +6892,22 @@
     let activeTicketId = '';
     let personSearchTimeout = null;
     let scriptsCache = null;
+    const pendingChanges = new Map(); // ticketId -> { gse?: {id,name}, assignee?: {id,name} }
+
+    const getTicketPending = (id) => pendingChanges.get(id) || {};
+    const setTicketPending = (id, field, value) => {
+      const cur = pendingChanges.get(id) || {};
+      if (value === null) { delete cur[field]; }
+      else { cur[field] = value; }
+      if (Object.keys(cur).length === 0) pendingChanges.delete(id);
+      else pendingChanges.set(id, cur);
+    };
+
+    const resolveAssigneeName = (personId) => {
+      if (!personId) return '';
+      const p = DataRepository.peopleCache.get(personId);
+      return p?.name || p?.fullName || personId;
+    };
 
     const STATUS_LABELS = {
       RequestStatusActive: 'Ativo',
@@ -7036,8 +7067,31 @@
         }
       }
 
-      const gseLabel = backdrop.querySelector('#smax-resp-gse-label');
-      if (gseLabel) gseLabel.textContent = entry.assignmentGroupName || '';
+      // Meta-bar: GSE chip
+      const pending = getTicketPending(entry.idText || activeTicketId);
+      const gseChipName = backdrop.querySelector('#smax-resp-gse-chip-name');
+      const gseBtn = backdrop.querySelector('#smax-resp-gse-btn');
+      if (gseChipName && gseBtn) {
+        const displayGse = pending.gse ? pending.gse.name : (entry.assignmentGroupName || '—');
+        gseChipName.textContent = displayGse;
+        gseBtn.classList.toggle('dirty', !!pending.gse);
+        gseBtn.title = pending.gse ? `Alterar GSE (pendente: ${pending.gse.name})` : 'Alterar GSE (Grupo de Suporte)';
+      }
+      // Meta-bar: Especialista chip
+      const assigneeChipName = backdrop.querySelector('#smax-resp-assignee-chip-name');
+      const assigneeBtn = backdrop.querySelector('#smax-resp-assignee-btn');
+      if (assigneeChipName && assigneeBtn) {
+        let displayAssignee;
+        if (pending.assignee) {
+          displayAssignee = pending.assignee.name || pending.assignee.id;
+        } else {
+          const aid = entry.expertAssigneeId || '';
+          displayAssignee = aid ? (resolveAssigneeName(aid) || aid) : 'Sem especialista';
+        }
+        assigneeChipName.textContent = displayAssignee;
+        assigneeBtn.classList.toggle('dirty', !!pending.assignee);
+        assigneeBtn.title = pending.assignee ? `Alterar especialista (pendente: ${pending.assignee.name})` : 'Alterar especialista';
+      }
 
       const descEl = backdrop.querySelector('#smax-resp-desc-content');
       if (descEl) descEl.innerHTML = entry.descriptionHtml || '<em style="color:#6b7280;">Sem descrição.</em>';
@@ -7372,15 +7426,40 @@
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
       const solutionRaw = (solEl?.value || '').trim();
-      if (!solutionRaw) return { ok: false, msg: 'Solução vazia.' };
-      const solutionHtml = solutionRaw.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+      const pending = getTicketPending(id);
+      const hasSolution = !!solutionRaw;
+      const hasGse = !!(pending.gse && pending.gse.id);
+      const hasAssignee = !!(pending.assignee && pending.assignee.id);
+      if (!hasSolution && !hasGse && !hasAssignee) return { ok: false, msg: 'Nada a enviar (solução vazia e sem alterações).' };
+      const props = { Id: id };
+      if (hasSolution) {
+        const solutionHtml = solutionRaw.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+        props.Solution = `<p>${solutionHtml}</p>`;
+      }
+      if (hasGse) props.ExpertGroup = pending.gse.id;
+      if (hasAssignee) props.ExpertAssignee = pending.assignee.id;
       const body = {
-        entities: [{ entity_type: 'Request', properties: { Id: id, Solution: `<p>${solutionHtml}</p>` } }],
+        entities: [{ entity_type: 'Request', properties: props }],
         operation: 'UPDATE'
       };
       try {
         const result = await ApiClient.ems.bulk(body);
         const outcome = Api.summarizeBulkOutcome(result);
+        if (outcome?.ok !== false) {
+          // Limpa pending changes do chamado após sucesso
+          pendingChanges.delete(id);
+          // Atualiza o triageCache se necessário
+          if (hasGse || hasAssignee) {
+            const entry = DataRepository.triageCache.get(id);
+            if (entry) {
+              DataRepository.triageCache.set(id, Object.assign({}, entry, {
+                assignmentGroupId: hasGse ? pending.gse.id : entry.assignmentGroupId,
+                assignmentGroupName: hasGse ? pending.gse.name : entry.assignmentGroupName,
+                expertAssigneeId: hasAssignee ? pending.assignee.id : entry.expertAssigneeId,
+              }));
+            }
+          }
+        }
         return outcome;
       } catch (e) {
         return { ok: false, msg: e.message };
@@ -7414,6 +7493,166 @@
       if (batchBtn) batchBtn.disabled = false;
       if (fail === 0) setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).`, '#4ade80');
       else setStatusMsg(`${ok} ok, ${fail} com erro.`, '#fca5a5');
+    };
+
+    const closeAllPickers = () => {
+      backdrop?.querySelectorAll('.smax-resp-field-picker').forEach(p => { p.style.display = 'none'; });
+    };
+
+    const positionPicker = (picker, anchorBtn) => {
+      const rect = anchorBtn.getBoundingClientRect();
+      picker.style.display = 'block';
+      const pickerH = picker.offsetHeight || 280;
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      if (spaceBelow < pickerH && rect.top > pickerH) {
+        picker.style.top = (rect.top - pickerH - 4) + 'px';
+      } else {
+        picker.style.top = (rect.bottom + 4) + 'px';
+      }
+      picker.style.left = Math.min(rect.left, window.innerWidth - 298) + 'px';
+    };
+
+    const openGsePicker = async () => {
+      if (!backdrop || !activeTicketId) return;
+      const picker = backdrop.querySelector('#smax-resp-gse-picker');
+      const btn = backdrop.querySelector('#smax-resp-gse-btn');
+      if (!picker || !btn) return;
+      if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+      closeAllPickers();
+      picker.innerHTML = '<div class="smax-resp-field-picker-empty">Carregando grupos...</div>';
+      positionPicker(picker, btn);
+
+      const groups = await DataRepository.ensureSupportGroups();
+      const pending = getTicketPending(activeTicketId);
+      const currentGroupId = pending.gse?.id || DataRepository.triageCache.get(activeTicketId)?.assignmentGroupId || '';
+
+      const renderGroups = (filter) => {
+        const q = (filter || '').toLowerCase();
+        const filtered = q ? groups.filter(g => (g.name || g.id).toLowerCase().includes(q)) : groups;
+        if (!filtered.length) {
+          picker.querySelector('.smax-resp-field-picker-list').innerHTML =
+            '<div class="smax-resp-field-picker-empty">Nenhum grupo encontrado.</div>';
+          return;
+        }
+        picker.querySelector('.smax-resp-field-picker-list').innerHTML = filtered.map(g => {
+          const isActive = g.id === currentGroupId;
+          return `<div class="smax-resp-field-picker-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(g.id)}" data-name="${Utils.escapeHtml(g.name || g.id)}">
+            ${isActive ? '✓ ' : ''}<span>${Utils.escapeHtml(g.name || g.id)}</span>
+          </div>`;
+        }).join('');
+        picker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const gid = item.dataset.id;
+            const gname = item.dataset.name;
+            const chipEl = backdrop.querySelector('#smax-resp-gse-chip-name');
+            const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
+            const origEntry = DataRepository.triageCache.get(activeTicketId);
+            const isOriginal = gid === (origEntry?.assignmentGroupId || '');
+            if (isOriginal) {
+              setTicketPending(activeTicketId, 'gse', null);
+            } else {
+              setTicketPending(activeTicketId, 'gse', { id: gid, name: gname });
+            }
+            if (chipEl) chipEl.textContent = gname;
+            if (chipBtn) {
+              chipBtn.classList.toggle('dirty', !isOriginal);
+              chipBtn.title = !isOriginal ? `Alterar GSE (pendente: ${gname})` : 'Alterar GSE (Grupo de Suporte)';
+            }
+            picker.style.display = 'none';
+          });
+        });
+      };
+
+      picker.innerHTML = `
+        <input class="smax-resp-field-picker-search" type="text" placeholder="Buscar grupo..." autocomplete="off">
+        <div class="smax-resp-field-picker-list"></div>`;
+      renderGroups('');
+      positionPicker(picker, btn);
+
+      const search = picker.querySelector('.smax-resp-field-picker-search');
+      search?.addEventListener('input', () => renderGroups(search.value));
+      search?.focus();
+
+      const closeOnOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== btn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside, true);
+        }
+      };
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+    };
+
+    const openAssigneePicker = async () => {
+      if (!backdrop || !activeTicketId) return;
+      const picker = backdrop.querySelector('#smax-resp-assignee-picker');
+      const btn = backdrop.querySelector('#smax-resp-assignee-btn');
+      if (!picker || !btn) return;
+      if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+      closeAllPickers();
+      picker.innerHTML = '<div class="smax-resp-field-picker-empty">Carregando pessoas...</div>';
+      positionPicker(picker, btn);
+
+      await DataRepository.ensurePeopleLoaded();
+      const pending = getTicketPending(activeTicketId);
+      const currentAssigneeId = pending.assignee?.id || DataRepository.triageCache.get(activeTicketId)?.expertAssigneeId || '';
+      const people = Array.from(DataRepository.peopleCache.values()).sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '', 'pt'));
+
+      const renderPeople = (filter) => {
+        const q = (filter || '').toLowerCase();
+        const filtered = q ? people.filter(p => (p.name || p.fullName || '').toLowerCase().includes(q)) : people.slice(0, 80);
+        if (!filtered.length) {
+          picker.querySelector('.smax-resp-field-picker-list').innerHTML =
+            '<div class="smax-resp-field-picker-empty">Nenhuma pessoa encontrada.</div>';
+          return;
+        }
+        picker.querySelector('.smax-resp-field-picker-list').innerHTML = filtered.map(p => {
+          const isActive = p.id === currentAssigneeId;
+          const label = p.name || p.fullName || p.id;
+          return `<div class="smax-resp-field-picker-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(label)}">
+            ${isActive ? '✓ ' : ''}<span>${Utils.escapeHtml(label)}</span>
+          </div>`;
+        }).join('');
+        picker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const pid = item.dataset.id;
+            const pname = item.dataset.name;
+            const chipEl = backdrop.querySelector('#smax-resp-assignee-chip-name');
+            const chipBtn = backdrop.querySelector('#smax-resp-assignee-btn');
+            const origEntry = DataRepository.triageCache.get(activeTicketId);
+            const isOriginal = pid === (origEntry?.expertAssigneeId || '');
+            if (isOriginal) {
+              setTicketPending(activeTicketId, 'assignee', null);
+            } else {
+              setTicketPending(activeTicketId, 'assignee', { id: pid, name: pname });
+            }
+            if (chipEl) chipEl.textContent = pname;
+            if (chipBtn) {
+              chipBtn.classList.toggle('dirty', !isOriginal);
+              chipBtn.title = !isOriginal ? `Alterar especialista (pendente: ${pname})` : 'Alterar especialista';
+            }
+            picker.style.display = 'none';
+          });
+        });
+      };
+
+      picker.innerHTML = `
+        <input class="smax-resp-field-picker-search" type="text" placeholder="Buscar especialista..." autocomplete="off">
+        <div class="smax-resp-field-picker-list"></div>`;
+      renderPeople('');
+      positionPicker(picker, btn);
+
+      const search = picker.querySelector('.smax-resp-field-picker-search');
+      search?.addEventListener('input', () => renderPeople(search.value));
+      search?.focus();
+
+      const closeOnOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== btn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside, true);
+        }
+      };
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
     const open = () => {
@@ -7481,7 +7720,6 @@
                 <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                 <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;" title="Status SMAX"></span>
                 <span id="smax-resp-sccd-label" style="font-size:10px;background:rgba(245,158,11,.2);color:#fcd34d;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(245,158,11,.4);flex-shrink:0;display:none;" title="Status Operacional"></span>
-                <span id="smax-resp-gse-label" style="font-size:11px;color:rgba(255,255,255,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:180px;"></span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <input type="text" id="smax-resp-global-id" placeholder="Global ID" inputmode="numeric" autocomplete="off"
@@ -7496,6 +7734,18 @@
                   <span>Selecione um chamado para começar.</span>
                 </div>
                 <div id="smax-resp-detail" style="display:none;">
+                  <!-- Meta-bar: GSE e Especialista editáveis -->
+                  <div id="smax-resp-meta-bar">
+                    <button id="smax-resp-gse-btn" class="smax-resp-meta-chip" title="Alterar GSE (Grupo de Suporte)">
+                      🏢 <span id="smax-resp-gse-chip-name">—</span><span class="chip-edit">✎</span>
+                    </button>
+                    <button id="smax-resp-assignee-btn" class="smax-resp-meta-chip" title="Alterar especialista">
+                      👤 <span id="smax-resp-assignee-chip-name">Sem especialista</span><span class="chip-edit">✎</span>
+                    </button>
+                  </div>
+                  <!-- Pickers fixos (posicionados via JS) -->
+                  <div id="smax-resp-gse-picker" class="smax-resp-field-picker"></div>
+                  <div id="smax-resp-assignee-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-desc-panel">
                     <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
                     <div id="smax-resp-desc-content"></div>
@@ -7601,6 +7851,12 @@
 
       // Scripts picker
       backdrop.querySelector('#smax-resp-scripts-btn')?.addEventListener('click', openScriptPicker);
+
+      // GSE picker
+      backdrop.querySelector('#smax-resp-gse-btn')?.addEventListener('click', openGsePicker);
+
+      // Especialista picker
+      backdrop.querySelector('#smax-resp-assignee-btn')?.addEventListener('click', openAssigneePicker);
 
       // Send buttons
       backdrop.querySelector('#smax-resp-send-btn')?.addEventListener('click', commitAll);
