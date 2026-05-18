@@ -2127,10 +2127,29 @@
 
       const idNum = parseInt(id.replace(/\D/g, ''), 10);
       const existing = triageCache.get(id) || {};
-      // DEBUG TEMPORÁRIO — despejar todos os campos para identificar vínculo global
+      // DEBUG TEMPORÁRIO — despejar chaves e valores suspeitos de vínculo global
       if (props.Description !== undefined) { // só em fetches completos (FULL_LAYOUT)
-        console.log('[SMAX Debug FULL props] id=' + id, JSON.parse(JSON.stringify(props)));
-        console.log('[SMAX Debug FULL rel]  id=' + id, JSON.parse(JSON.stringify(rel || {})));
+        const propsKeys = Object.keys(props).join(', ');
+        const relKeys = Object.keys(rel || {}).join(', ');
+        console.log('[SMAX Debug] id=' + id + ' | props keys: ' + propsKeys);
+        console.log('[SMAX Debug] id=' + id + ' | rel keys: ' + relKeys);
+        // Mostra todos os campos de props que parecem conter referência a outro chamado (valor numérico >= 7 dígitos ou string com "IMRfc")
+        const suspeitosProps = {};
+        for (const [k, v] of Object.entries(props)) {
+          const str = String(v);
+          if (/\bIMRfc\b/i.test(str) || (/^\d{7,}$/.test(str)) || (typeof v === 'number' && v > 1000000)) {
+            suspeitosProps[k] = v;
+          }
+        }
+        if (Object.keys(suspeitosProps).length) console.log('[SMAX Debug] id=' + id + ' | props com ID numérico:', suspeitosProps);
+        // Mesmo para rel (valores ou sub-campos que tenham Id >= 7 dígitos)
+        const suspeitosRel = {};
+        for (const [k, v] of Object.entries(rel || {})) {
+          if (v && typeof v === 'object' && (String(v.Id || '').length >= 7 || String(v.id || '').length >= 7)) {
+            suspeitosRel[k] = { Id: v.Id || v.id, Name: v.Name || v.DisplayLabel || '' };
+          }
+        }
+        if (Object.keys(suspeitosRel).length) console.log('[SMAX Debug] id=' + id + ' | rel com Id >= 7 dígitos:', JSON.stringify(suspeitosRel));
       }
       let requestedForName = '';
       const requestedRel = rel && rel.RequestedForPerson ? rel.RequestedForPerson : null;
