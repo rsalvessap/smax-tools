@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.70
+// @version      1.71
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -42,7 +42,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.70';
+  const SMAX_TOOLKIT_VERSION = '1.71';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -7108,10 +7108,10 @@
         let idLineHtml;
         if (isGlobalParent) {
           idLineHtml = `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-            + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);vertical-align:middle;">Global ×${childCount}</span>`;
+            + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);vertical-align:middle;">🌐 Global (${childCount} filho${childCount !== 1 ? 's' : ''})</span>`;
         } else if (globalChangeId) {
           idLineHtml = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-            + ` <span style="color:#f87171;font-size:9px;vertical-align:middle;">⬆ #${Utils.escapeHtml(globalChangeId)}</span>`;
+            + ` <span style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalChangeId)}</span>`;
         } else {
           idLineHtml = `#${Utils.escapeHtml(t.id)}`;
         }
@@ -7299,7 +7299,7 @@
         const idDiv = listItem.querySelector('.smax-resp-ticket-id');
         if (idDiv && globalId && !idDiv.querySelector('.smax-global-badge')) {
           idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(ticketId)}</span>`
-            + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;vertical-align:middle;">⬆ #${Utils.escapeHtml(globalId)}</span>`;
+            + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalId)}</span>`;
         }
       };
 
@@ -7470,8 +7470,12 @@
           const rel = e.related_properties || {};
           const rawId = (p.Id || '').replace(/^IMRfc:/, '');
           if (!rawId) return null;
-          // Extrai globalChangeId do rel.GlobalId_c e persiste no triageCache de forma leve
-          const globalId = rel.GlobalId_c ? String(rel.GlobalId_c.Id || rel.GlobalId_c.id || '').trim() : '';
+          // Extrai globalChangeId — tenta rel (objeto com Id) e props (string plana)
+          const globalId = rel.GlobalId_c
+            ? String(rel.GlobalId_c.Id || rel.GlobalId_c.id || rel.GlobalId_c || '').replace(/^IMRfc:/i, '').trim()
+            : p.GlobalId_c
+              ? String(p.GlobalId_c).replace(/^IMRfc:/i, '').trim()
+              : '';
           if (globalId && globalId !== rawId) {
             const existing = DataRepository.triageCache.get(rawId) || {};
             if (!existing.globalChangeId) {
