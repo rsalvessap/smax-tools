@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.77
+// @version      1.78
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.77';
+  const SMAX_TOOLKIT_VERSION = '1.78';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -70,6 +70,12 @@
       myPersonId: '',
       myPersonName: '',
       sharedConfigUrl: 'https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/shared-config.json',
+      forwardingButtonsRaw: JSON.stringify([
+        { label: 'STI \u2013 Migra\u00e7\u00e3o', text: 'Encaminhado para STI \u2013 Migra\u00e7\u00e3o.' },
+        { label: 'N3',            text: 'Encaminhado para N3.' },
+        { label: 'SPI',           text: 'Encaminhado para SPI.' },
+        { label: 'Devolu\u00e7\u00e3o SAJ', text: 'Devolvido ao SAJ.' },
+      ]),
       teamsConfigRaw: JSON.stringify([
         {
           id: 'jec',
@@ -4328,6 +4334,12 @@
           </ul>
         </div>
         <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📤 Botões de Encaminhamento Rápido</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">Configure os botões exibidos ao alterar GSE com encaminhamento. Cada botão tem um rótulo e um texto pré-definido.</div>
+          <div id="smax-fwd-btns-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+          <button id="smax-fwd-btns-add" style="padding:4px 14px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;cursor:pointer;">+ Adicionar</button>
+        </div>
+        <div class="smax-sp-card">
           <div class="smax-sp-section-title">📊 Relatório de Atividades</div>
           <div class="smax-sp-muted" style="margin-bottom:10px;">Filtre por período e veja um resumo das ações realizadas (respostas, vínculos, transferências…).</div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -4807,6 +4819,49 @@
 
     const wireRespostasEvents = () => {
       if (!container) return;
+
+      // ── Botões de encaminhamento rápido ──
+      const fwdListEl = container.querySelector('#smax-fwd-btns-list');
+      const fwdAddBtn = container.querySelector('#smax-fwd-btns-add');
+
+      const getForwardingButtons = () => {
+        try { return JSON.parse(prefs.forwardingButtonsRaw || '[]'); } catch { return []; }
+      };
+      const saveForwardingButtons = () => {
+        const rows = fwdListEl ? fwdListEl.querySelectorAll('.smax-fwd-btn-row') : [];
+        const btns = Array.from(rows).map(row => ({
+          label: row.querySelector('.smax-fwd-btn-label')?.value?.trim() || '',
+          text:  row.querySelector('.smax-fwd-btn-text')?.value?.trim()  || '',
+        })).filter(b => b.label || b.text);
+        prefs.forwardingButtonsRaw = JSON.stringify(btns);
+        savePrefs();
+      };
+      const renderForwardingRow = (btn, idx) => {
+        const row = document.createElement('div');
+        row.className = 'smax-fwd-btn-row';
+        row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+        row.innerHTML = `
+          <input class="smax-fwd-btn-label" placeholder="Rótulo" value="${Utils.escapeHtml(btn.label || '')}"
+            style="width:110px;padding:4px 7px;border-radius:5px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;outline:none;">
+          <input class="smax-fwd-btn-text" placeholder="Texto de encaminhamento" value="${Utils.escapeHtml(btn.text || '')}"
+            style="flex:1;padding:4px 7px;border-radius:5px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;outline:none;">
+          <button class="smax-fwd-btn-remove" style="padding:2px 8px;border-radius:5px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.1);color:#f87171;font-size:12px;cursor:pointer;flex-shrink:0;">×</button>`;
+        row.querySelector('.smax-fwd-btn-label')?.addEventListener('change', saveForwardingButtons);
+        row.querySelector('.smax-fwd-btn-text')?.addEventListener('change', saveForwardingButtons);
+        row.querySelector('.smax-fwd-btn-remove')?.addEventListener('click', () => { row.remove(); saveForwardingButtons(); });
+        return row;
+      };
+      const renderForwardingList = () => {
+        if (!fwdListEl) return;
+        fwdListEl.innerHTML = '';
+        getForwardingButtons().forEach((btn, i) => fwdListEl.appendChild(renderForwardingRow(btn, i)));
+      };
+      renderForwardingList();
+      fwdAddBtn?.addEventListener('click', () => {
+        if (!fwdListEl) return;
+        fwdListEl.appendChild(renderForwardingRow({ label: '', text: '' }, fwdListEl.children.length));
+      });
+
       const launchBtn = container.querySelector('#smax-launch-resp-btn');
       if (launchBtn) {
         launchBtn.addEventListener('mouseenter', () => { launchBtn.style.transform = 'translateY(-2px)'; launchBtn.style.boxShadow = '0 10px 28px rgba(139,92,246,.55),0 0 0 1px rgba(255,255,255,.15) inset'; });
@@ -8064,9 +8119,19 @@
           const entry = DataRepository.triageCache.get(activeTicketId);
           if (entry) renderTicketDetail(entry);
         }
-        // Inserir texto de encaminhamento no CKEditor da página SMAX
+        // Inserir texto de encaminhamento no CKEditor de discussão da página SMAX
         if (fwdText) {
-          try { Templates.insertIntoEditor(fwdText); } catch {}
+          try {
+            const inst = Utils.locateSolutionEditor?.();
+            if (inst) {
+              inst.focus();
+              inst.insertHtml(fwdText);
+            } else {
+              // Fallback direto ao elemento contenteditable da discussão
+              const ed = document.querySelector('.cke_wysiwyg_div[contenteditable="true"]');
+              if (ed) { ed.focus(); document.execCommand('insertHTML', false, fwdText); }
+            }
+          } catch {}
         }
         const skipNote = skipped > 0 ? ` (${skipped} ignorado${skipped !== 1 ? 's' : ''} — sem alterações)` : '';
         const fwdNote = fwdText ? ' | 📤 Encaminhamento inserido no editor.' : '';
@@ -8273,11 +8338,13 @@
             }
 
             // Mostrar painel de confirmação + encaminhamento
-            const QUICK_BTNS = [
-              { label: 'STI – Migração', text: 'Encaminhado para STI – Migração.' },
-              { label: 'N3',             text: 'Encaminhado para N3.' },
-              { label: 'SPI',            text: 'Encaminhado para SPI.' },
-              { label: 'Devolução SAJ',  text: 'Devolvido ao SAJ.' },
+            let QUICK_BTNS = [];
+            try { QUICK_BTNS = JSON.parse(prefs.forwardingButtonsRaw || '[]'); } catch {}
+            if (!QUICK_BTNS.length) QUICK_BTNS = [
+              { label: 'STI \u2013 Migra\u00e7\u00e3o', text: 'Encaminhado para STI \u2013 Migra\u00e7\u00e3o.' },
+              { label: 'N3',            text: 'Encaminhado para N3.' },
+              { label: 'SPI',           text: 'Encaminhado para SPI.' },
+              { label: 'Devolu\u00e7\u00e3o SAJ', text: 'Devolvido ao SAJ.' },
             ];
             const quickHtml = QUICK_BTNS.map(b =>
               `<button class="smax-gse-fwd-quick" data-text="${Utils.escapeHtml(b.text)}"
@@ -8333,13 +8400,21 @@
               const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
               setBatchPending('gse', { id: gid, name: gname });
               if (chipEl) chipEl.textContent = gname;
-              if (chipBtn) {
-                chipBtn.classList.add('dirty');
-                const hasFwd = cb.checked && (picker.querySelector('#smax-gse-fwd-text')?.value || '').trim();
-                chipBtn.title = `Alterar GSE → ${gname} (todos selecionados)${hasFwd ? ' | 📤 Com encaminhamento' : ''}`;
-              }
               const fwdText = cb.checked ? (picker.querySelector('#smax-gse-fwd-text')?.value || '').trim() : '';
               setBatchPending('forwarding', fwdText ? { text: fwdText } : null);
+              if (chipBtn) {
+                chipBtn.classList.add('dirty');
+                chipBtn.title = `Alterar GSE → ${gname} (todos selecionados)${fwdText ? ' | 📤 Com encaminhamento' : ''}`;
+              }
+              // Encaminhamento implica remoção do especialista (chamado vai para outra equipe)
+              if (fwdText) {
+                setBatchPending('assignee', null);
+                const assigneeChipName = backdrop.querySelector('#smax-resp-assignee-chip-name');
+                const assigneeChipBtn  = backdrop.querySelector('#smax-resp-assignee-btn');
+                const origEntry = DataRepository.triageCache.get(activeTicketId);
+                if (assigneeChipName) assigneeChipName.textContent = resolveAssigneeName(origEntry?.expertAssigneeId || '') || 'Sem especialista';
+                if (assigneeChipBtn)  { assigneeChipBtn.classList.remove('dirty'); assigneeChipBtn.title = 'Alterar especialista'; }
+              }
               updateSendButton();
               picker.style.display = 'none';
             });
