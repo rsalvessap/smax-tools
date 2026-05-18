@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.62
+// @version      1.63
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -2203,6 +2203,36 @@
 
       const { assignmentGroupId, assignmentGroupName } = pickAssignmentGroupMeta(props, rel);
       const expertAssigneeId = props.ExpertAssignee ? String(props.ExpertAssignee) : (existing.expertAssigneeId || '');
+
+      // Tenta extrair chamado global (pai) via rel — nomes candidatos do SMAX EMS API
+      let globalChangeId = existing.globalChangeId || '';
+      if (!globalChangeId && rel && typeof rel === 'object') {
+        const parentFieldCandidates = [
+          'CausedByRequest', 'CausedByChange', 'ParentRequest', 'Cause', 'CausedBy',
+          'RequestCausesRequest', 'ParentChange', 'CausedByProblem'
+        ];
+        for (const field of parentFieldCandidates) {
+          const v = rel[field];
+          if (!v) continue;
+          const candidates = Array.isArray(v) ? v : [v];
+          for (const item of candidates) {
+            if (!item || typeof item !== 'object') continue;
+            const rawId = String(item.Id || item.id || '').replace(/^IMRfc:/, '').replace(/^IMchg:/, '');
+            if (rawId && rawId !== id) {
+              globalChangeId = rawId;
+              console.log('[SMAX] globalChangeId via rel.' + field + ':', globalChangeId, 'para chamado', id);
+              break;
+            }
+          }
+          if (globalChangeId) break;
+        }
+        // Debug: loga as chaves de rel para chamados com Description (fetch completo)
+        if (!globalChangeId && props.Description !== undefined) {
+          const relKeys = Object.keys(rel);
+          if (relKeys.length > 1) console.log('[SMAX Debug] rel keys para', id, ':', relKeys.join(', '));
+        }
+      }
+
       triageCache.set(id, Object.assign({}, existing, {
         idText: id,
         idNum: Number.isNaN(idNum) ? null : idNum,
@@ -2224,7 +2254,8 @@
         locationId,
         locationName,
         status,
-        statusSCCD: props.StatusSCCDSMAX_c || existing.statusSCCD || ''
+        statusSCCD: props.StatusSCCDSMAX_c || existing.statusSCCD || '',
+        globalChangeId
       }));
     };
 
@@ -7010,11 +7041,14 @@
         return;
       }
 
-      // Mapa de vínculo global a partir do ActivityLog (fonte correta de globalChangeId)
-      const globalLogMap = ActivityLog.getGlobalMap(); // ticketId -> globalChangeId
+      // Mapa de vínculo global: combina ActivityLog + triageCache
+      const globalLogMap = ActivityLog.getGlobalMap(); // ticketId -> globalChangeId (via log de ações)
+      const getGlobalId = (tid) =>
+        globalLogMap.get(tid) || DataRepository.triageCache.get(tid)?.globalChangeId || '';
+
       const globalParentCount = new Map(); // parentId -> count de filhos
       for (const t of ticketList) {
-        const gid = globalLogMap.get(t.id);
+        const gid = getGlobalId(t.id);
         if (gid) globalParentCount.set(gid, (globalParentCount.get(gid) || 0) + 1);
       }
 
@@ -7022,7 +7056,7 @@
         const isActive = t.id === activeTicketId;
         const isChecked = selectedTicketIds.has(t.id);
         const statusLabel = t.statusSCCD || STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
-        const globalChangeId = globalLogMap.get(t.id) || '';   // este chamado é filho de globalChangeId
+        const globalChangeId = getGlobalId(t.id);              // este chamado é filho de globalChangeId
         const isGlobalParent = globalParentCount.has(t.id);    // este chamado é pai de outros
         const childCount = isGlobalParent ? globalParentCount.get(t.id) : 0;
 
@@ -7198,17 +7232,17 @@
       try {
         const entry = await DataRepository.ensureRequestPayload(id, { force: true });
         renderTicketDetail(entry || DataRepository.triageCache.get(id) || null);
-        // Atualiza o assunto no item da lista (estava vazio antes do carregamento completo)
+        // Atualiza o assunto e badge global no item da lista após carregamento completo
         const subjectText = entry?.subjectText || '';
-        if (subjectText && subjectText !== id) {
-          const listItem = backdrop?.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(id)}"]`);
-          if (listItem) {
+        const listItem = backdrop?.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(id)}"]`);
+        if (listItem) {
+          // Atualiza assunto
+          if (subjectText && subjectText !== id) {
             const subEl = listItem.querySelector('.smax-resp-ticket-subject');
             if (subEl) {
               subEl.textContent = subjectText.slice(0, 55);
               subEl.title = subjectText;
             } else {
-              // Cria o elemento se ainda não existe
               const idDiv = listItem.querySelector('.smax-resp-ticket-id');
               if (idDiv) {
                 const newSub = document.createElement('div');
@@ -7218,6 +7252,13 @@
                 idDiv.after(newSub);
               }
             }
+          }
+          // Atualiza badge global (se não estava na lista antes)
+          const globalId = DataRepository.triageCache.get(id)?.globalChangeId || '';
+          const idDiv = listItem.querySelector('.smax-resp-ticket-id');
+          if (idDiv && globalId && !idDiv.querySelector('.smax-global-badge')) {
+            idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(id)}</span>`
+              + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;vertical-align:middle;">⬆ #${Utils.escapeHtml(globalId)}</span>`;
           }
         }
         setStatusMsg('', '');
