@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.60
+// @version      1.61
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -325,9 +325,20 @@
     const getCount = () => entries.length;
     const getEntries = () => entries.slice();
 
+    // Retorna Map<ticketId, globalChangeId> com o vínculo global mais recente por chamado
+    const getGlobalMap = () => {
+      const map = new Map();
+      for (const e of entries) {
+        if (e.globalAssigned && e.globalChangeId && e.ticketId) {
+          map.set(String(e.ticketId), String(e.globalChangeId));
+        }
+      }
+      return map;
+    };
+
     load();
 
-    return { log, exportCsv, clear, getCount, getEntries, load };
+    return { log, exportCsv, clear, getCount, getEntries, getGlobalMap, load };
   })();
 
   /* =========================================================
@@ -589,6 +600,26 @@
     .smax-resp-field-picker-item.active { color:#60a5fa; font-weight:600; }
     .smax-resp-field-picker-item .fpi-sub { font-size:10px; color:#6b7280; margin-left:auto; white-space:nowrap; }
     .smax-resp-field-picker-empty { padding:10px 12px; color:#6b7280; font-size:11px; text-align:center; }
+    #smax-batch-confirm-overlay { position:fixed; inset:0; z-index:9999999; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
+    #smax-batch-confirm-box { background:#0f172a; border:1px solid rgba(255,255,255,.12); border-radius:14px; width:100%; max-width:720px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.7); font-family:system-ui,-apple-system,sans-serif; color:#e5e7eb; overflow:hidden; }
+    #smax-batch-confirm-header { padding:14px 18px; border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; background:rgba(255,255,255,.03); }
+    #smax-batch-confirm-body { flex:1; overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:14px; }
+    .smax-bc-section-title { font-size:10px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.07em; margin-bottom:6px; }
+    .smax-bc-changes { display:flex; flex-wrap:wrap; gap:6px; }
+    .smax-bc-change-pill { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; font-size:11px; }
+    .smax-bc-change-pill.gse { background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.4); color:#93c5fd; }
+    .smax-bc-change-pill.assignee { background:rgba(167,139,250,.15); border:1px solid rgba(167,139,250,.4); color:#c4b5fd; }
+    .smax-bc-change-pill.solution { background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.35); color:#86efac; }
+    .smax-bc-ticket-table { border-collapse:collapse; width:100%; font-size:11px; }
+    .smax-bc-ticket-table th { text-align:left; padding:5px 8px; color:#6b7280; font-size:10px; text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,.07); }
+    .smax-bc-ticket-table td { padding:5px 8px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle; }
+    .smax-bc-ticket-table tr:hover td { background:rgba(255,255,255,.03); }
+    .smax-bc-tag { display:inline-flex; align-items:center; padding:1px 6px; border-radius:10px; font-size:10px; font-weight:600; }
+    .smax-bc-tag.ok { background:rgba(34,197,94,.15); color:#4ade80; }
+    .smax-bc-tag.skip { background:rgba(107,114,128,.15); color:#9ca3af; }
+    .smax-bc-tag.partial { background:rgba(245,158,11,.15); color:#fbbf24; }
+    #smax-batch-confirm-footer { padding:12px 18px; border-top:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; background:rgba(255,255,255,.02); }
+    #smax-batch-confirm-summary { font-size:12px; color:#9ca3af; }
 
     #smax-activity-log-panel { margin-top:14px; padding:10px 12px; border:1px solid #ddd; border-radius:6px; background:#f8fafc; }
     #smax-activity-log-panel h4 { margin:0 0 8px; font-size:13px; font-weight:600; color:#1f2937; }
@@ -6979,23 +7010,20 @@
         return;
       }
 
-      // Monta mapa de pais globais: parentId -> qtd de filhos (a partir do triageCache)
-      const globalParentCount = new Map(); // parentId -> count
+      // Mapa de vínculo global a partir do ActivityLog (fonte correta de globalChangeId)
+      const globalLogMap = ActivityLog.getGlobalMap(); // ticketId -> globalChangeId
+      const globalParentCount = new Map(); // parentId -> count de filhos
       for (const t of ticketList) {
-        const ce = DataRepository.triageCache.get(t.id);
-        if (ce?.globalChangeId) {
-          const gid = String(ce.globalChangeId);
-          globalParentCount.set(gid, (globalParentCount.get(gid) || 0) + 1);
-        }
+        const gid = globalLogMap.get(t.id);
+        if (gid) globalParentCount.set(gid, (globalParentCount.get(gid) || 0) + 1);
       }
 
       listEl.innerHTML = ticketList.map(t => {
         const isActive = t.id === activeTicketId;
         const isChecked = selectedTicketIds.has(t.id);
         const statusLabel = t.statusSCCD || STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
-        const ce = DataRepository.triageCache.get(t.id);
-        const globalChangeId = ce?.globalChangeId || '';        // este chamado é filho de globalChangeId
-        const isGlobalParent = globalParentCount.has(t.id);     // este chamado é pai de outros
+        const globalChangeId = globalLogMap.get(t.id) || '';   // este chamado é filho de globalChangeId
+        const isGlobalParent = globalParentCount.has(t.id);    // este chamado é pai de outros
         const childCount = isGlobalParent ? globalParentCount.get(t.id) : 0;
 
         const idHtml = isGlobalParent
@@ -7471,47 +7499,192 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside), 0);
     };
 
-    const commitTicket = async (id) => {
-      if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
-      const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
-      const solutionRaw = (solEl?.value || '').trim();
-      // batchPending aplica-se a TODOS os tickets selecionados
+    // Analisa o que vai mudar por ticket (para confirmação e smart-skip)
+    const analyzeTicket = (id, solutionRaw) => {
       const pending = getBatchPending();
-      const hasSolution = !!solutionRaw;
-      const hasGse = !!(pending.gse && pending.gse.id);
-      const hasAssignee = !!(pending.assignee && pending.assignee.id);
-      if (!hasSolution && !hasGse && !hasAssignee) return { skipped: true, msg: 'Nada a enviar.' };
+      const fetched = allFetchedEntries.find(e => e.id === id) || {};
+      const cache   = DataRepository.triageCache.get(id) || {};
+
+      const hasSolution   = !!solutionRaw.trim();
+      const curGseId      = fetched.gse || cache.assignmentGroupId || '';
+      const gseWillChange = !!(pending.gse?.id) && pending.gse.id !== curGseId;
+      const curAssigneeId       = fetched.assignee || cache.expertAssigneeId || '';
+      const assigneeWillChange  = !!(pending.assignee?.id) && pending.assignee.id !== curAssigneeId;
+
+      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange,
+               willAct: hasSolution || gseWillChange || assigneeWillChange };
+    };
+
+    const commitTicket = async (id, solutionRaw) => {
+      if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
+      const pending = getBatchPending();
+      const { hasSolution, gseWillChange, assigneeWillChange, willAct } = analyzeTicket(id, solutionRaw);
+      if (!willAct) return { skipped: true, msg: 'Sem alterações para este chamado.' };
+
       const props = { Id: id };
       if (hasSolution) {
-        const solutionHtml = solutionRaw.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+        const solutionHtml = solutionRaw.trim().replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
         props.Solution = `<p>${solutionHtml}</p>`;
       }
-      if (hasGse) props.ExpertGroup = pending.gse.id;
-      if (hasAssignee) props.ExpertAssignee = pending.assignee.id;
-      const body = {
-        entities: [{ entity_type: 'Request', properties: props }],
-        operation: 'UPDATE'
-      };
+      if (gseWillChange) props.ExpertGroup = pending.gse.id;
+      if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
+
+      const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
       try {
-        const result = await ApiClient.ems.bulk(body);
+        const result  = await ApiClient.ems.bulk(body);
         const outcome = Api.summarizeBulkOutcome(result);
         if (outcome?.ok !== false) {
-          // Atualiza triageCache local do ticket
-          if (hasGse || hasAssignee) {
-            const entry = DataRepository.triageCache.get(id);
-            if (entry) {
-              DataRepository.triageCache.set(id, Object.assign({}, entry, {
-                assignmentGroupId: hasGse ? pending.gse.id : entry.assignmentGroupId,
-                assignmentGroupName: hasGse ? pending.gse.name : entry.assignmentGroupName,
-                expertAssigneeId: hasAssignee ? pending.assignee.id : entry.expertAssigneeId,
-              }));
-            }
+          const entry = DataRepository.triageCache.get(id);
+          if (entry && (gseWillChange || assigneeWillChange)) {
+            DataRepository.triageCache.set(id, Object.assign({}, entry, {
+              assignmentGroupId:   gseWillChange      ? pending.gse.id      : entry.assignmentGroupId,
+              assignmentGroupName: gseWillChange      ? pending.gse.name    : entry.assignmentGroupName,
+              expertAssigneeId:    assigneeWillChange ? pending.assignee.id : entry.expertAssigneeId,
+            }));
           }
         }
         return outcome;
       } catch (e) {
         return { ok: false, msg: e.message };
       }
+    };
+
+    const executeCommitAll = async (targets, solutionRaw) => {
+      const sendBtn  = backdrop?.querySelector('#smax-resp-send-btn');
+      const batchBtn = backdrop?.querySelector('#smax-resp-batch-send-btn');
+      if (sendBtn)  sendBtn.disabled  = true;
+      if (batchBtn) batchBtn.disabled = true;
+
+      setStatusMsg(`Enviando ${targets.length} chamado(s)...`, '#93c5fd');
+      let ok = 0, fail = 0, skipped = 0;
+      for (const id of targets) {
+        const r = await commitTicket(id, solutionRaw);
+        if (r?.skipped) skipped++;
+        else if (r?.ok !== false) ok++;
+        else fail++;
+      }
+      if (sendBtn)  sendBtn.disabled  = false;
+      if (batchBtn) batchBtn.disabled = false;
+
+      if (fail === 0 && ok > 0) {
+        clearBatchPending();
+        const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
+        if (solEl) solEl.value = '';
+        if (activeTicketId) {
+          const entry = DataRepository.triageCache.get(activeTicketId);
+          if (entry) renderTicketDetail(entry);
+        }
+        const skipNote = skipped > 0 ? ` (${skipped} ignorado${skipped !== 1 ? 's' : ''} — sem alterações)` : '';
+        setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}`, '#4ade80');
+      } else if (fail === 0 && ok === 0) {
+        setStatusMsg('Nenhum chamado com alterações para enviar.', '#fca5a5');
+      } else {
+        setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
+      }
+      updateSendButton();
+    };
+
+    const showBatchConfirm = (targets, solutionRaw, onConfirm) => {
+      const pending  = getBatchPending();
+      const groupMap = new Map(DataRepository.getSupportGroupsSnapshot().map(g => [g.id, g.name || g.id]));
+
+      // Análise por ticket
+      const rows = targets.map(id => {
+        const a = analyzeTicket(id, solutionRaw);
+        const curGseName      = groupMap.get(a.curGseId)      || a.curGseId      || '—';
+        const curAssigneeName = resolveAssigneeName(a.curAssigneeId) || a.curAssigneeId || '—';
+        return { id, ...a, curGseName, curAssigneeName };
+      });
+
+      const willActCount  = rows.filter(r => r.willAct).length;
+      const willSkipCount = rows.length - willActCount;
+
+      const tagHtml = (row) => {
+        if (!row.willAct) return '<span class="smax-bc-tag skip">Ignorar</span>';
+        if (row.hasSolution && row.gseWillChange && row.assigneeWillChange) return '<span class="smax-bc-tag ok">Tudo</span>';
+        if (!row.gseWillChange && !row.assigneeWillChange) return '<span class="smax-bc-tag partial">Só solução</span>';
+        return '<span class="smax-bc-tag partial">Parcial</span>';
+      };
+
+      const gseColHtml = (row) => {
+        if (!pending.gse?.id) return '<span style="color:#6b7280">—</span>';
+        if (row.gseWillChange) return `<span style="color:#9ca3af">${Utils.escapeHtml(row.curGseName)}</span> → <span style="color:#93c5fd">${Utils.escapeHtml(pending.gse.name)}</span>`;
+        return `<span style="color:#6b7280">${Utils.escapeHtml(row.curGseName)} <em style="font-size:9px;">(igual)</em></span>`;
+      };
+
+      const assigneeColHtml = (row) => {
+        if (!pending.assignee?.id) return '<span style="color:#6b7280">—</span>';
+        if (row.assigneeWillChange) return `<span style="color:#9ca3af">${Utils.escapeHtml(row.curAssigneeName)}</span> → <span style="color:#c4b5fd">${Utils.escapeHtml(pending.assignee.name)}</span>`;
+        return `<span style="color:#6b7280">${Utils.escapeHtml(row.curAssigneeName)} <em style="font-size:9px;">(igual)</em></span>`;
+      };
+
+      const overlay = document.createElement('div');
+      overlay.id = 'smax-batch-confirm-overlay';
+      const solutionPreview = solutionRaw.trim().slice(0, 90) + (solutionRaw.trim().length > 90 ? '…' : '');
+      overlay.innerHTML = `
+        <div id="smax-batch-confirm-box">
+          <div id="smax-batch-confirm-header">
+            <span style="font-size:14px;font-weight:700;">Confirmar ações em lote</span>
+            <button id="smax-bc-cancel-x" style="background:none;border:none;color:#9ca3af;font-size:18px;cursor:pointer;line-height:1;">✕</button>
+          </div>
+          <div id="smax-batch-confirm-body">
+            <div>
+              <div class="smax-bc-section-title">Alterações que serão aplicadas a todos</div>
+              <div class="smax-bc-changes">
+                ${pending.gse?.id      ? `<span class="smax-bc-change-pill gse">🏢 GSE → ${Utils.escapeHtml(pending.gse.name)}</span>` : ''}
+                ${pending.assignee?.id ? `<span class="smax-bc-change-pill assignee">👤 Especialista → ${Utils.escapeHtml(pending.assignee.name)}</span>` : ''}
+                ${solutionRaw.trim()   ? `<span class="smax-bc-change-pill solution">📋 Solução: "${Utils.escapeHtml(solutionPreview)}"</span>` : ''}
+                ${!pending.gse?.id && !pending.assignee?.id && !solutionRaw.trim() ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
+              </div>
+            </div>
+            <div>
+              <div class="smax-bc-section-title">${rows.length} chamado(s) selecionado(s) — ${willActCount} será(ão) atualizado(s)${willSkipCount > 0 ? `, ${willSkipCount} ignorado(s)` : ''}</div>
+              <table class="smax-bc-ticket-table">
+                <thead>
+                  <tr>
+                    <th>Chamado</th>
+                    ${pending.gse?.id      ? '<th>GSE</th>'         : ''}
+                    ${pending.assignee?.id ? '<th>Especialista</th>' : ''}
+                    ${solutionRaw.trim()   ? '<th>Solução</th>'      : ''}
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows.map(r => `
+                    <tr style="${!r.willAct ? 'opacity:.45;' : ''}">
+                      <td style="font-weight:700;color:#60a5fa;">#${Utils.escapeHtml(r.id)}</td>
+                      ${pending.gse?.id      ? `<td>${gseColHtml(r)}</td>`      : ''}
+                      ${pending.assignee?.id ? `<td>${assigneeColHtml(r)}</td>` : ''}
+                      ${solutionRaw.trim()   ? `<td><span style="color:${r.hasSolution ? '#86efac' : '#6b7280'};">${r.hasSolution ? '✓' : '—'}</span></td>` : ''}
+                      <td>${tagHtml(r)}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div id="smax-batch-confirm-footer">
+            <span id="smax-batch-confirm-summary" style="color:#9ca3af;font-size:12px;">
+              ${willActCount > 0 ? `${willActCount} chamado(s) serão atualizados.` : 'Nenhum chamado será alterado.'}
+            </span>
+            <div style="display:flex;gap:8px;">
+              <button id="smax-bc-cancel-btn" style="padding:7px 18px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:transparent;color:#9ca3af;font-size:13px;cursor:pointer;">Cancelar</button>
+              <button id="smax-bc-confirm-btn" ${willActCount === 0 ? 'disabled' : ''}
+                style="padding:7px 22px;border:none;border-radius:8px;background:${willActCount > 0 ? 'linear-gradient(135deg,#22c55e,#16a34a)' : '#374151'};color:#fff;font-size:13px;font-weight:700;cursor:${willActCount > 0 ? 'pointer' : 'default'};">
+                Confirmar e Enviar (${willActCount})
+              </button>
+            </div>
+          </div>
+        </div>`;
+
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelector('#smax-bc-cancel-x').addEventListener('click', close);
+      overlay.querySelector('#smax-bc-cancel-btn').addEventListener('click', close);
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+      overlay.querySelector('#smax-bc-confirm-btn').addEventListener('click', () => {
+        close();
+        onConfirm();
+      });
     };
 
     const commitAll = async () => {
@@ -7525,40 +7698,11 @@
         return;
       }
 
-      const sendBtn = backdrop?.querySelector('#smax-resp-send-btn');
-      const batchBtn = backdrop?.querySelector('#smax-resp-batch-send-btn');
-      if (sendBtn) sendBtn.disabled = true;
-      if (batchBtn) batchBtn.disabled = true;
+      const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
+      const solutionRaw = solEl?.value || '';
 
-      setStatusMsg(`Enviando ${targets.length} chamado(s)...`, '#93c5fd');
-      let ok = 0, fail = 0, skipped = 0;
-      for (const id of targets) {
-        const r = await commitTicket(id);
-        if (r?.skipped) skipped++;
-        else if (r?.ok !== false) ok++;
-        else fail++;
-      }
-      if (sendBtn) sendBtn.disabled = false;
-      if (batchBtn) batchBtn.disabled = false;
-
-      if (fail === 0 && ok > 0) {
-        // Sucesso total — limpa estado compartilhado
-        clearBatchPending();
-        const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
-        if (solEl) solEl.value = '';
-        // Re-renderiza chips sem dirty
-        if (activeTicketId) {
-          const entry = DataRepository.triageCache.get(activeTicketId);
-          if (entry) renderTicketDetail(entry);
-        }
-        const skipNote = skipped > 0 ? ` (${skipped} sem alterações, ignorado${skipped !== 1 ? 's' : ''})` : '';
-        setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}`, '#4ade80');
-      } else if (fail === 0 && ok === 0) {
-        setStatusMsg('Nenhum chamado com alterações para enviar.', '#fca5a5');
-      } else {
-        setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
-      }
-      updateSendButton();
+      // Sempre mostra confirmação antes de executar
+      showBatchConfirm(targets, solutionRaw, () => executeCommitAll(targets, solutionRaw));
     };
 
     const closeAllPickers = () => {
