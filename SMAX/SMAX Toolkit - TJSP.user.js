@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.64
+// @version      1.65
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -2546,6 +2546,28 @@
         });
     };
 
+    // Ingere resposta de RequestCausesRequest (interceptada do SMAX UI)
+    // firstEndpoint = pai (global), secondEndpoint = filho
+    const ingestParentRelationshipPayload = (payload) => {
+      try {
+        const entities = payload?.entities || [];
+        for (const ent of entities) {
+          const props = ent?.properties || {};
+          const firstRaw = String(props.firstEndpoint || props.FirstEndpoint || '').replace(/^IMRfc:/i, '').replace(/^IMchg:/i, '').trim();
+          const secondRaw = String(props.secondEndpoint || props.SecondEndpoint || '').replace(/^IMRfc:/i, '').replace(/^IMchg:/i, '').trim();
+          if (!firstRaw || !secondRaw || firstRaw === secondRaw) continue;
+          // firstEndpoint é o pai → o filho (secondEndpoint) aponta para ele
+          const existing = triageCache.get(secondRaw) || {};
+          if (!existing.globalChangeId) {
+            triageCache.set(secondRaw, Object.assign({}, existing, { globalChangeId: firstRaw }));
+            console.log('[SMAX] RequestCausesRequest interceptado → filho', secondRaw, 'pai', firstRaw);
+          }
+        }
+      } catch (err) {
+        console.warn('[SMAX] ingestParentRelationshipPayload falhou:', err);
+      }
+    };
+
     // Busca o chamado pai (global) via relacionamento RequestCausesRequest
     // secondEndpoint = filho, firstEndpoint = pai (global)
     const fetchParentRequest = async (id) => {
@@ -2609,6 +2631,7 @@
       ingestRequestDetailPayload,
       updateCachedSolution,
       fetchParentRequest,
+      ingestParentRelationshipPayload,
       ingestSupportGroupPayload,
       getSupportGroupsSnapshot,
       onQueueUpdate: (fn) => {
@@ -2707,7 +2730,9 @@
               tryCapurePageFilter(url);
               if (!this.responseText) return;
               const json = JSON.parse(this.responseText);
-              if (isRequestListUrl(url)) {
+              if (/\/rest\/\d+\/ems\/RequestCausesRequest/i.test(url)) {
+                DataRepository.ingestParentRelationshipPayload(json);
+              } else if (isRequestListUrl(url)) {
                 DataRepository.ingestRequestListPayload(json);
               } else if (isRequestDetailUrl(url)) {
                 DataRepository.ingestRequestDetailPayload(json);
@@ -2734,7 +2759,9 @@
                   try {
                     if (!txt) return;
                     const json = JSON.parse(txt);
-                    if (isRequestListUrl(url)) {
+                    if (/\/rest\/\d+\/ems\/RequestCausesRequest/i.test(url)) {
+                      DataRepository.ingestParentRelationshipPayload(json);
+                    } else if (isRequestListUrl(url)) {
                       DataRepository.ingestRequestListPayload(json);
                     } else if (isRequestDetailUrl(url)) {
                       DataRepository.ingestRequestDetailPayload(json);
@@ -7292,11 +7319,7 @@
       };
 
       try {
-        // Busca detalhe do ticket e relacionamento pai em paralelo
-        const [entry] = await Promise.all([
-          DataRepository.ensureRequestPayload(id, { force: true }),
-          DataRepository.fetchParentRequest(id)
-        ]);
+        const entry = await DataRepository.ensureRequestPayload(id, { force: true });
         renderTicketDetail(entry || DataRepository.triageCache.get(id) || null);
         applyListItemUpdates(id);
         setStatusMsg('', '');
