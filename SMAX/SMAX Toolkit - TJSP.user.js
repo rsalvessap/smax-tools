@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.61
+// @version      1.62
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7026,14 +7026,20 @@
         const isGlobalParent = globalParentCount.has(t.id);    // este chamado é pai de outros
         const childCount = isGlobalParent ? globalParentCount.get(t.id) : 0;
 
-        const idHtml = isGlobalParent
-          ? `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-          + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.5);vertical-align:middle;">Global ×${childCount}</span>`
-          : `#${Utils.escapeHtml(t.id)}`;
+        // Linha do ID: número + badge de global (tudo inline)
+        let idLineHtml;
+        if (isGlobalParent) {
+          idLineHtml = `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
+            + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);vertical-align:middle;">Global ×${childCount}</span>`;
+        } else if (globalChangeId) {
+          idLineHtml = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
+            + ` <span style="color:#f87171;font-size:9px;vertical-align:middle;">⬆ #${Utils.escapeHtml(globalChangeId)}</span>`;
+        } else {
+          idLineHtml = `#${Utils.escapeHtml(t.id)}`;
+        }
 
-        const globalLinkHtml = (!isGlobalParent && globalChangeId)
-          ? `<div style="font-size:9px;color:#f87171;margin-top:2px;">⬆ Global: <span style="font-weight:700;">#${Utils.escapeHtml(globalChangeId)}</span></div>`
-          : '';
+        // Assunto: não mostra se for igual ao ID (placeholder antes do carregamento completo)
+        const subjectText = t.subject && t.subject !== t.id ? (t.subject || '').slice(0, 55) : '';
 
         return `
           <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
@@ -7042,9 +7048,8 @@
               ${isChecked ? '✓' : ''}
             </div>
             <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
-              <div class="smax-resp-ticket-id">${idHtml}</div>
-              ${globalLinkHtml}
-              <div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml((t.subject || '').slice(0, 60))}</div>
+              <div class="smax-resp-ticket-id">${idLineHtml}</div>
+              ${subjectText ? `<div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml(subjectText)}</div>` : ''}
               <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
             </div>
           </div>`;
@@ -7193,6 +7198,28 @@
       try {
         const entry = await DataRepository.ensureRequestPayload(id, { force: true });
         renderTicketDetail(entry || DataRepository.triageCache.get(id) || null);
+        // Atualiza o assunto no item da lista (estava vazio antes do carregamento completo)
+        const subjectText = entry?.subjectText || '';
+        if (subjectText && subjectText !== id) {
+          const listItem = backdrop?.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(id)}"]`);
+          if (listItem) {
+            const subEl = listItem.querySelector('.smax-resp-ticket-subject');
+            if (subEl) {
+              subEl.textContent = subjectText.slice(0, 55);
+              subEl.title = subjectText;
+            } else {
+              // Cria o elemento se ainda não existe
+              const idDiv = listItem.querySelector('.smax-resp-ticket-id');
+              if (idDiv) {
+                const newSub = document.createElement('div');
+                newSub.className = 'smax-resp-ticket-subject';
+                newSub.title = subjectText;
+                newSub.textContent = subjectText.slice(0, 55);
+                idDiv.after(newSub);
+              }
+            }
+          }
+        }
         setStatusMsg('', '');
       } catch (e) {
         setStatusMsg('Erro ao carregar chamado.', '#fca5a5');
