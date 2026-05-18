@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.58
+// @version      1.59
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6941,6 +6941,26 @@
       el.style.color = color || '#9ca3af';
     };
 
+    const updateSendButton = () => {
+      const btn = backdrop?.querySelector('#smax-resp-send-btn');
+      if (!btn) return;
+      const count = selectedTicketIds.size;
+      const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
+      const hasSolution = !!(solEl?.value || '').trim();
+      const pending = getTicketPending(activeTicketId);
+      const hasPending = !!(pending.gse || pending.assignee);
+      if (count > 1) {
+        btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
+        btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+      } else if (!hasSolution && hasPending) {
+        btn.textContent = 'Atualizar';
+        btn.style.background = 'linear-gradient(135deg,#3b82f6,#1d4ed8)';
+      } else {
+        btn.textContent = 'Enviar';
+        btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+      }
+    };
+
     const updateBatchBar = () => {
       const bar = backdrop?.querySelector('#smax-resp-batch-bar');
       if (!bar) return;
@@ -6948,6 +6968,7 @@
       bar.style.display = count >= 1 ? 'flex' : 'none';
       const countEl = bar.querySelector('#smax-resp-batch-count');
       if (countEl) countEl.textContent = `${count} selecionado${count !== 1 ? 's' : ''}`;
+      updateSendButton();
     };
 
     const renderTicketList = () => {
@@ -6955,12 +6976,38 @@
       if (!listEl) return;
       if (!ticketList.length) {
         listEl.innerHTML = '<div style="padding:16px 10px;color:#6b7280;font-size:12px;text-align:center;">Nenhum chamado encontrado.</div>';
+        updateSendButton();
         return;
       }
+
+      // Monta mapa de pais globais: parentId -> qtd de filhos (a partir do triageCache)
+      const globalParentCount = new Map(); // parentId -> count
+      for (const t of ticketList) {
+        const ce = DataRepository.triageCache.get(t.id);
+        if (ce?.globalChangeId) {
+          const gid = String(ce.globalChangeId);
+          globalParentCount.set(gid, (globalParentCount.get(gid) || 0) + 1);
+        }
+      }
+
       listEl.innerHTML = ticketList.map(t => {
         const isActive = t.id === activeTicketId;
         const isChecked = selectedTicketIds.has(t.id);
         const statusLabel = t.statusSCCD || STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
+        const ce = DataRepository.triageCache.get(t.id);
+        const globalChangeId = ce?.globalChangeId || '';        // este chamado é filho de globalChangeId
+        const isGlobalParent = globalParentCount.has(t.id);     // este chamado é pai de outros
+        const childCount = isGlobalParent ? globalParentCount.get(t.id) : 0;
+
+        const idHtml = isGlobalParent
+          ? `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
+          + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.5);vertical-align:middle;">Global ×${childCount}</span>`
+          : `#${Utils.escapeHtml(t.id)}`;
+
+        const globalLinkHtml = (!isGlobalParent && globalChangeId)
+          ? `<div style="font-size:9px;color:#f87171;margin-top:2px;">⬆ Global: <span style="font-weight:700;">#${Utils.escapeHtml(globalChangeId)}</span></div>`
+          : '';
+
         return `
           <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
             <div class="smax-resp-tick-sel" data-id="${Utils.escapeHtml(t.id)}" title="Selecionar para lote"
@@ -6968,12 +7015,14 @@
               ${isChecked ? '✓' : ''}
             </div>
             <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
-              <div class="smax-resp-ticket-id">#${Utils.escapeHtml(t.id)}</div>
+              <div class="smax-resp-ticket-id">${idHtml}</div>
+              ${globalLinkHtml}
               <div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml((t.subject || '').slice(0, 60))}</div>
               <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
             </div>
           </div>`;
       }).join('');
+      updateSendButton();
 
       listEl.querySelectorAll('.smax-resp-tick-sel').forEach(sel => {
         sel.addEventListener('click', e => {
@@ -7104,6 +7153,7 @@
       }
 
       renderDiscussions(entry.discussions || []);
+      updateSendButton();
     };
 
     const loadTicket = async (id) => {
@@ -7430,7 +7480,7 @@
       const hasSolution = !!solutionRaw;
       const hasGse = !!(pending.gse && pending.gse.id);
       const hasAssignee = !!(pending.assignee && pending.assignee.id);
-      if (!hasSolution && !hasGse && !hasAssignee) return { ok: false, msg: 'Nada a enviar (solução vazia e sem alterações).' };
+      if (!hasSolution && !hasGse && !hasAssignee) return { skipped: true, msg: 'Nada a enviar.' };
       const props = { Id: id };
       if (hasSolution) {
         const solutionHtml = solutionRaw.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
@@ -7483,16 +7533,24 @@
       if (batchBtn) batchBtn.disabled = true;
 
       setStatusMsg(`Enviando ${targets.length} chamado(s)...`, '#93c5fd');
-      let ok = 0, fail = 0;
+      let ok = 0, fail = 0, skipped = 0;
       for (const id of targets) {
         const r = await commitTicket(id);
-        if (r?.ok !== false) ok++;
+        if (r?.skipped) skipped++;
+        else if (r?.ok !== false) ok++;
         else fail++;
       }
       if (sendBtn) sendBtn.disabled = false;
       if (batchBtn) batchBtn.disabled = false;
-      if (fail === 0) setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).`, '#4ade80');
-      else setStatusMsg(`${ok} ok, ${fail} com erro.`, '#fca5a5');
+      updateSendButton();
+      if (fail === 0 && ok > 0) {
+        const skipNote = skipped > 0 ? ` (${skipped} sem alterações, ignorado${skipped !== 1 ? 's' : ''})` : '';
+        setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}`, '#4ade80');
+      } else if (fail === 0 && ok === 0) {
+        setStatusMsg('Nenhum chamado com alterações para enviar.', '#fca5a5');
+      } else {
+        setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
+      }
     };
 
     const closeAllPickers = () => {
@@ -7848,6 +7906,9 @@
         renderTicketList();
         updateBatchBar();
       });
+
+      // Atualiza label do botão ao digitar na solução
+      backdrop.querySelector('#smax-resp-solution-textarea')?.addEventListener('input', updateSendButton);
 
       // Scripts picker
       backdrop.querySelector('#smax-resp-scripts-btn')?.addEventListener('click', openScriptPicker);
