@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.73
+// @version      1.74
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -42,7 +42,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.73';
+  const SMAX_TOOLKIT_VERSION = '1.74';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -7217,7 +7217,7 @@
         if (isBothParentAndChild) {
           // Ticket é ao mesmo tempo pai e filho de outro global — configuração inválida
           idLineHtml = `<span style="color:#fb923c;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-            + ` <span style="color:#fb923c;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(251,146,60,.5);vertical-align:middle;">⚠️ Global — filho de #${Utils.escapeHtml(globalChangeId)}</span>`;
+            + ` <span class="smax-warning-badge" style="color:#fb923c;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(251,146,60,.5);vertical-align:middle;">⚠️ Global — filho de #${Utils.escapeHtml(globalChangeId)}</span>`;
         } else if (isGlobalParent) {
           idLineHtml = `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
             + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);vertical-align:middle;">🌐 Global (${childCount} filho${childCount !== 1 ? 's' : ''})</span>`;
@@ -7241,8 +7241,6 @@
             <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
               <div class="smax-resp-ticket-id">${idLineHtml}</div>
               ${t.descSnippet ? `<div class="smax-resp-list-desc" title="${Utils.escapeHtml(t.descSnippet)}">${Utils.escapeHtml(t.descSnippet.slice(0, 80))}</div>` : ''}
-              ${t.requestedForName ? `<div style="font-size:10px;color:#94a3b8;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(t.requestedForName)}">👤 ${Utils.escapeHtml(t.requestedForName)}</div>` : ''}
-              ${t.locationName ? `<div style="font-size:10px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(t.locationName)}">📍 ${Utils.escapeHtml(t.locationName)}</div>` : ''}
               <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
             </div>
           </div>`;
@@ -7325,8 +7323,45 @@
         idLink.href = `https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(entry.idText)}/general`;
       }
 
+      // Badge de global no painel de detalhe (mesmas regras da lista)
+      const tid = entry.idText || '';
+      const detailGlobalId = (ActivityLog.getGlobalMap ? ActivityLog.getGlobalMap().get(tid) : '') || DataRepository.triageCache.get(tid)?.globalChangeId || '';
+      const detailIsParent = realChildCountMap.has(tid);
+      const detailChildCount = realChildCountMap.get(tid) ?? 0;
+      const detailIsBoth = detailIsParent && !!detailGlobalId;
+      const detailGlobalBadge = backdrop.querySelector('#smax-resp-detail-global-badge');
+      if (detailGlobalBadge) {
+        const mkLink = id => `https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(id)}/general`;
+        if (detailIsBoth) {
+          detailGlobalBadge.innerHTML = `<span style="color:#fb923c;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(251,146,60,.5);white-space:nowrap;">⚠️ filho de <a href="${mkLink(detailGlobalId)}" target="_blank" style="color:#fb923c;text-decoration:underline;">#${Utils.escapeHtml(detailGlobalId)}</a></span>`;
+          detailGlobalBadge.style.display = '';
+        } else if (detailIsParent) {
+          detailGlobalBadge.innerHTML = `<span style="color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);white-space:nowrap;">🌐 Global (${detailChildCount} filho${detailChildCount !== 1 ? 's' : ''})</span>`;
+          detailGlobalBadge.style.display = '';
+        } else if (detailGlobalId) {
+          detailGlobalBadge.innerHTML = `<span style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);white-space:nowrap;">⬆ Global <a href="${mkLink(detailGlobalId)}" target="_blank" style="color:#f87171;text-decoration:underline;">#${Utils.escapeHtml(detailGlobalId)}</a></span>`;
+          detailGlobalBadge.style.display = '';
+        } else {
+          detailGlobalBadge.innerHTML = '';
+          detailGlobalBadge.style.display = 'none';
+        }
+      }
+
       const openerEl = backdrop.querySelector('#smax-resp-opener');
       if (openerEl) openerEl.textContent = entry.requestedForName ? `👤 ${entry.requestedForName}` : '';
+
+      const vipBadge = backdrop.querySelector('#smax-resp-vip-badge');
+      if (vipBadge) vipBadge.style.display = entry.isVip ? '' : 'none';
+
+      const locationLabel = backdrop.querySelector('#smax-resp-location-label');
+      if (locationLabel) {
+        if (entry.locationName) {
+          locationLabel.textContent = `📍 ${entry.locationName}`;
+          locationLabel.style.display = '';
+        } else {
+          locationLabel.style.display = 'none';
+        }
+      }
 
       const statusLabel = backdrop.querySelector('#smax-resp-status-label');
       if (statusLabel) statusLabel.textContent = STATUS_LABELS[entry.status] || (entry.status || '').replace('RequestStatus', '') || '';
@@ -7412,7 +7447,7 @@
         }
         const globalId = DataRepository.triageCache.get(ticketId)?.globalChangeId || '';
         const idDiv = listItem.querySelector('.smax-resp-ticket-id');
-        if (idDiv && globalId && !idDiv.querySelector('.smax-global-badge')) {
+        if (idDiv && globalId && !idDiv.querySelector('.smax-global-badge') && !idDiv.querySelector('.smax-warning-badge')) {
           idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(ticketId)}</span>`
             + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalId)}</span>`;
         }
@@ -7608,10 +7643,13 @@
             const txt = (tmp.textContent || tmp.innerText || '').trim();
             descSnippet = txt.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
           }
-          // RequestedForPerson: VIP e nome do solicitante
+          // RequestedForPerson: VIP e nome do solicitante (API de lista retorna só {Id}; fallback para peopleCache)
           const rfp = rel.RequestedForPerson || {};
-          const isVip = !!(rfp.IsVIP);
-          const requestedForName = (rfp.DisplayLabel || rfp.Name || rfp.PrimaryDisplayValue || rfp.FullName || '').trim();
+          const rfpId = rfp.Id || rfp.id || '';
+          const cachedPerson = rfpId ? DataRepository.peopleCache.get(rfpId) : null;
+          const isVip = !!(rfp.IsVIP ?? cachedPerson?.IsVIP ?? cachedPerson?.isVIP);
+          const requestedForName = (rfp.DisplayLabel || rfp.Name || rfp.PrimaryDisplayValue || rfp.FullName
+            || cachedPerson?.name || cachedPerson?.DisplayLabel || cachedPerson?.Name || '').trim();
           // RegisteredForLocation: local de divulgação
           const rloc = rel.RegisteredForLocation || {};
           const locationName = (rloc.DisplayLabel || rloc.Name || rloc.DisplayName || rloc.FullName || '').trim();
@@ -8189,10 +8227,16 @@
                 <span id="smax-resp-select-all-icon" style="font-size:13px;">☐</span> Todos
               </div>
             </div>
+            <div id="smax-resp-num-search-bar" style="padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
+              <div style="display:flex;gap:5px;">
+                <input type="text" id="smax-resp-num-search-input" placeholder="🔍 Buscar por número..." inputmode="numeric" autocomplete="off"
+                  style="flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:4px 8px;color:#fff;font-size:11px;outline:none;min-width:0;">
+                <button id="smax-resp-num-search-btn" type="button" style="padding:4px 10px;border:none;border-radius:5px;background:rgba(59,130,246,.5);color:#fff;font-size:11px;cursor:pointer;white-space:nowrap;">→</button>
+              </div>
+            </div>
             <div id="smax-resp-ticket-list" style="flex:1;overflow-y:auto;"></div>
-            <div id="smax-resp-batch-bar" style="display:none;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;justify-content:space-between;gap:8px;background:rgba(59,130,246,.08);">
+            <div id="smax-resp-batch-bar" style="display:none;padding:6px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;background:rgba(59,130,246,.08);">
               <span id="smax-resp-batch-count" style="font-size:11px;color:#93c5fd;"></span>
-              <button id="smax-resp-batch-send-btn" style="padding:5px 14px;border:none;border-radius:6px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">ENVIAR EM LOTE</button>
             </div>
           </div>
 
@@ -8201,7 +8245,10 @@
             <div id="smax-resp-hud-header">
               <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;overflow:hidden;">
                 <a id="smax-resp-ticket-id-link" href="#" target="_blank" style="font-size:14px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;opacity:.9;">—</a>
+                <span id="smax-resp-detail-global-badge" style="display:none;flex-shrink:0;"></span>
                 <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                <span id="smax-resp-vip-badge" style="display:none;padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;flex-shrink:0;">VIP</span>
+                <span id="smax-resp-location-label" style="display:none;font-size:10px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;"></span>
                 <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;" title="Status SMAX"></span>
                 <span id="smax-resp-sccd-label" style="font-size:10px;background:rgba(245,158,11,.2);color:#fcd34d;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(245,158,11,.4);flex-shrink:0;display:none;" title="Status Operacional"></span>
               </div>
@@ -8271,7 +8318,28 @@
 
             <div id="smax-resp-hud-footer">
               <div style="font-size:11px;color:#6b7280;">Escritas reais: <span style="color:${prefs.enableRealWrites ? '#4ade80' : '#f87171'}">${prefs.enableRealWrites ? 'ativadas' : 'desativadas'}</span></div>
-              <button id="smax-resp-send-btn" type="button" style="padding:8px 28px;border:none;border-radius:8px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);transition:transform .12s,box-shadow .12s;">ENVIAR</button>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <button id="smax-resp-report-btn" type="button" style="padding:6px 14px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.06);color:#d1d5db;font-size:12px;cursor:pointer;">📊 Relatório</button>
+                <button id="smax-resp-send-btn" type="button" style="padding:8px 28px;border:none;border-radius:8px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);transition:transform .12s,box-shadow .12s;">ENVIAR</button>
+              </div>
+            </div>
+          </div>
+          <!-- Activity Report Modal (overlay) -->
+          <div id="smax-resp-report-modal" style="display:none;position:absolute;inset:0;background:rgba(2,6,23,.97);z-index:10;border-radius:inherit;flex-direction:column;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;">
+              <span style="font-size:14px;font-weight:700;color:#e5e7eb;">📊 Relatório de Atividades</span>
+              <button id="smax-resp-report-close" type="button" style="border:none;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);font-size:14px;width:28px;height:28px;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,.2);">✕</button>
+            </div>
+            <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <label style="font-size:11px;color:#9ca3af;">De:</label>
+              <input type="date" id="smax-resp-report-from" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:4px 8px;color:#e5e7eb;font-size:11px;outline:none;">
+              <label style="font-size:11px;color:#9ca3af;">Até:</label>
+              <input type="date" id="smax-resp-report-to" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:4px 8px;color:#e5e7eb;font-size:11px;outline:none;">
+              <button id="smax-resp-report-gen-btn" type="button" style="padding:5px 14px;border:none;border-radius:6px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">Gerar</button>
+              <button id="smax-resp-report-export-btn" type="button" style="padding:5px 14px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.06);color:#d1d5db;font-size:11px;cursor:pointer;display:none;">⬇ Exportar CSV</button>
+            </div>
+            <div id="smax-resp-report-content" style="flex:1;overflow-y:auto;padding:12px 16px;">
+              <div style="color:#6b7280;font-size:12px;text-align:center;padding-top:40px;">Selecione o período e clique em Gerar.</div>
             </div>
           </div>
         </div>`;
@@ -8370,41 +8438,222 @@
       // Especialista picker
       backdrop.querySelector('#smax-resp-assignee-btn')?.addEventListener('click', openAssigneePicker);
 
-      // Botão Vincular Global
+      // Botão Vincular Global — suporte a lote, auto-designar, detectar duplicata
       backdrop.querySelector('#smax-resp-global-link-btn')?.addEventListener('click', async () => {
         const inputEl = backdrop.querySelector('#smax-resp-global-id');
         const globalId = (inputEl?.value || '').trim().replace(/\D/g, '');
         if (!globalId) { setStatusMsg('Informe o ID do chamado global.', '#fca5a5'); return; }
-        if (!activeTicketId) { setStatusMsg('Selecione um chamado primeiro.', '#fca5a5'); return; }
         if (!prefs.enableRealWrites) { setStatusMsg('⚠️ Escritas reais desativadas.', '#facc15'); return; }
-        setStatusMsg(`Vinculando #${activeTicketId} ao Global #${globalId}...`, '#93c5fd');
-        try {
-          const result = await Api.postCreateRequestCausesRequest(globalId, activeTicketId);
-          const outcome = Api.summarizeBulkOutcome(result);
-          if (outcome?.ok !== false) {
-            const existing = DataRepository.triageCache.get(activeTicketId) || {};
-            DataRepository.triageCache.set(activeTicketId, Object.assign({}, existing, { globalChangeId: globalId }));
-            ActivityLog.log({ ticketId: activeTicketId, globalAssigned: true, globalChangeId: globalId });
-            if (inputEl) inputEl.value = '';
-            setStatusMsg(`✓ Vinculado ao Global #${globalId}.`, '#4ade80');
-            // Atualiza badge na lista
-            const listItem = backdrop.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(activeTicketId)}"]`);
-            const idDiv = listItem?.querySelector('.smax-resp-ticket-id');
-            if (idDiv && !idDiv.querySelector('.smax-global-badge')) {
-              idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(activeTicketId)}</span>`
-                + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalId)}</span>`;
+
+        // Determina alvos: selecionados em lote ou chamado ativo
+        const targets = selectedTicketIds.size > 0
+          ? [...selectedTicketIds]
+          : activeTicketId ? [activeTicketId] : [];
+        if (!targets.length) { setStatusMsg('Selecione um chamado primeiro.', '#fca5a5'); return; }
+
+        // Detecta já vinculados ao mesmo global
+        const alreadyLinked = targets.filter(id => {
+          const c = DataRepository.triageCache.get(id);
+          return c?.globalChangeId === globalId;
+        });
+        const toLink = targets.filter(id => !alreadyLinked.includes(id));
+
+        if (alreadyLinked.length && !toLink.length) {
+          setStatusMsg(`⚠️ Chamado(s) já vinculado(s) ao Global #${globalId}.`, '#facc15');
+          return;
+        }
+        if (alreadyLinked.length) {
+          setStatusMsg(`⚠️ ${alreadyLinked.length} já vinculado(s). Vinculando os demais...`, '#facc15');
+        } else {
+          setStatusMsg(`Vinculando ${toLink.length} chamado(s) ao Global #${globalId}...`, '#93c5fd');
+        }
+
+        let ok = 0, fail = 0;
+        for (const ticketId of toLink) {
+          try {
+            const result = await Api.postCreateRequestCausesRequest(globalId, ticketId);
+            const outcome = Api.summarizeBulkOutcome(result);
+            if (outcome?.ok !== false) {
+              const existing = DataRepository.triageCache.get(ticketId) || {};
+              const noAssignee = !existing.expertAssigneeId;
+              DataRepository.triageCache.set(ticketId, Object.assign({}, existing, { globalChangeId: globalId }));
+              ActivityLog.log({ ticketId, globalAssigned: true, globalChangeId: globalId });
+
+              // Auto-designar ao usuário atual se sem especialista
+              if (noAssignee && prefs.myPersonId) {
+                try {
+                  await Api.postUpdateRequest({ Id: ticketId, ExpertAssignee: prefs.myPersonId });
+                  const cur = DataRepository.triageCache.get(ticketId) || {};
+                  DataRepository.triageCache.set(ticketId, Object.assign({}, cur, { expertAssigneeId: prefs.myPersonId }));
+                } catch {}
+              }
+
+              // Atualiza badge na lista
+              const listItem = backdrop.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(ticketId)}"]`);
+              const idDiv = listItem?.querySelector('.smax-resp-ticket-id');
+              if (idDiv && !idDiv.querySelector('.smax-global-badge') && !idDiv.querySelector('.smax-warning-badge')) {
+                idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(ticketId)}</span>`
+                  + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalId)}</span>`;
+              }
+              ok++;
+            } else {
+              fail++;
             }
-          } else {
-            setStatusMsg(`Erro: ${outcome.messages?.[0] || 'falha ao vincular.'}`, '#fca5a5');
+          } catch {
+            fail++;
           }
-        } catch (e) {
-          setStatusMsg(`Erro: ${e.message}`, '#fca5a5');
+        }
+
+        if (inputEl) inputEl.value = '';
+        if (fail === 0) {
+          setStatusMsg(`✓ ${ok} chamado(s) vinculado(s) ao Global #${globalId}.`, '#4ade80');
+        } else {
+          setStatusMsg(`${ok} vinculado(s), ${fail} erro(s).`, '#fca5a5');
         }
       });
 
-      // Send buttons
+      // Buscar chamado por número
+      const doSearchTicket = async () => {
+        const searchInput = backdrop.querySelector('#smax-resp-num-search-input');
+        const id = (searchInput?.value || '').trim().replace(/\D/g, '');
+        if (!id) return;
+        setStatusMsg(`Buscando #${id}...`, '#93c5fd');
+        try {
+          await DataRepository.ensurePeopleLoaded();
+          const entry = await DataRepository.ensureRequestPayload(id, { force: true });
+          if (!entry && !DataRepository.triageCache.get(id)) {
+            setStatusMsg(`Chamado #${id} não encontrado.`, '#fca5a5');
+            return;
+          }
+          if (!ticketList.find(t => t.id === id)) {
+            const cached = DataRepository.triageCache.get(id) || {};
+            ticketList.unshift({
+              id,
+              subject: cached.subjectText || id,
+              descSnippet: '',
+              status: cached.status || '',
+              statusSCCD: cached.statusSCCD || '',
+              gse: cached.assignmentGroupName || '',
+              assignee: cached.expertAssigneeId || '',
+              isVip: cached.isVip || false,
+              requestedForName: cached.requestedForName || '',
+              locationName: cached.locationName || '',
+            });
+          }
+          renderTicketList();
+          setStatusMsg('', '');
+          loadTicket(id);
+          if (searchInput) searchInput.value = '';
+        } catch (e) {
+          setStatusMsg(`Erro: ${e.message}`, '#fca5a5');
+        }
+      };
+      backdrop.querySelector('#smax-resp-num-search-btn')?.addEventListener('click', doSearchTicket);
+      backdrop.querySelector('#smax-resp-num-search-input')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') doSearchTicket();
+      });
+
+      // Relatório de atividades
+      const reportModal = backdrop.querySelector('#smax-resp-report-modal');
+      backdrop.querySelector('#smax-resp-report-btn')?.addEventListener('click', () => {
+        if (!reportModal) return;
+        reportModal.style.display = 'flex';
+        // Pré-preencher datas: 30 dias atrás até hoje
+        const toInput = backdrop.querySelector('#smax-resp-report-to');
+        const fromInput = backdrop.querySelector('#smax-resp-report-from');
+        const today = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        if (toInput && !toInput.value) toInput.value = fmt(today);
+        if (fromInput && !fromInput.value) {
+          const from = new Date(today); from.setDate(from.getDate() - 30);
+          fromInput.value = fmt(from);
+        }
+      });
+      backdrop.querySelector('#smax-resp-report-close')?.addEventListener('click', () => {
+        if (reportModal) reportModal.style.display = 'none';
+      });
+      backdrop.querySelector('#smax-resp-report-gen-btn')?.addEventListener('click', () => {
+        const fromVal = backdrop.querySelector('#smax-resp-report-from')?.value;
+        const toVal = backdrop.querySelector('#smax-resp-report-to')?.value;
+        const content = backdrop.querySelector('#smax-resp-report-content');
+        const exportBtn = backdrop.querySelector('#smax-resp-report-export-btn');
+        if (!fromVal || !toVal) { if (content) content.innerHTML = '<div style="color:#fca5a5;font-size:12px;padding:20px;">Informe o período completo.</div>'; return; }
+        const fromTs = new Date(fromVal + 'T00:00:00').getTime();
+        const toTs = new Date(toVal + 'T23:59:59').getTime();
+        const entries = ActivityLog.getEntries().filter(e => e.ts >= fromTs && e.ts <= toTs);
+        if (!entries.length) {
+          if (content) content.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:20px;text-align:center;">Nenhuma atividade no período.</div>';
+          if (exportBtn) exportBtn.style.display = 'none';
+          return;
+        }
+        // Resumo por tipo
+        const counts = { RESPONDIDO: 0, VINCULO_GLOBAL: 0, TRANSFERIDO: 0, DESIGNADO: 0, OUTRO: 0 };
+        for (const e of entries) counts[e.relevantWork] = (counts[e.relevantWork] || 0) + 1;
+        const uniqueTickets = new Set(entries.map(e => e.ticketId)).size;
+        const pad2 = n => String(n).padStart(2, '0');
+        const fmtTs = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+        const summaryHtml = `
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+            ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
+              `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 14px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:${color};">${counts[key]||0}</div>
+                <div style="font-size:10px;color:#9ca3af;">${label}</div>
+              </div>`
+            ).join('')}
+            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 14px;text-align:center;">
+              <div style="font-size:18px;font-weight:700;color:#e5e7eb;">${uniqueTickets}</div>
+              <div style="font-size:10px;color:#9ca3af;">Chamados únicos</div>
+            </div>
+            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 14px;text-align:center;">
+              <div style="font-size:18px;font-weight:700;color:#e5e7eb;">${entries.length}</div>
+              <div style="font-size:10px;color:#9ca3af;">Total ações</div>
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead><tr style="background:rgba(255,255,255,.06);">
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Data/Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Chamado</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Ação</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Detalhe</th>
+            </tr></thead>
+            <tbody>${entries.slice().reverse().map((e, i) => `
+              <tr style="background:${i%2===0?'transparent':'rgba(255,255,255,.02)'};border-bottom:1px solid rgba(255,255,255,.04);">
+                <td style="padding:4px 8px;color:#6b7280;white-space:nowrap;">${fmtTs(e.ts)}</td>
+                <td style="padding:4px 8px;color:#60a5fa;">#${Utils.escapeHtml(e.ticketId)}</td>
+                <td style="padding:4px 8px;color:#e5e7eb;">${Utils.escapeHtml(e.relevantWork)}</td>
+                <td style="padding:4px 8px;color:#9ca3af;">${e.globalChangeId ? `→ Global #${Utils.escapeHtml(e.globalChangeId)}` : e.transferredTo ? `→ ${Utils.escapeHtml(e.transferredTo)}` : e.assignedTo ? `→ ${Utils.escapeHtml(e.assignedTo)}` : ''}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>`;
+        if (content) content.innerHTML = summaryHtml;
+        if (exportBtn) exportBtn.style.display = '';
+        // Armazena range filtrado para exportar
+        exportBtn._filteredEntries = entries;
+      });
+      backdrop.querySelector('#smax-resp-report-export-btn')?.addEventListener('click', function() {
+        const entriesToExport = this._filteredEntries;
+        if (!entriesToExport?.length) return;
+        const pad2 = n => String(n).padStart(2, '0');
+        const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
+        const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+        const headers = ['Data/Hora','Chamado','Ação','Atribuído Para','Global','Transferido Para','Respondido','Script','Usuário','Sucesso'];
+        const rows = entriesToExport.map(e => [
+          fmtFull(e.ts), e.ticketId, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
+          e.transferredTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
+        ].map(esc).join(','));
+        const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const now = new Date();
+        const fn = `smax_relatorio_${pad2(now.getDate())}-${pad2(now.getMonth()+1)}-${now.getFullYear()}.csv`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = fn;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      });
+
+      // Send button
       backdrop.querySelector('#smax-resp-send-btn')?.addEventListener('click', commitAll);
-      backdrop.querySelector('#smax-resp-batch-send-btn')?.addEventListener('click', commitAll);
     };
 
     return { init, open };
