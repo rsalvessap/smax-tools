@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.76
+// @version      1.77
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.76';
+  const SMAX_TOOLKIT_VERSION = '1.77';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -8055,6 +8055,8 @@
       if (batchBtn) batchBtn.disabled = false;
 
       if (fail === 0 && ok > 0) {
+        const pendingBeforeClear = getBatchPending();
+        const fwdText = pendingBeforeClear.forwarding?.text || '';
         clearBatchPending();
         const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
         if (solEl) solEl.innerHTML = '';
@@ -8062,8 +8064,13 @@
           const entry = DataRepository.triageCache.get(activeTicketId);
           if (entry) renderTicketDetail(entry);
         }
+        // Inserir texto de encaminhamento no CKEditor da página SMAX
+        if (fwdText) {
+          try { Templates.insertIntoEditor(fwdText); } catch {}
+        }
         const skipNote = skipped > 0 ? ` (${skipped} ignorado${skipped !== 1 ? 's' : ''} — sem alterações)` : '';
-        setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}`, '#4ade80');
+        const fwdNote = fwdText ? ' | 📤 Encaminhamento inserido no editor.' : '';
+        setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}${fwdNote}`, '#4ade80');
       } else if (fail === 0 && ok === 0) {
         setStatusMsg('Nenhum chamado com alterações para enviar.', '#fca5a5');
       } else {
@@ -8249,20 +8256,93 @@
           item.addEventListener('click', () => {
             const gid = item.dataset.id;
             const gname = item.dataset.name;
-            const chipEl = backdrop.querySelector('#smax-resp-gse-chip-name');
-            const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
-            // Toggle: se já tem esse grupo no pending, remove; senão, seta
             const curPending = getBatchPending();
             const alreadySet = curPending.gse?.id === gid;
-            setBatchPending('gse', alreadySet ? null : { id: gid, name: gname });
-            const isDirty = !alreadySet;
-            if (chipEl) chipEl.textContent = isDirty ? gname : (DataRepository.triageCache.get(activeTicketId)?.assignmentGroupName || '—');
-            if (chipBtn) {
-              chipBtn.classList.toggle('dirty', isDirty);
-              chipBtn.title = isDirty ? `Alterar GSE → ${gname} (todos selecionados)` : 'Alterar GSE (Grupo de Suporte)';
+
+            if (alreadySet) {
+              // Toggle off — remove GSE pending e encaminhamento
+              const chipEl = backdrop.querySelector('#smax-resp-gse-chip-name');
+              const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
+              setBatchPending('gse', null);
+              setBatchPending('forwarding', null);
+              if (chipEl) chipEl.textContent = DataRepository.triageCache.get(activeTicketId)?.assignmentGroupName || '—';
+              if (chipBtn) { chipBtn.classList.remove('dirty'); chipBtn.title = 'Alterar GSE (Grupo de Suporte)'; }
+              updateSendButton();
+              picker.style.display = 'none';
+              return;
             }
-            updateSendButton();
-            picker.style.display = 'none';
+
+            // Mostrar painel de confirmação + encaminhamento
+            const QUICK_BTNS = [
+              { label: 'STI – Migração', text: 'Encaminhado para STI – Migração.' },
+              { label: 'N3',             text: 'Encaminhado para N3.' },
+              { label: 'SPI',            text: 'Encaminhado para SPI.' },
+              { label: 'Devolução SAJ',  text: 'Devolvido ao SAJ.' },
+            ];
+            const quickHtml = QUICK_BTNS.map(b =>
+              `<button class="smax-gse-fwd-quick" data-text="${Utils.escapeHtml(b.text)}"
+                style="font-size:10px;padding:2px 8px;border-radius:12px;border:1px solid rgba(148,163,184,.35);background:rgba(148,163,184,.1);color:#94a3b8;cursor:pointer;white-space:nowrap;">${Utils.escapeHtml(b.label)}</button>`
+            ).join('');
+
+            picker.innerHTML = `
+              <div style="padding:8px 12px;font-size:11px;color:#9ca3af;border-bottom:1px solid rgba(255,255,255,.08);">GSE selecionada:</div>
+              <div style="padding:8px 12px 6px;font-size:12px;color:#e2e8f0;font-weight:600;">${Utils.escapeHtml(gname)}</div>
+              <div style="padding:6px 12px 8px;border-top:1px solid rgba(255,255,255,.06);">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:#d1d5db;user-select:none;">
+                  <input type="checkbox" id="smax-gse-fwd-cb" style="cursor:pointer;"> 📤 Com encaminhamento
+                </label>
+              </div>
+              <div id="smax-gse-fwd-area" style="display:none;padding:0 12px 10px;">
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">${quickHtml}</div>
+                <textarea id="smax-gse-fwd-text" placeholder="Texto de encaminhamento..."
+                  style="width:100%;height:72px;background:#1e293b;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:11px;padding:6px;resize:vertical;box-sizing:border-box;outline:none;"></textarea>
+              </div>
+              <div style="display:flex;gap:6px;padding:8px 12px;border-top:1px solid rgba(255,255,255,.08);">
+                <button id="smax-gse-fwd-back" style="flex:1;padding:5px 0;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:transparent;color:#9ca3af;font-size:11px;cursor:pointer;">← Voltar</button>
+                <button id="smax-gse-fwd-confirm" style="flex:2;padding:5px 0;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">Confirmar</button>
+              </div>`;
+
+            // Checkbox toggle
+            const cb = picker.querySelector('#smax-gse-fwd-cb');
+            const fwdArea = picker.querySelector('#smax-gse-fwd-area');
+            cb.addEventListener('change', () => {
+              fwdArea.style.display = cb.checked ? 'block' : 'none';
+              if (cb.checked) picker.querySelector('#smax-gse-fwd-text')?.focus();
+            });
+
+            // Botões rápidos
+            picker.querySelectorAll('.smax-gse-fwd-quick').forEach(qbtn => {
+              qbtn.addEventListener('click', () => {
+                const ta = picker.querySelector('#smax-gse-fwd-text');
+                if (ta) { ta.value = qbtn.dataset.text; ta.focus(); }
+              });
+            });
+
+            // Voltar
+            picker.querySelector('#smax-gse-fwd-back').addEventListener('click', () => {
+              picker.innerHTML = `<input class="smax-resp-field-picker-search" type="text" placeholder="Buscar grupo..." autocomplete="off"><div class="smax-resp-field-picker-list"></div>`;
+              renderGroups('');
+              const s = picker.querySelector('.smax-resp-field-picker-search');
+              s?.addEventListener('input', () => renderGroups(s.value));
+              s?.focus();
+            });
+
+            // Confirmar
+            picker.querySelector('#smax-gse-fwd-confirm').addEventListener('click', () => {
+              const chipEl = backdrop.querySelector('#smax-resp-gse-chip-name');
+              const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
+              setBatchPending('gse', { id: gid, name: gname });
+              if (chipEl) chipEl.textContent = gname;
+              if (chipBtn) {
+                chipBtn.classList.add('dirty');
+                const hasFwd = cb.checked && (picker.querySelector('#smax-gse-fwd-text')?.value || '').trim();
+                chipBtn.title = `Alterar GSE → ${gname} (todos selecionados)${hasFwd ? ' | 📤 Com encaminhamento' : ''}`;
+              }
+              const fwdText = cb.checked ? (picker.querySelector('#smax-gse-fwd-text')?.value || '').trim() : '';
+              setBatchPending('forwarding', fwdText ? { text: fwdText } : null);
+              updateSendButton();
+              picker.style.display = 'none';
+            });
           });
         });
       };
@@ -8698,6 +8778,15 @@
                   DataRepository.triageCache.set(ticketId, Object.assign({}, cur, { expertAssigneeId: prefs.myPersonId }));
                 } catch {}
               }
+
+              // Atualizar status para Suspenso após vinculação global
+              try {
+                await Api.postUpdateRequest({ Id: ticketId, Status: 'RequestStatusSuspended' });
+                const cur2 = DataRepository.triageCache.get(ticketId) || {};
+                DataRepository.triageCache.set(ticketId, Object.assign({}, cur2, { status: 'RequestStatusSuspended' }));
+                const statusEl = backdrop.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(ticketId)}"] .smax-resp-ticket-status`);
+                if (statusEl) statusEl.textContent = 'Suspenso';
+              } catch {}
 
               // Atualiza badge na lista
               const listItem = backdrop.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(ticketId)}"]`);
