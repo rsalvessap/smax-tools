@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.74
+// @version      1.75
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -42,7 +42,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.74';
+  const SMAX_TOOLKIT_VERSION = '1.75';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -4278,7 +4278,7 @@
         <div class="smax-sp-card">
           <div class="smax-sp-section-title">📨 Módulo de Respostas</div>
           <div class="smax-sp-muted" style="margin-bottom:14px;">
-            Abre o painel de respostas. Selecione um colaborador e filtre por status para ver os chamados, redija a solução, use scripts prontos e envie em lote.
+            Abre o painel de respostas em cima da tela atual. Selecione um colaborador, filtre por equipe e status, redija a solução com editor de texto e envie em lote.
           </div>
           <button id="smax-launch-resp-btn" style="padding:12px 32px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:linear-gradient(135deg,#8b5cf6 0%,#6d28d9 100%);color:#fff;box-shadow:0 6px 20px rgba(139,92,246,.4),0 0 0 1px rgba(255,255,255,.1) inset;transition:transform .15s,box-shadow .15s;">
             📨 Abrir Respostas
@@ -4287,12 +4287,29 @@
         <div class="smax-sp-card">
           <div class="smax-sp-section-title">📖 Como usar</div>
           <ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--sp-text);line-height:1.7;">
-            <li>Busque um colaborador para ver os chamados dele.</li>
-            <li>Filtre por status (Ativo, Em Andamento, Aguardando…).</li>
-            <li>Clique num chamado para ver descrição, discussões e redigir a solução.</li>
-            <li>Use "📋 Scripts" para inserir um script de resposta pronto.</li>
-            <li>Marque vários chamados e clique "ENVIAR EM LOTE" para responder todos de uma vez.</li>
+            <li>Selecione as equipes e clique <strong>↺ Carregar</strong> para buscar os chamados.</li>
+            <li>Filtre por status operacional (Ativo, Em Andamento, Aguardando…).</li>
+            <li>Clique num chamado para ver descrição, discussões, anexos e redigir a solução.</li>
+            <li>Use <strong>📋 Scripts de Respostas</strong> para inserir um texto pronto.</li>
+            <li>Selecione vários chamados (checkbox) e clique <strong>ENVIAR</strong> para responder em lote.</li>
+            <li>Use <strong>🔗 Vincular</strong> para vincular um ou vários chamados a um Global — sem especialista, a designação é automática.</li>
+            <li>Use o campo <strong>🔍 Buscar por número</strong> (topo da lista) para carregar qualquer chamado pelo ID, mesmo fora da lista atual.</li>
+            <li>Chamados VIP e usuários em destaque são sinalizados no cabeçalho do detalhe.</li>
+            <li style="color:var(--sp-danger-text);font-weight:600;">CUIDADO: Vincular Global não verifica se o número informado é válido.</li>
           </ul>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">📊 Relatório de Atividades</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">Filtre por período e veja um resumo das ações realizadas (respostas, vínculos, transferências…).</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <label style="font-size:11px;color:var(--sp-text-muted);">De:</label>
+            <input type="date" id="smax-resp-report-from-sp" style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:5px;padding:4px 8px;color:var(--sp-text);font-size:11px;outline:none;">
+            <label style="font-size:11px;color:var(--sp-text-muted);">Até:</label>
+            <input type="date" id="smax-resp-report-to-sp" style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:5px;padding:4px 8px;color:var(--sp-text);font-size:11px;outline:none;">
+            <button type="button" id="smax-resp-report-gen-sp" style="padding:5px 14px;border:none;border-radius:6px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">Gerar</button>
+            <button type="button" id="smax-resp-report-export-sp" style="padding:5px 14px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;cursor:pointer;display:none;">⬇ Exportar CSV</button>
+          </div>
+          <div id="smax-resp-report-content-sp"></div>
         </div>
       </div>`;
 
@@ -4746,6 +4763,109 @@
           ResponseHUD.open();
         });
       }
+
+      // Pré-preenche datas ao renderizar
+      const today = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const toInput = container.querySelector('#smax-resp-report-to-sp');
+      const fromInput = container.querySelector('#smax-resp-report-from-sp');
+      if (toInput && !toInput.value) toInput.value = fmt(today);
+      if (fromInput && !fromInput.value) {
+        const from = new Date(today); from.setDate(from.getDate() - 30);
+        fromInput.value = fmt(from);
+      }
+
+      const genBtn = container.querySelector('#smax-resp-report-gen-sp');
+      const exportBtn = container.querySelector('#smax-resp-report-export-sp');
+      const contentEl = container.querySelector('#smax-resp-report-content-sp');
+
+      genBtn?.addEventListener('click', () => {
+        const fromVal = fromInput?.value;
+        const toVal = toInput?.value;
+        if (!fromVal || !toVal || !contentEl) return;
+        const fromTs = new Date(fromVal + 'T00:00:00').getTime();
+        const toTs = new Date(toVal + 'T23:59:59').getTime();
+        const entries = ActivityLog.getEntries().filter(e => e.ts >= fromTs && e.ts <= toTs);
+        if (!entries.length) {
+          contentEl.innerHTML = '<div style="color:var(--sp-text-muted);font-size:12px;padding:10px 0;">Nenhuma atividade no período.</div>';
+          if (exportBtn) exportBtn.style.display = 'none';
+          return;
+        }
+        const counts = { RESPONDIDO: 0, VINCULO_GLOBAL: 0, TRANSFERIDO: 0, DESIGNADO: 0, OUTRO: 0 };
+        for (const e of entries) counts[e.relevantWork] = (counts[e.relevantWork] || 0) + 1;
+        const uniqueTickets = new Set(entries.map(e => e.ticketId)).size;
+        const pad2 = n => String(n).padStart(2, '0');
+        const fmtTs = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+        const summaryHtml = `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
+              `<div style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:8px;padding:6px 12px;text-align:center;">
+                <div style="font-size:16px;font-weight:700;color:${color};">${counts[key]||0}</div>
+                <div style="font-size:10px;color:var(--sp-text-muted);">${label}</div>
+              </div>`
+            ).join('')}
+            <div style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:8px;padding:6px 12px;text-align:center;">
+              <div style="font-size:16px;font-weight:700;color:var(--sp-text);">${uniqueTickets}</div>
+              <div style="font-size:10px;color:var(--sp-text-muted);">Chamados únicos</div>
+            </div>
+            <div style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:8px;padding:6px 12px;text-align:center;">
+              <div style="font-size:16px;font-weight:700;color:var(--sp-text);">${entries.length}</div>
+              <div style="font-size:10px;color:var(--sp-text-muted);">Total ações</div>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead><tr style="background:var(--sp-surface-2);">
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;white-space:nowrap;">Data/Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Chamado</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Descrição</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Ação</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Detalhe</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Usuário</th>
+            </tr></thead>
+            <tbody>${entries.slice().reverse().map((e, i) => {
+              const desc = (DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
+              const detalhe = e.globalChangeId ? `→ Global #${e.globalChangeId}` : e.transferredTo ? `→ ${e.transferredTo}` : e.assignedTo ? `→ ${e.assignedTo}` : '';
+              return `<tr style="background:${i%2===0?'transparent':'var(--sp-surface-2)'};border-bottom:1px solid var(--sp-border);">
+                <td style="padding:4px 8px;color:var(--sp-text-muted);white-space:nowrap;">${fmtTs(e.ts)}</td>
+                <td style="padding:4px 8px;color:#60a5fa;white-space:nowrap;">#${Utils.escapeHtml(e.ticketId)}</td>
+                <td style="padding:4px 8px;color:var(--sp-text);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(desc)}">${Utils.escapeHtml(desc)}</td>
+                <td style="padding:4px 8px;color:var(--sp-text);white-space:nowrap;">${Utils.escapeHtml(e.relevantWork)}</td>
+                <td style="padding:4px 8px;color:var(--sp-text-muted);white-space:nowrap;">${Utils.escapeHtml(detalhe)}</td>
+                <td style="padding:4px 8px;color:var(--sp-text-muted);white-space:nowrap;">${Utils.escapeHtml(e.user||'')}</td>
+              </tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+          </div>`;
+        contentEl.innerHTML = summaryHtml;
+        if (exportBtn) { exportBtn.style.display = ''; exportBtn._filteredEntries = entries; }
+      });
+
+      exportBtn?.addEventListener('click', function() {
+        const entriesToExport = this._filteredEntries;
+        if (!entriesToExport?.length) return;
+        const pad2 = n => String(n).padStart(2, '0');
+        const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
+        const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+        const headers = ['Data/Hora','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Respondido','Script','Usuário','Sucesso'];
+        const rows = entriesToExport.map(e => {
+          const desc = (DataRepository.triageCache.get(e.ticketId)?.subjectText || '');
+          return [
+            fmtFull(e.ts), e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
+            e.transferredTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
+          ].map(esc).join(',');
+        });
+        const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const now = new Date();
+        const fn = `smax_relatorio_${pad2(now.getDate())}-${pad2(now.getMonth()+1)}-${now.getFullYear()}.csv`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = fn;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      });
     };
 
     /* ── Main render ── */
@@ -7333,13 +7453,13 @@
       if (detailGlobalBadge) {
         const mkLink = id => `https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(id)}/general`;
         if (detailIsBoth) {
-          detailGlobalBadge.innerHTML = `<span style="color:#fb923c;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(251,146,60,.5);white-space:nowrap;">⚠️ filho de <a href="${mkLink(detailGlobalId)}" target="_blank" style="color:#fb923c;text-decoration:underline;">#${Utils.escapeHtml(detailGlobalId)}</a></span>`;
+          detailGlobalBadge.innerHTML = `<span style="color:#fb923c;font-size:12px;padding:2px 7px;border-radius:10px;border:1px solid rgba(251,146,60,.5);white-space:nowrap;">⚠️ filho de <a href="${mkLink(detailGlobalId)}" target="_blank" style="color:#fb923c;text-decoration:underline;">#${Utils.escapeHtml(detailGlobalId)}</a></span>`;
           detailGlobalBadge.style.display = '';
         } else if (detailIsParent) {
-          detailGlobalBadge.innerHTML = `<span style="color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);white-space:nowrap;">🌐 Global (${detailChildCount} filho${detailChildCount !== 1 ? 's' : ''})</span>`;
+          detailGlobalBadge.innerHTML = `<span style="color:#4ade80;font-size:12px;padding:2px 7px;border-radius:10px;border:1px solid rgba(74,222,128,.45);white-space:nowrap;">🌐 Global (${detailChildCount} filho${detailChildCount !== 1 ? 's' : ''})</span>`;
           detailGlobalBadge.style.display = '';
         } else if (detailGlobalId) {
-          detailGlobalBadge.innerHTML = `<span style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);white-space:nowrap;">⬆ Global <a href="${mkLink(detailGlobalId)}" target="_blank" style="color:#f87171;text-decoration:underline;">#${Utils.escapeHtml(detailGlobalId)}</a></span>`;
+          detailGlobalBadge.innerHTML = `<span style="color:#f87171;font-size:12px;padding:2px 7px;border-radius:10px;border:1px solid rgba(248,113,113,.35);white-space:nowrap;">⬆ Global <a href="${mkLink(detailGlobalId)}" target="_blank" style="color:#f87171;text-decoration:underline;">#${Utils.escapeHtml(detailGlobalId)}</a></span>`;
           detailGlobalBadge.style.display = '';
         } else {
           detailGlobalBadge.innerHTML = '';
@@ -7357,9 +7477,11 @@
       if (locationLabel) {
         if (entry.locationName) {
           locationLabel.textContent = `📍 ${entry.locationName}`;
+          locationLabel.dataset.fullLocation = entry.locationName;
           locationLabel.style.display = '';
         } else {
           locationLabel.style.display = 'none';
+          locationLabel.dataset.fullLocation = '';
         }
       }
 
@@ -8248,7 +8370,7 @@
                 <span id="smax-resp-detail-global-badge" style="display:none;flex-shrink:0;"></span>
                 <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                 <span id="smax-resp-vip-badge" style="display:none;padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;flex-shrink:0;">VIP</span>
-                <span id="smax-resp-location-label" style="display:none;font-size:10px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;"></span>
+                <span id="smax-resp-location-label" style="display:none;font-size:10px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;cursor:pointer;" title="Clique para ver nome completo"></span>
                 <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;" title="Status SMAX"></span>
                 <span id="smax-resp-sccd-label" style="font-size:10px;background:rgba(245,158,11,.2);color:#fcd34d;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(245,158,11,.4);flex-shrink:0;display:none;" title="Status Operacional"></span>
               </div>
@@ -8387,6 +8509,36 @@
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
       backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+      // Local do solicitante: clique revela nome completo via tooltip flutuante
+      backdrop.querySelector('#smax-resp-location-label')?.addEventListener('click', function() {
+        const full = this.dataset.fullLocation || this.textContent;
+        if (!full) return;
+        let tip = backdrop.querySelector('#smax-resp-location-tip');
+        if (!tip) {
+          tip = document.createElement('div');
+          tip.id = 'smax-resp-location-tip';
+          Object.assign(tip.style, {
+            position: 'fixed', background: '#1e293b', color: '#e5e7eb', fontSize: '12px',
+            padding: '6px 10px', borderRadius: '7px', border: '1px solid rgba(255,255,255,.15)',
+            boxShadow: '0 4px 16px rgba(0,0,0,.5)', zIndex: '9999999',
+            maxWidth: '320px', wordBreak: 'break-word', cursor: 'pointer',
+            lineHeight: '1.5',
+          });
+          tip.title = 'Clique para fechar';
+          tip.addEventListener('click', () => tip.remove());
+          backdrop.appendChild(tip);
+        }
+        tip.textContent = full;
+        const rect = this.getBoundingClientRect();
+        tip.style.top = (rect.bottom + 6) + 'px';
+        tip.style.left = rect.left + 'px';
+        // auto-remove on next click outside
+        setTimeout(() => {
+          const removeTip = (ev) => { if (!tip.contains(ev.target)) { tip.remove(); document.removeEventListener('click', removeTip, true); } };
+          document.addEventListener('click', removeTip, true);
+        }, 0);
+      });
 
       // Toggle criteria visibility
       const criteriaEl = backdrop.querySelector('#smax-resp-filter-criteria');
@@ -8612,18 +8764,25 @@
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:11px;">
             <thead><tr style="background:rgba(255,255,255,.06);">
-              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Data/Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;white-space:nowrap;">Data/Hora</th>
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Chamado</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Descrição</th>
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Ação</th>
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Detalhe</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Usuário</th>
             </tr></thead>
-            <tbody>${entries.slice().reverse().map((e, i) => `
-              <tr style="background:${i%2===0?'transparent':'rgba(255,255,255,.02)'};border-bottom:1px solid rgba(255,255,255,.04);">
+            <tbody>${entries.slice().reverse().map((e, i) => {
+              const desc = (DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
+              const detalhe = e.globalChangeId ? `→ Global #${Utils.escapeHtml(e.globalChangeId)}` : e.transferredTo ? `→ ${Utils.escapeHtml(e.transferredTo)}` : e.assignedTo ? `→ ${Utils.escapeHtml(e.assignedTo)}` : '';
+              return `<tr style="background:${i%2===0?'transparent':'rgba(255,255,255,.02)'};border-bottom:1px solid rgba(255,255,255,.04);">
                 <td style="padding:4px 8px;color:#6b7280;white-space:nowrap;">${fmtTs(e.ts)}</td>
-                <td style="padding:4px 8px;color:#60a5fa;">#${Utils.escapeHtml(e.ticketId)}</td>
-                <td style="padding:4px 8px;color:#e5e7eb;">${Utils.escapeHtml(e.relevantWork)}</td>
-                <td style="padding:4px 8px;color:#9ca3af;">${e.globalChangeId ? `→ Global #${Utils.escapeHtml(e.globalChangeId)}` : e.transferredTo ? `→ ${Utils.escapeHtml(e.transferredTo)}` : e.assignedTo ? `→ ${Utils.escapeHtml(e.assignedTo)}` : ''}</td>
-              </tr>`).join('')}
+                <td style="padding:4px 8px;color:#60a5fa;white-space:nowrap;">#${Utils.escapeHtml(e.ticketId)}</td>
+                <td style="padding:4px 8px;color:#e5e7eb;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(desc)}">${Utils.escapeHtml(desc)}</td>
+                <td style="padding:4px 8px;color:#e5e7eb;white-space:nowrap;">${Utils.escapeHtml(e.relevantWork)}</td>
+                <td style="padding:4px 8px;color:#9ca3af;white-space:nowrap;">${detalhe}</td>
+                <td style="padding:4px 8px;color:#9ca3af;white-space:nowrap;">${Utils.escapeHtml(e.user||'')}</td>
+              </tr>`;
+            }).join('')}
             </tbody>
           </table>`;
         if (content) content.innerHTML = summaryHtml;
@@ -8637,11 +8796,14 @@
         const pad2 = n => String(n).padStart(2, '0');
         const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
         const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-        const headers = ['Data/Hora','Chamado','Ação','Atribuído Para','Global','Transferido Para','Respondido','Script','Usuário','Sucesso'];
-        const rows = entriesToExport.map(e => [
-          fmtFull(e.ts), e.ticketId, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
-          e.transferredTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
-        ].map(esc).join(','));
+        const headers = ['Data/Hora','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Respondido','Script','Usuário','Sucesso'];
+        const rows = entriesToExport.map(e => {
+          const desc = DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
+          return [
+            fmtFull(e.ts), e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
+            e.transferredTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
+          ].map(esc).join(',');
+        });
         const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
         const now = new Date();
