@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.71
+// @version      1.72
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -42,7 +42,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.71';
+  const SMAX_TOOLKIT_VERSION = '1.72';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -569,12 +569,13 @@
     #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
     #smax-resp-hud-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%); flex-shrink:0; }
     #smax-resp-hud-body { flex:1; display:flex; min-height:0; overflow:hidden; }
-    #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow:hidden; min-width:0; }
+    #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow-y:auto; min-width:0; }
     #smax-resp-desc-panel { background:rgba(2,6,23,.7); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:10px 12px; flex-shrink:0; }
-    #smax-resp-desc-content { font-size:12px; color:#d1d5db; overflow-y:auto; max-height:110px; line-height:1.5; }
+    #smax-resp-desc-content { font-size:12px; color:#d1d5db; overflow-y:auto; min-height:40px; max-height:28vh; line-height:1.5; }
     #smax-resp-desc-content img { max-width:100%; height:auto; border-radius:4px; }
-    #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex:1; min-height:0; }
-    #smax-resp-solution-textarea { flex:1; min-height:120px; resize:none; width:100%; box-sizing:border-box; background:#0a0f1e; border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:10px 12px; color:#e5e7eb; font-size:13px; line-height:1.6; outline:none; font-family:inherit; transition:border-color .15s; }
+    #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
+    #smax-resp-solution-textarea { min-height:105px; resize:none; overflow:hidden; width:100%; box-sizing:border-box; background:#0a0f1e; border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:10px 12px; color:#e5e7eb; font-size:13px; line-height:1.6; outline:none; font-family:inherit; transition:border-color .15s; }
+    .smax-resp-list-desc { font-size:10px; color:#9ca3af; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-style:italic; }
     #smax-resp-solution-textarea:focus { border-color:#3b82f6; }
     #smax-resp-hud-discussions { width:300px; flex-shrink:0; border-left:1px solid rgba(255,255,255,.07); display:flex; flex-direction:column; overflow:hidden; background:rgba(2,6,23,.5); }
     #smax-resp-discussions-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:8px; }
@@ -7127,7 +7128,7 @@
             </div>
             <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
               <div class="smax-resp-ticket-id">${idLineHtml}</div>
-              ${subjectText ? `<div class="smax-resp-ticket-subject" title="${Utils.escapeHtml(t.subject)}">${Utils.escapeHtml(subjectText)}</div>` : ''}
+              ${t.descSnippet ? `<div class="smax-resp-list-desc" title="${Utils.escapeHtml(t.descSnippet)}">${Utils.escapeHtml(t.descSnippet.slice(0, 80))}</div>` : ''}
               <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
             </div>
           </div>`;
@@ -7260,6 +7261,16 @@
         const tmp = document.createElement('div');
         tmp.innerHTML = entry.solutionHtml || '';
         solEl.value = (tmp.textContent || tmp.innerText || '').trim();
+        // Auto-resize: altura baseada no conteúdo, mínimo 5 linhas (~105px)
+        solEl.style.height = 'auto';
+        solEl.style.height = Math.max(105, solEl.scrollHeight) + 'px';
+        if (!solEl.dataset.autoResize) {
+          solEl.dataset.autoResize = '1';
+          solEl.addEventListener('input', () => {
+            solEl.style.height = 'auto';
+            solEl.style.height = Math.max(105, solEl.scrollHeight) + 'px';
+          });
+        }
       }
 
       renderDiscussions(entry.discussions || []);
@@ -7450,7 +7461,7 @@
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
-      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c';
+      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description';
 
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
@@ -7483,9 +7494,18 @@
             }
           }
           const statusSCCD = (p.StatusSCCDSMAX_c || '').replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
+          // Extrai primeira linha de texto da descrição HTML
+          let descSnippet = '';
+          if (p.Description) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = String(p.Description);
+            const txt = (tmp.textContent || tmp.innerText || '').trim();
+            descSnippet = txt.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+          }
           return {
             id: rawId,
-            subject: rawId, // sem Description no layout; subject = ID até carregar detalhes
+            subject: rawId,
+            descSnippet,
             status: p.Status || '',
             statusSCCD,
             gse: p.AssignedToGroup || '',
