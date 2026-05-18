@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.65
+// @version      1.65d
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -2127,6 +2127,11 @@
 
       const idNum = parseInt(id.replace(/\D/g, ''), 10);
       const existing = triageCache.get(id) || {};
+      // DEBUG TEMPORÁRIO — despejar todos os campos para identificar vínculo global
+      if (props.Description !== undefined) { // só em fetches completos (FULL_LAYOUT)
+        console.log('[SMAX Debug FULL props] id=' + id, JSON.parse(JSON.stringify(props)));
+        console.log('[SMAX Debug FULL rel]  id=' + id, JSON.parse(JSON.stringify(rel || {})));
+      }
       let requestedForName = '';
       const requestedRel = rel && rel.RequestedForPerson ? rel.RequestedForPerson : null;
       const requestedProps = props && props.RequestedForPerson ? props.RequestedForPerson : null;
