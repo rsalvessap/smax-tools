@@ -1,0 +1,12 @@
+{
+  "_version": 1,
+  "_updatedAt": "2026-05-18",
+  "_description": "Configuracao compartilhada SMAX Toolkit TJSP. Edite para distribuir equipes e scripts para toda a equipe automaticamente.",
+
+  "teams": [],
+
+  "scripts": {
+    "sol": [],
+    "disc": []
+  }
+}

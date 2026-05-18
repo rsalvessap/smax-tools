@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.75
+// @version      1.76
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -11,7 +11,9 @@
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @connect      raw.githubusercontent.com
 // @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @homepageURL  https://github.com/rsalvessap/SMAX-TOOLS
@@ -42,7 +44,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.75';
+  const SMAX_TOOLKIT_VERSION = '1.76';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -67,6 +69,7 @@
       personalFinalsRaw: '',
       myPersonId: '',
       myPersonName: '',
+      sharedConfigUrl: 'https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/shared-config.json',
       teamsConfigRaw: JSON.stringify([
         {
           id: 'jec',
@@ -1573,6 +1576,7 @@
    * =======================================================*/
   const TeamsConfig = (() => {
     let cachedTeams = null;
+    let _sharedTeams = [];
 
     const getTeams = () => {
       if (cachedTeams) return cachedTeams;
@@ -1593,6 +1597,11 @@
             });
           }
         });
+        // Append shared teams whose id isn't already defined locally
+        const localIds = new Set(cachedTeams.map(t => t.id));
+        for (const st of _sharedTeams) {
+          if (!localIds.has(st.id)) cachedTeams.push({ ...st, _shared: true });
+        }
         // Sort by priority desc
         cachedTeams.sort((a, b) => (b.priority || 0) - (a.priority || 0));
       } catch (err) {
@@ -1600,6 +1609,11 @@
         cachedTeams = [];
       }
       return cachedTeams;
+    };
+
+    const setSharedTeams = (teams) => {
+      _sharedTeams = Array.isArray(teams) ? teams : [];
+      cachedTeams = null; // force rebuild on next getTeams()
     };
 
     const getTeamById = (id) => getTeams().find(t => t.id === id) || null;
@@ -1712,7 +1726,7 @@
 
     const reload = () => { cachedTeams = null; };
 
-    return { getTeams, getTeamById, getWorkersForTeam, suggestTeam, suggestWorker, reload };
+    return { getTeams, getTeamById, getWorkersForTeam, suggestTeam, suggestWorker, reload, setSharedTeams };
   })();
 
   /* =========================================================
@@ -4094,6 +4108,7 @@
               </div>
             `).join('')}
             <div class="smax-module-group-label" style="margin-top:6px;">🎫 Tela de Chamado (interno)</div>
+
             ${[
               ['zenModeOn',  '🧘', 'Zen Mode',       'Oculta campos desnecessários no formulário de chamado'],
               ['collapseOn', '📂', 'Recolher seções', 'Recolhe automaticamente seções desnecessárias'],
@@ -4111,6 +4126,20 @@
               </div>
             `).join('')}
           </div>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">☁️ Config. Compartilhada</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">
+            Equipes e scripts carregados de um arquivo JSON público (GitHub). Todos os usuários que apontarem para a mesma URL recebem as mesmas configurações automaticamente.
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+            <input type="text" id="smax-shared-url-input" value="${Utils.escapeHtml(prefs.sharedConfigUrl || '')}"
+              placeholder="https://raw.githubusercontent.com/..."
+              style="flex:1;min-width:200px;padding:7px 10px;border-radius:7px;font-size:11px;box-sizing:border-box;">
+            <button type="button" id="smax-shared-save-btn" style="padding:7px 14px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">Salvar</button>
+            <button type="button" id="smax-shared-refresh-btn" style="padding:7px 14px;border:1px solid var(--sp-border);border-radius:7px;background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;cursor:pointer;">↺ Atualizar</button>
+          </div>
+          <div id="smax-shared-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;"></div>
         </div>`;
     };
 
@@ -4400,6 +4429,32 @@
           if (key === 'nameBadgesOn')   NameBadges.apply();
           if (key === 'collapseOn')     SectionTweaks.applyAll();
         });
+      });
+
+      // SharedConfig — salvar URL e atualizar
+      const sharedStatusEl = container.querySelector('#smax-shared-status');
+      const showSharedStatus = () => {
+        if (!sharedStatusEl) return;
+        const { text, loading } = SharedConfig.getStatus();
+        sharedStatusEl.textContent = loading ? '⏳ ' + text : text;
+      };
+      showSharedStatus();
+
+      container.querySelector('#smax-shared-save-btn')?.addEventListener('click', () => {
+        const urlInput = container.querySelector('#smax-shared-url-input');
+        const newUrl = (urlInput?.value || '').trim();
+        prefs.sharedConfigUrl = newUrl;
+        savePrefs();
+        if (sharedStatusEl) sharedStatusEl.textContent = 'URL salva. Clique em Atualizar para buscar.';
+      });
+
+      container.querySelector('#smax-shared-refresh-btn')?.addEventListener('click', async () => {
+        const urlInput = container.querySelector('#smax-shared-url-input');
+        const newUrl = (urlInput?.value || '').trim();
+        if (newUrl) { prefs.sharedConfigUrl = newUrl; savePrefs(); }
+        if (sharedStatusEl) sharedStatusEl.textContent = '⏳ Buscando...';
+        await SharedConfig.refresh(true);
+        showSharedStatus();
       });
     };
 
@@ -7869,11 +7924,15 @@
           }
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        scriptsCache = await resp.json();
+        const fromDB = await resp.json();
+        // Mescla scripts compartilhados (GitHub) — precedem os do Supabase
+        const shared = SharedConfig.getScripts(false);
+        scriptsCache = [...shared, ...fromDB];
         return scriptsCache;
       } catch (e) {
         console.warn('[SMAX] ResponseHUD: falha ao carregar scripts:', e);
-        return [];
+        // Fallback: apenas os scripts compartilhados
+        return SharedConfig.getScripts(false);
       }
     };
 
@@ -7895,7 +7954,7 @@
             style="width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:5px 8px;color:#e5e7eb;font-size:12px;outline:none;">
         </div>
         <div id="smax-resp-script-list" style="max-height:220px;overflow-y:auto;">
-          ${scripts.map(s => `<div class="smax-resp-script-item" data-content="${Utils.escapeHtml(s.conteudo_bruto || '')}">${Utils.escapeHtml(s.nome)}</div>`).join('')}
+          ${scripts.map(s => `<div class="smax-resp-script-item" data-content="${Utils.escapeHtml(s.conteudo_bruto || '')}">${Utils.escapeHtml(s.nome)}${s._shared ? ' <span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);">☁️</span>' : ''}</div>`).join('')}
         </div>`;
 
       picker.querySelectorAll('.smax-resp-script-item').forEach(item => {
@@ -8953,15 +9012,30 @@
     const KEY_SOL  = 'smax_solutions_v2';
     const KEY_DISC = 'smax_discussions_v2';
 
+    let _sharedSol = [], _sharedDisc = [];
+
+    const setSharedScripts = (sol, disc) => {
+      _sharedSol = Array.isArray(sol) ? sol : [];
+      _sharedDisc = Array.isArray(disc) ? disc : [];
+    };
+
     // Normaliza os dois formatos: { title, html } (nosso) e { title, content } (Felipe)
     const normalize = (arr) => arr.map(t => ({
       title: t.title || '',
-      html: t.html || t.content || ''
+      html: t.html || t.content || '',
+      _shared: t._shared || false,
     }));
 
     const load = (disc) => {
       try { const r = JSON.parse(localStorage.getItem(disc ? KEY_DISC : KEY_SOL)); return normalize(Array.isArray(r) ? r : []); }
       catch { return []; }
+    };
+
+    // Returns local + shared (shared appended, marked with _shared:true)
+    const loadAll = (disc) => {
+      const local = load(disc);
+      const shared = normalize(disc ? _sharedDisc : _sharedSol).map(s => ({ ...s, _shared: true }));
+      return [...local, ...shared];
     };
     // Salva sempre no formato { title, html } para compatibilidade com os dois scripts
     const save = (disc, arr) => localStorage.setItem(disc ? KEY_DISC : KEY_SOL, JSON.stringify(normalize(arr)));
@@ -8983,20 +9057,23 @@
     let editingIdx = null;
 
     const renderList = () => {
-      const list = load(activeDisc);
+      const list = loadAll(activeDisc);
       const listEl = modalEl.querySelector('.smax-tpl-list');
       if (!listEl) return;
 
       listEl.innerHTML = list.length === 0
         ? `<div class="smax-tpl-empty">Nenhum script. Clique em "+ Novo" para criar.</div>`
         : list.map((t, i) => `
-          <div class="smax-tpl-item" data-idx="${i}">
-            <div class="smax-tpl-item-title">${Utils.escapeHtml(t.title)}</div>
+          <div class="smax-tpl-item" data-idx="${i}" data-shared="${t._shared ? '1' : ''}">
+            <div class="smax-tpl-item-title">
+              ${Utils.escapeHtml(t.title)}
+              ${t._shared ? '<span style="margin-left:5px;font-size:9px;padding:1px 5px;border-radius:999px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);vertical-align:middle;">☁️ Compartilhado</span>' : ''}
+            </div>
             <div class="smax-tpl-item-preview">${Utils.escapeHtml((t.html || '').replace(/<[^>]+>/g, ' ').trim())}</div>
-            <div class="smax-tpl-item-actions">
+            ${!t._shared ? `<div class="smax-tpl-item-actions">
               <button class="smax-tpl-edit-btn" data-idx="${i}">Editar</button>
               <button class="smax-tpl-del-btn"  data-idx="${i}">Excluir</button>
-            </div>
+            </div>` : ''}
           </div>
         `).join('');
 
@@ -9005,7 +9082,7 @@
           if (e.target.classList.contains('smax-tpl-edit-btn')) return;
           if (e.target.classList.contains('smax-tpl-del-btn')) return;
           const idx = parseInt(el.dataset.idx, 10);
-          const tpl = load(activeDisc)[idx];
+          const tpl = loadAll(activeDisc)[idx];
           if (!tpl) return;
           if (!insertIntoEditor(tpl.html)) {
             navigator.clipboard?.writeText(tpl.html).catch(() => {});
@@ -9132,7 +9209,7 @@
 
     const init = () => { /* botão externo removido — acesso via painel de configurações */ };
 
-    return { init, openModal, load, save, insertIntoEditor };
+    return { init, openModal, load, loadAll, save, insertIntoEditor, setSharedScripts };
   })();
 
   /* =========================================================
@@ -9897,6 +9974,109 @@
   })();
 
   /* =========================================================
+   * SharedConfig — configuração compartilhada via GitHub JSON
+   * Busca um arquivo JSON público e distribui equipes e scripts
+   * para toda a equipe sem banco de dados.
+   * =======================================================*/
+  const SharedConfig = (() => {
+    const CACHE_KEY = 'smax_shared_cache';
+    const TTL_MS = 60 * 60 * 1000; // 1 hora
+
+    let data = null;
+    let fetchedAt = 0;
+    let statusText = '';
+    let isLoading = false;
+
+    const loadCache = () => {
+      try {
+        const raw = GM_getValue(CACHE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        data = saved.data || null;
+        fetchedAt = saved.fetchedAt || 0;
+      } catch {}
+    };
+
+    const saveCache = (d) => {
+      try { GM_setValue(CACHE_KEY, JSON.stringify({ data: d, fetchedAt: Date.now() })); } catch {}
+    };
+
+    const applyToModules = () => {
+      if (!data) return;
+      if (Array.isArray(data.teams)) TeamsConfig.setSharedTeams(data.teams);
+      if (data.scripts) {
+        Templates.setSharedScripts(
+          Array.isArray(data.scripts.sol)  ? data.scripts.sol  : [],
+          Array.isArray(data.scripts.disc) ? data.scripts.disc : []
+        );
+      }
+    };
+
+    const refresh = (force = false) => {
+      const url = (prefs.sharedConfigUrl || '').trim();
+      if (!url) { statusText = 'URL não configurada.'; return Promise.resolve(null); }
+      if (!force && data && (Date.now() - fetchedAt) < TTL_MS) return Promise.resolve(data);
+
+      isLoading = true;
+      statusText = 'Buscando...';
+
+      return new Promise((resolve) => {
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url: url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now(),
+          headers: { 'Cache-Control': 'no-cache' },
+          timeout: 15000,
+          onload: (res) => {
+            isLoading = false;
+            try {
+              if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+              const parsed = JSON.parse(res.responseText);
+              data = parsed;
+              fetchedAt = Date.now();
+              saveCache(data);
+              const now = new Date();
+              const hm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+              statusText = `✓ v${data._version || '1'} — ${hm}`;
+              console.log('[SMAX SharedConfig] carregado:', data._version, '| equipes:', (data.teams||[]).length, '| scripts sol:', (data.scripts?.sol||[]).length);
+              applyToModules();
+              resolve(data);
+            } catch (e) {
+              statusText = `Erro: ${e.message}`;
+              console.warn('[SMAX SharedConfig]', e);
+              resolve(data);
+            }
+          },
+          onerror: () => { isLoading = false; statusText = 'Erro de rede (cache local em uso)'; resolve(data); },
+          ontimeout: () => { isLoading = false; statusText = 'Timeout (cache local em uso)'; resolve(data); },
+        });
+      });
+    };
+
+    const init = () => {
+      loadCache();
+      if (data) applyToModules(); // aplica cache imediatamente
+      refresh();                  // atualiza em segundo plano (sem await)
+    };
+
+    // Scripts no formato compatível com o picker do ResponseHUD (nome/conteudo_bruto)
+    const getScripts = (disc) => {
+      if (!data?.scripts) return [];
+      const arr = disc ? (data.scripts.disc || []) : (data.scripts.sol || []);
+      return arr.map(s => ({
+        ...s,
+        _shared: true,
+        nome: s.title || s.nome || '',
+        conteudo_bruto: s.html || s.conteudo_bruto || '',
+      }));
+    };
+
+    const getStatus = () => ({ text: statusText, loading: isLoading, fetchedAt });
+    const get = () => data;
+
+    return { init, refresh, get, getStatus, getScripts };
+  })();
+
+  /* =========================================================
    * Boot
    * =======================================================*/
   const boot = () => {
@@ -9918,6 +10098,7 @@
     PageLinkifier.init();
     BlackHeader.init();
     TicketInfoBar.init();
+    SharedConfig.init();
     DataRepository.refreshQueueFromApi().catch(() => { });
     DataRepository.ensureSupportGroups().catch(() => { });
   };
