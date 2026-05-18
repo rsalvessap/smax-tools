@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.63
+// @version      1.64
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -2226,11 +2226,7 @@
           }
           if (globalChangeId) break;
         }
-        // Debug: loga as chaves de rel para chamados com Description (fetch completo)
-        if (!globalChangeId && props.Description !== undefined) {
-          const relKeys = Object.keys(rel);
-          if (relKeys.length > 1) console.log('[SMAX Debug] rel keys para', id, ':', relKeys.join(', '));
-        }
+
       }
 
       triageCache.set(id, Object.assign({}, existing, {
@@ -2550,6 +2546,41 @@
         });
     };
 
+    // Busca o chamado pai (global) via relacionamento RequestCausesRequest
+    // secondEndpoint = filho, firstEndpoint = pai (global)
+    const fetchParentRequest = async (id) => {
+      const key = String(id || '').replace(/\D/g, '') || String(id || '');
+      if (!key) return null;
+      // Se já temos, não busca de novo
+      const cached = triageCache.get(key);
+      if (cached?.globalChangeId) return cached.globalChangeId;
+      try {
+        const payload = await ApiClient.request('ems/RequestCausesRequest', {
+          method: 'GET',
+          searchParams: {
+            filter: `(secondEndpoint='${key}')`,
+            layout: 'firstEndpoint,secondEndpoint',
+            size: 1
+          },
+          includeTenantParam: true
+        });
+        const entities = payload?.entities || [];
+        if (!entities.length) return null;
+        const props = entities[0]?.properties || {};
+        const parentRaw = props.firstEndpoint || props.FirstEndpoint || '';
+        const parentId = String(parentRaw).replace(/^IMRfc:/, '').replace(/^IMchg:/, '').trim();
+        if (!parentId || parentId === key) return null;
+        // Persiste no triageCache
+        const existing = triageCache.get(key) || {};
+        triageCache.set(key, Object.assign({}, existing, { globalChangeId: parentId }));
+        console.log('[SMAX] RequestCausesRequest → chamado', key, 'tem pai global:', parentId);
+        return parentId;
+      } catch (err) {
+        console.warn('[SMAX] fetchParentRequest falhou para', key, err);
+        return null;
+      }
+    };
+
     const updateCachedSolution = (id, html) => {
       const key = String(id || '');
       if (!key || !triageCache.has(key)) return;
@@ -2577,6 +2608,7 @@
       upsertTriageEntryFromProps,
       ingestRequestDetailPayload,
       updateCachedSolution,
+      fetchParentRequest,
       ingestSupportGroupPayload,
       getSupportGroupsSnapshot,
       onQueueUpdate: (fn) => {
@@ -7229,38 +7261,44 @@
         el.classList.toggle('active', el.dataset.id === id);
       });
       setStatusMsg('Carregando chamado...', '#93c5fd');
-      try {
-        const entry = await DataRepository.ensureRequestPayload(id, { force: true });
-        renderTicketDetail(entry || DataRepository.triageCache.get(id) || null);
-        // Atualiza o assunto e badge global no item da lista após carregamento completo
-        const subjectText = entry?.subjectText || '';
-        const listItem = backdrop?.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(id)}"]`);
-        if (listItem) {
-          // Atualiza assunto
-          if (subjectText && subjectText !== id) {
-            const subEl = listItem.querySelector('.smax-resp-ticket-subject');
-            if (subEl) {
-              subEl.textContent = subjectText.slice(0, 55);
-              subEl.title = subjectText;
-            } else {
-              const idDiv = listItem.querySelector('.smax-resp-ticket-id');
-              if (idDiv) {
-                const newSub = document.createElement('div');
-                newSub.className = 'smax-resp-ticket-subject';
-                newSub.title = subjectText;
-                newSub.textContent = subjectText.slice(0, 55);
-                idDiv.after(newSub);
-              }
+
+      // Função auxiliar para aplicar subject + badge global no item da lista
+      const applyListItemUpdates = (ticketId) => {
+        const listItem = backdrop?.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(ticketId)}"]`);
+        if (!listItem) return;
+        const subjectText = DataRepository.triageCache.get(ticketId)?.subjectText || '';
+        if (subjectText && subjectText !== ticketId) {
+          const subEl = listItem.querySelector('.smax-resp-ticket-subject');
+          if (subEl) {
+            subEl.textContent = subjectText.slice(0, 55);
+            subEl.title = subjectText;
+          } else {
+            const idDiv = listItem.querySelector('.smax-resp-ticket-id');
+            if (idDiv) {
+              const newSub = document.createElement('div');
+              newSub.className = 'smax-resp-ticket-subject';
+              newSub.title = subjectText;
+              newSub.textContent = subjectText.slice(0, 55);
+              idDiv.after(newSub);
             }
           }
-          // Atualiza badge global (se não estava na lista antes)
-          const globalId = DataRepository.triageCache.get(id)?.globalChangeId || '';
-          const idDiv = listItem.querySelector('.smax-resp-ticket-id');
-          if (idDiv && globalId && !idDiv.querySelector('.smax-global-badge')) {
-            idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(id)}</span>`
-              + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;vertical-align:middle;">⬆ #${Utils.escapeHtml(globalId)}</span>`;
-          }
         }
+        const globalId = DataRepository.triageCache.get(ticketId)?.globalChangeId || '';
+        const idDiv = listItem.querySelector('.smax-resp-ticket-id');
+        if (idDiv && globalId && !idDiv.querySelector('.smax-global-badge')) {
+          idDiv.innerHTML = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(ticketId)}</span>`
+            + ` <span class="smax-global-badge" style="color:#f87171;font-size:9px;vertical-align:middle;">⬆ #${Utils.escapeHtml(globalId)}</span>`;
+        }
+      };
+
+      try {
+        // Busca detalhe do ticket e relacionamento pai em paralelo
+        const [entry] = await Promise.all([
+          DataRepository.ensureRequestPayload(id, { force: true }),
+          DataRepository.fetchParentRequest(id)
+        ]);
+        renderTicketDetail(entry || DataRepository.triageCache.get(id) || null);
+        applyListItemUpdates(id);
         setStatusMsg('', '');
       } catch (e) {
         setStatusMsg('Erro ao carregar chamado.', '#fca5a5');
