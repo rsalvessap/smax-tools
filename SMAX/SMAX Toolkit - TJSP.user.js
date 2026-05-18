@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.59
+// @version      1.60
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -6892,16 +6892,15 @@
     let activeTicketId = '';
     let personSearchTimeout = null;
     let scriptsCache = null;
-    const pendingChanges = new Map(); // ticketId -> { gse?: {id,name}, assignee?: {id,name} }
+    // Alterações pendentes compartilhadas — aplicadas a TODOS os tickets selecionados ao enviar
+    let batchPending = {}; // { gse?: {id,name}, assignee?: {id,name} }
 
-    const getTicketPending = (id) => pendingChanges.get(id) || {};
-    const setTicketPending = (id, field, value) => {
-      const cur = pendingChanges.get(id) || {};
-      if (value === null) { delete cur[field]; }
-      else { cur[field] = value; }
-      if (Object.keys(cur).length === 0) pendingChanges.delete(id);
-      else pendingChanges.set(id, cur);
+    const getBatchPending = () => batchPending;
+    const setBatchPending = (field, value) => {
+      if (value === null) delete batchPending[field];
+      else batchPending[field] = value;
     };
+    const clearBatchPending = () => { batchPending = {}; };
 
     const resolveAssigneeName = (personId) => {
       if (!personId) return '';
@@ -6947,7 +6946,7 @@
       const count = selectedTicketIds.size;
       const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
       const hasSolution = !!(solEl?.value || '').trim();
-      const pending = getTicketPending(activeTicketId);
+      const pending = getBatchPending();
       const hasPending = !!(pending.gse || pending.assignee);
       if (count > 1) {
         btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
@@ -7116,8 +7115,8 @@
         }
       }
 
-      // Meta-bar: GSE chip
-      const pending = getTicketPending(entry.idText || activeTicketId);
+      // Meta-bar: GSE chip (mostra batchPending — aplica-se a todos os selecionados)
+      const pending = getBatchPending();
       const gseChipName = backdrop.querySelector('#smax-resp-gse-chip-name');
       const gseBtn = backdrop.querySelector('#smax-resp-gse-btn');
       if (gseChipName && gseBtn) {
@@ -7476,7 +7475,8 @@
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
       const solutionRaw = (solEl?.value || '').trim();
-      const pending = getTicketPending(id);
+      // batchPending aplica-se a TODOS os tickets selecionados
+      const pending = getBatchPending();
       const hasSolution = !!solutionRaw;
       const hasGse = !!(pending.gse && pending.gse.id);
       const hasAssignee = !!(pending.assignee && pending.assignee.id);
@@ -7496,9 +7496,7 @@
         const result = await ApiClient.ems.bulk(body);
         const outcome = Api.summarizeBulkOutcome(result);
         if (outcome?.ok !== false) {
-          // Limpa pending changes do chamado após sucesso
-          pendingChanges.delete(id);
-          // Atualiza o triageCache se necessário
+          // Atualiza triageCache local do ticket
           if (hasGse || hasAssignee) {
             const entry = DataRepository.triageCache.get(id);
             if (entry) {
@@ -7542,8 +7540,17 @@
       }
       if (sendBtn) sendBtn.disabled = false;
       if (batchBtn) batchBtn.disabled = false;
-      updateSendButton();
+
       if (fail === 0 && ok > 0) {
+        // Sucesso total — limpa estado compartilhado
+        clearBatchPending();
+        const solEl = backdrop?.querySelector('#smax-resp-solution-textarea');
+        if (solEl) solEl.value = '';
+        // Re-renderiza chips sem dirty
+        if (activeTicketId) {
+          const entry = DataRepository.triageCache.get(activeTicketId);
+          if (entry) renderTicketDetail(entry);
+        }
         const skipNote = skipped > 0 ? ` (${skipped} sem alterações, ignorado${skipped !== 1 ? 's' : ''})` : '';
         setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}`, '#4ade80');
       } else if (fail === 0 && ok === 0) {
@@ -7551,6 +7558,7 @@
       } else {
         setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
       }
+      updateSendButton();
     };
 
     const closeAllPickers = () => {
@@ -7581,7 +7589,7 @@
       positionPicker(picker, btn);
 
       const groups = await DataRepository.ensureSupportGroups();
-      const pending = getTicketPending(activeTicketId);
+      const pending = getBatchPending();
       const currentGroupId = pending.gse?.id || DataRepository.triageCache.get(activeTicketId)?.assignmentGroupId || '';
 
       const renderGroups = (filter) => {
@@ -7604,18 +7612,17 @@
             const gname = item.dataset.name;
             const chipEl = backdrop.querySelector('#smax-resp-gse-chip-name');
             const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
-            const origEntry = DataRepository.triageCache.get(activeTicketId);
-            const isOriginal = gid === (origEntry?.assignmentGroupId || '');
-            if (isOriginal) {
-              setTicketPending(activeTicketId, 'gse', null);
-            } else {
-              setTicketPending(activeTicketId, 'gse', { id: gid, name: gname });
-            }
-            if (chipEl) chipEl.textContent = gname;
+            // Toggle: se já tem esse grupo no pending, remove; senão, seta
+            const curPending = getBatchPending();
+            const alreadySet = curPending.gse?.id === gid;
+            setBatchPending('gse', alreadySet ? null : { id: gid, name: gname });
+            const isDirty = !alreadySet;
+            if (chipEl) chipEl.textContent = isDirty ? gname : (DataRepository.triageCache.get(activeTicketId)?.assignmentGroupName || '—');
             if (chipBtn) {
-              chipBtn.classList.toggle('dirty', !isOriginal);
-              chipBtn.title = !isOriginal ? `Alterar GSE (pendente: ${gname})` : 'Alterar GSE (Grupo de Suporte)';
+              chipBtn.classList.toggle('dirty', isDirty);
+              chipBtn.title = isDirty ? `Alterar GSE → ${gname} (todos selecionados)` : 'Alterar GSE (Grupo de Suporte)';
             }
+            updateSendButton();
             picker.style.display = 'none';
           });
         });
@@ -7651,7 +7658,7 @@
       positionPicker(picker, btn);
 
       await DataRepository.ensurePeopleLoaded();
-      const pending = getTicketPending(activeTicketId);
+      const pending = getBatchPending();
       const currentAssigneeId = pending.assignee?.id || DataRepository.triageCache.get(activeTicketId)?.expertAssigneeId || '';
       const people = Array.from(DataRepository.peopleCache.values()).sort((a, b) =>
         (a.name || '').localeCompare(b.name || '', 'pt'));
@@ -7677,18 +7684,17 @@
             const pname = item.dataset.name;
             const chipEl = backdrop.querySelector('#smax-resp-assignee-chip-name');
             const chipBtn = backdrop.querySelector('#smax-resp-assignee-btn');
+            const curPending = getBatchPending();
+            const alreadySet = curPending.assignee?.id === pid;
+            setBatchPending('assignee', alreadySet ? null : { id: pid, name: pname });
+            const isDirty = !alreadySet;
             const origEntry = DataRepository.triageCache.get(activeTicketId);
-            const isOriginal = pid === (origEntry?.expertAssigneeId || '');
-            if (isOriginal) {
-              setTicketPending(activeTicketId, 'assignee', null);
-            } else {
-              setTicketPending(activeTicketId, 'assignee', { id: pid, name: pname });
-            }
-            if (chipEl) chipEl.textContent = pname;
+            if (chipEl) chipEl.textContent = isDirty ? pname : (resolveAssigneeName(origEntry?.expertAssigneeId || '') || 'Sem especialista');
             if (chipBtn) {
-              chipBtn.classList.toggle('dirty', !isOriginal);
-              chipBtn.title = !isOriginal ? `Alterar especialista (pendente: ${pname})` : 'Alterar especialista';
+              chipBtn.classList.toggle('dirty', isDirty);
+              chipBtn.title = isDirty ? `Alterar especialista → ${pname} (todos selecionados)` : 'Alterar especialista';
             }
+            updateSendButton();
             picker.style.display = 'none';
           });
         });
