@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.80
+// @version      1.81
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.80';
+  const SMAX_TOOLKIT_VERSION = '1.81';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -597,6 +597,9 @@
     .smax-sort-btn:hover { color:#9ca3af; border-color:rgba(255,255,255,.2); }
     .smax-sort-btn.active { background:rgba(59,130,246,.2); border-color:#3b82f6; color:#93c5fd; }
     .smax-resp-disc-recent { border-color:rgba(59,130,246,.35) !important; background:rgba(59,130,246,.08) !important; }
+    #smax-gse-fwd-editor { min-height:72px; max-height:200px; overflow-y:auto; background:#1e293b; border:1px solid rgba(255,255,255,.15); border-radius:6px; color:#e2e8f0; font-size:11px; padding:6px; outline:none; line-height:1.5; font-family:inherit; }
+    #smax-gse-fwd-editor:empty::before { content:attr(data-placeholder); color:#6b7280; pointer-events:none; display:block; }
+    #smax-gse-fwd-editor img { max-width:100%; height:auto; border-radius:4px; vertical-align:middle; }
     .smax-resp-disc-footer { display:flex; justify-content:flex-end; margin-top:5px; padding-top:4px; border-top:1px solid rgba(255,255,255,.05); }
     .smax-resp-disc-replicate-btn { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#6b7280; cursor:pointer; transition:all .12s; }
     .smax-resp-disc-replicate-btn:hover:not(:disabled) { border-color:rgba(59,130,246,.5); color:#93c5fd; background:rgba(59,130,246,.1); }
@@ -2926,7 +2929,7 @@
               complexTypeProperties: [{
                 changeType: 'ADD',
                 properties: {
-                  Body: bodyHtml,
+                  CommentBody:       bodyHtml,
                   FunctionalPurpose: purposeCode || 'FunctionalPurposeComment',
                   PrivacyType:       privacyCode || 'PrivacyTypeInternal',
                 }
@@ -7373,6 +7376,28 @@
       div.innerHTML = html;
       return (div.textContent || div.innerText || '').trim();
     };
+    // Adiciona suporte a colar imagem (base64 inline) em qualquer editor contenteditable
+    const addImagePasteHandler = (editor, onInput) => {
+      if (!editor) return;
+      editor.addEventListener('paste', e => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
+            const reader = new FileReader();
+            reader.onload = ev => {
+              document.execCommand('insertImage', false, ev.target.result);
+              if (onInput) onInput();
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      });
+    };
 
     // Painel de anexos do ResponseHUD
     let attachFetchSeq = 0;
@@ -7865,9 +7890,9 @@
         (selectedAssignees.size === 0 || selectedAssignees.has(e.assignee)) &&
         (!q ||
           e.id.includes(q) ||
-          (e.descSnippet     || '').toLowerCase().includes(q) ||
-          (e.requestedForName || '').toLowerCase().includes(q) ||
-          (e.locationName    || '').toLowerCase().includes(q))
+          (e.descSnippet || '').toLowerCase().includes(q) ||
+          (e.requestedForName || DataRepository.triageCache.get(e.id)?.requestedForName || '').toLowerCase().includes(q) ||
+          (e.locationName    || DataRepository.triageCache.get(e.id)?.locationName    || '').toLowerCase().includes(q))
       );
       // Ordenação
       ticketList.sort((a, b) => {
@@ -7891,6 +7916,8 @@
       });
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
       if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
+      const clearBtn = backdrop?.querySelector('#smax-resp-clear-filters');
+      if (clearBtn) clearBtn.style.display = (selectedStatuses.size > 0 || selectedAssignees.size > 0) ? '' : 'none';
       setStatusMsg('', '');
       renderTicketList();
       updateBatchBar();
@@ -8065,15 +8092,16 @@
           infoEl.style.display = '';
         }
 
-        // Gerar pills de filtro
-        renderStatusPills(allFetchedEntries);
-        renderAssigneePills(allFetchedEntries);
-
-        // Restaurar filtros que ainda existam nos novos dados
+        // Restaurar filtros que ainda existam nos novos dados — ANTES de renderizar as pills
+        // para que elas reflitam o estado ativo corretamente
         const newStatusSet   = new Set(allFetchedEntries.map(e => e.statusSCCD).filter(Boolean));
         const newAssigneeSet = new Set(allFetchedEntries.map(e => e.assignee));
         prevStatuses.forEach(s  => { if (newStatusSet.has(s))   selectedStatuses.add(s); });
         prevAssignees.forEach(a => { if (newAssigneeSet.has(a)) selectedAssignees.add(a); });
+
+        // Gerar pills de filtro (agora refletem o estado restaurado)
+        renderStatusPills(allFetchedEntries);
+        renderAssigneePills(allFetchedEntries);
 
         // Aplicar filtros (vazio = mostrar todos)
         applyFilters();
@@ -8486,8 +8514,8 @@
               </div>
               <div id="smax-gse-fwd-area" style="display:none;padding:0 12px 10px;">
                 <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">${quickHtml}</div>
-                <textarea id="smax-gse-fwd-text" placeholder="Texto de encaminhamento..."
-                  style="width:100%;height:72px;background:#1e293b;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:11px;padding:6px;resize:vertical;box-sizing:border-box;outline:none;"></textarea>
+                <div id="smax-gse-fwd-editor" contenteditable="true" spellcheck="false"
+                  data-placeholder="Texto de encaminhamento (suporta imagens coladas)..."></div>
               </div>
               <div style="display:flex;gap:6px;padding:8px 12px;border-top:1px solid rgba(255,255,255,.08);">
                 <button id="smax-gse-fwd-back" style="flex:1;padding:5px 0;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:transparent;color:#9ca3af;font-size:11px;cursor:pointer;">← Voltar</button>
@@ -8499,14 +8527,16 @@
             const fwdArea = picker.querySelector('#smax-gse-fwd-area');
             cb.addEventListener('change', () => {
               fwdArea.style.display = cb.checked ? 'block' : 'none';
-              if (cb.checked) picker.querySelector('#smax-gse-fwd-text')?.focus();
+              if (cb.checked) picker.querySelector('#smax-gse-fwd-editor')?.focus();
             });
+            // Paste de imagem no editor de encaminhamento
+            addImagePasteHandler(picker.querySelector('#smax-gse-fwd-editor'));
 
             // Botões rápidos
             picker.querySelectorAll('.smax-gse-fwd-quick').forEach(qbtn => {
               qbtn.addEventListener('click', () => {
-                const ta = picker.querySelector('#smax-gse-fwd-text');
-                if (ta) { ta.value = qbtn.dataset.text; ta.focus(); }
+                const ta = picker.querySelector('#smax-gse-fwd-editor');
+                if (ta) { ta.innerHTML = Utils.escapeHtml(qbtn.dataset.text).replace(/\n/g, '<br>'); ta.focus(); }
               });
             });
 
@@ -8525,7 +8555,7 @@
               const chipBtn = backdrop.querySelector('#smax-resp-gse-btn');
               setBatchPending('gse', { id: gid, name: gname });
               if (chipEl) chipEl.textContent = gname;
-              const fwdText = cb.checked ? (picker.querySelector('#smax-gse-fwd-text')?.value || '').trim() : '';
+              const fwdText = cb.checked ? (picker.querySelector('#smax-gse-fwd-editor')?.innerHTML || '').trim() : '';
               setBatchPending('forwarding', fwdText ? { text: fwdText } : null);
               if (chipBtn) {
                 chipBtn.classList.add('dirty');
@@ -8663,6 +8693,7 @@
               <div id="smax-resp-filter-header">
                 <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;">Filtros</span>
                 <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
+                  <button id="smax-resp-clear-filters" title="Limpar filtros ativos" style="display:none;padding:3px 7px;border:1px solid rgba(248,113,113,.35);border-radius:5px;background:rgba(248,113,113,.08);color:#f87171;font-size:10px;cursor:pointer;white-space:nowrap;">✕ Limpar</button>
                   <button id="smax-resp-fetch-btn" style="padding:5px 10px;border:none;border-radius:6px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">↺ Carregar</button>
                   <button id="smax-resp-toggle-criteria" title="Mostrar/ocultar critérios" style="padding:4px 7px;border:1px solid rgba(255,255,255,.12);border-radius:5px;background:transparent;color:#9ca3af;font-size:11px;cursor:pointer;line-height:1;">▲</button>
                 </div>
@@ -8906,6 +8937,15 @@
       };
       toggleBtn?.addEventListener('click', () => setCriteriaVisible(criteriaEl?.classList.contains('collapsed')));
 
+      // Limpar filtros ativos
+      backdrop.querySelector('#smax-resp-clear-filters')?.addEventListener('click', () => {
+        selectedStatuses.clear();
+        selectedAssignees.clear();
+        applyFilters();
+        renderStatusPills(allFetchedEntries);
+        renderAssigneePills(allFetchedEntries);
+      });
+
       // Fetch button — carregar e recolher critérios automaticamente
       backdrop.querySelector('#smax-resp-fetch-btn')?.addEventListener('click', async () => {
         await fetchTickets();
@@ -8925,7 +8965,9 @@
       });
 
       // Atualiza label do botão ao digitar na solução
-      backdrop.querySelector('#smax-resp-solution-editor')?.addEventListener('input', updateSendButton);
+      const solEditor = backdrop.querySelector('#smax-resp-solution-editor');
+      solEditor?.addEventListener('input', updateSendButton);
+      addImagePasteHandler(solEditor, updateSendButton);
 
       // Toolbar de formatação (execCommand via mousedown para não tirar o foco do editor)
       backdrop.querySelectorAll('#smax-resp-solution-toolbar .smax-resp-tb-btn').forEach(btn => {
