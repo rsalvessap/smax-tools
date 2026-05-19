@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.83
+// @version      1.84
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.83';
+  const SMAX_TOOLKIT_VERSION = '1.84';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -2120,7 +2120,8 @@
       if (!safeHtml && !bodyText) return null;
 
       const purposeCode = raw.FunctionalPurpose || '';
-      const { code: privacyCode, label: privacyLabel } = mapPrivacyLabel(raw.PrivacyType || '');
+      const privacyRaw  = raw.PrivacyType || '';
+      const { code: privacyCode, label: privacyLabel } = mapPrivacyLabel(privacyRaw);
       const submitter = raw.Submitter || raw.SubmitterId || '';
       let submitterPersonId = '';
       if (submitter) {
@@ -2147,6 +2148,7 @@
         purposeCode,
         purposeLabel: mapPurposeLabel(purposeCode),
         privacyCode,
+        privacyRaw,
         privacyLabel,
         bodyHtml: safeHtml,
         bodyText,
@@ -2987,9 +2989,12 @@
       return { ok: false, messages: [`Operação ${index + 1} falhou sem detalhes (status: ${normalizedStatus || 'desconhecido'}).`] };
     };
 
-    const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyCode } = {}) => {
+    const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
       if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
       if (!ticketId || !bodyHtml) return Promise.resolve(null);
+      const props = { CommentBody: bodyHtml };
+      if (purposeCode) props.FunctionalPurpose = purposeCode;
+      if (privacyRaw)  props.PrivacyType = privacyRaw;
       const body = {
         entities: [{
           entity_type: 'Request',
@@ -2998,11 +3003,7 @@
             Comments: {
               complexTypeProperties: [{
                 changeType: 'ADD',
-                properties: {
-                  CommentBody:       bodyHtml,
-                  FunctionalPurpose: purposeCode || 'FunctionalPurposeComment',
-                  PrivacyType:       privacyCode || 'PrivacyTypeInternal',
-                }
+                properties: props,
               }]
             }
           }
@@ -7677,7 +7678,7 @@
         const result = await Api.postDiscussion(activeTicketId, {
           bodyHtml:    disc.bodyHtml,
           purposeCode: disc.purposeCode,
-          privacyCode: disc.privacyCode,
+          privacyRaw:  disc.privacyRaw,
         });
         const outcome = Api.summarizeBulkOutcome(result);
         if (outcome?.ok !== false) {
