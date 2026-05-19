@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.82
+// @version      1.83
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -41,10 +41,10 @@
   if (window.location.hostname !== 'suporte.tjsp.jus.br') return;
 
   /* Supabase — Gerenciador de Chamados (chave pública exposta no bundle do app) */
-  const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
-  const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
+  const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
+  const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.82';
+  const SMAX_TOOLKIT_VERSION = '1.83';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -227,6 +227,75 @@
       }
     };
 
+    // ── Supabase sync ──────────────────────────────────────────
+    const SB_WRITE_HEADERS = {
+      apikey:          SMAX_SB_KEY,
+      Authorization:   `Bearer ${SMAX_SB_KEY}`,
+      'Content-Type':  'application/json',
+      'Accept-Profile':'public',
+      'Prefer':        'return=minimal,resolution=ignore-duplicates',
+    };
+    const SB_READ_HEADERS = {
+      apikey:          SMAX_SB_KEY,
+      Authorization:   `Bearer ${SMAX_SB_KEY}`,
+      'Accept-Profile':'public',
+    };
+
+    const syncToSupabase = (entry) => {
+      try {
+        const equipeId = GM_getValue('smax_gerenciador_equipe_id', null);
+        const row = {
+          ts:               entry.ts,
+          ticket_id:        entry.ticketId,
+          relevant_work:    entry.relevantWork  || null,
+          answered:         !!entry.answered,
+          assigned:         !!entry.assigned,
+          assigned_to:      entry.assignedTo    || null,
+          global_assigned:  !!entry.globalAssigned,
+          global_change_id: entry.globalChangeId || null,
+          transferred:      !!entry.transferred,
+          transferred_to:   entry.transferredTo  || null,
+          used_script:      !!entry.usedScript,
+          user_name:        entry.user           || null,
+          equipe_id:        equipeId             || null,
+          success:          entry.success !== false,
+        };
+        fetch(`${SMAX_SB_URL}/rest/v1/smax_activity_log`, {
+          method:  'POST',
+          headers: SB_WRITE_HEADERS,
+          body:    JSON.stringify(row),
+        }).catch(e => console.warn('[SMAX] ActivityLog Supabase sync failed:', e));
+      } catch (e) {
+        console.warn('[SMAX] ActivityLog syncToSupabase error:', e);
+      }
+    };
+
+    const fetchFromSupabase = async (fromTs, toTs) => {
+      const equipeId = GM_getValue('smax_gerenciador_equipe_id', null);
+      const eqFilter = equipeId ? `&equipe_id=eq.${encodeURIComponent(equipeId)}` : '';
+      const url = `${SMAX_SB_URL}/rest/v1/smax_activity_log`
+        + `?ts=gte.${fromTs}&ts=lte.${toTs}&order=ts.asc&limit=10000${eqFilter}`;
+      const resp = await fetch(url, { headers: SB_READ_HEADERS });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      return (data || []).map(r => ({
+        ts:             r.ts,
+        ticketId:       r.ticket_id,
+        relevantWork:   r.relevant_work    || '',
+        answered:       r.answered,
+        assigned:       r.assigned,
+        assignedTo:     r.assigned_to      || '',
+        globalAssigned: r.global_assigned,
+        globalChangeId: r.global_change_id || '',
+        transferred:    r.transferred,
+        transferredTo:  r.transferred_to   || '',
+        usedScript:     r.used_script,
+        user:           r.user_name        || '',
+        success:        r.success,
+      }));
+    };
+    // ──────────────────────────────────────────────────────────
+
     const deriveRelevantWork = (data) => {
       // Priority: RESPONDIDO > VINCULO_GLOBAL > TRANSFERIDO > DESIGNADO
       if (data.answered) return 'RESPONDIDO';
@@ -256,6 +325,7 @@
       entry.relevantWork = deriveRelevantWork(entry);
       entries.push(entry);
       save();
+      syncToSupabase(entry);
       console.log('[SMAX] Activity logged:', entry);
     };
 
@@ -350,7 +420,7 @@
 
     load();
 
-    return { log, exportCsv, clear, getCount, getEntries, getGlobalMap, load };
+    return { log, exportCsv, clear, getCount, getEntries, getGlobalMap, load, fetchFromSupabase };
   })();
 
   /* =========================================================
@@ -4931,13 +5001,26 @@
       const exportBtn = container.querySelector('#smax-resp-report-export-sp');
       const contentEl = container.querySelector('#smax-resp-report-content-sp');
 
-      genBtn?.addEventListener('click', () => {
+      genBtn?.addEventListener('click', async () => {
         const fromVal = fromInput?.value;
         const toVal = toInput?.value;
         if (!fromVal || !toVal || !contentEl) return;
         const fromTs = new Date(fromVal + 'T00:00:00').getTime();
         const toTs = new Date(toVal + 'T23:59:59').getTime();
-        const entries = ActivityLog.getEntries().filter(e => e.ts >= fromTs && e.ts <= toTs);
+        genBtn.disabled = true;
+        genBtn.textContent = '…';
+        contentEl.innerHTML = '<div style="color:var(--sp-text-muted);font-size:12px;padding:10px 0;">Consultando Supabase…</div>';
+        let entries, source;
+        try {
+          entries = await ActivityLog.fetchFromSupabase(fromTs, toTs);
+          source = '☁ Supabase';
+        } catch (e) {
+          console.warn('[SMAX] Supabase fetch failed, using local:', e);
+          entries = ActivityLog.getEntries().filter(e => e.ts >= fromTs && e.ts <= toTs);
+          source = '⚠ Local';
+        }
+        genBtn.disabled = false;
+        genBtn.textContent = 'Gerar';
         if (!entries.length) {
           contentEl.innerHTML = '<div style="color:var(--sp-text-muted);font-size:12px;padding:10px 0;">Nenhuma atividade no período.</div>';
           if (exportBtn) exportBtn.style.display = 'none';
@@ -4949,6 +5032,7 @@
         const pad2 = n => String(n).padStart(2, '0');
         const fmtTs = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
         const summaryHtml = `
+          <div style="font-size:10px;color:var(--sp-text-muted);margin-bottom:8px;">Fonte: <b>${source}</b> — ${entries.length} registro(s)</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
             ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
               `<div style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:8px;padding:6px 12px;text-align:center;">
@@ -9186,7 +9270,7 @@
       backdrop.querySelector('#smax-resp-report-close')?.addEventListener('click', () => {
         if (reportModal) reportModal.style.display = 'none';
       });
-      backdrop.querySelector('#smax-resp-report-gen-btn')?.addEventListener('click', () => {
+      backdrop.querySelector('#smax-resp-report-gen-btn')?.addEventListener('click', async function() {
         const fromVal = backdrop.querySelector('#smax-resp-report-from')?.value;
         const toVal = backdrop.querySelector('#smax-resp-report-to')?.value;
         const content = backdrop.querySelector('#smax-resp-report-content');
@@ -9194,7 +9278,18 @@
         if (!fromVal || !toVal) { if (content) content.innerHTML = '<div style="color:#fca5a5;font-size:12px;padding:20px;">Informe o período completo.</div>'; return; }
         const fromTs = new Date(fromVal + 'T00:00:00').getTime();
         const toTs = new Date(toVal + 'T23:59:59').getTime();
-        const entries = ActivityLog.getEntries().filter(e => e.ts >= fromTs && e.ts <= toTs);
+        this.disabled = true; this.textContent = '…';
+        if (content) content.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:20px;text-align:center;">Consultando Supabase…</div>';
+        let entries, source;
+        try {
+          entries = await ActivityLog.fetchFromSupabase(fromTs, toTs);
+          source = '☁ Supabase';
+        } catch (e) {
+          console.warn('[SMAX] Supabase fetch failed, using local:', e);
+          entries = ActivityLog.getEntries().filter(e => e.ts >= fromTs && e.ts <= toTs);
+          source = '⚠ Local';
+        }
+        this.disabled = false; this.textContent = 'Gerar';
         if (!entries.length) {
           if (content) content.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:20px;text-align:center;">Nenhuma atividade no período.</div>';
           if (exportBtn) exportBtn.style.display = 'none';
@@ -9207,6 +9302,7 @@
         const pad2 = n => String(n).padStart(2, '0');
         const fmtTs = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
         const summaryHtml = `
+          <div style="font-size:10px;color:#6b7280;margin-bottom:8px;">Fonte: <b style="color:#9ca3af;">${source}</b> — ${entries.length} registro(s)</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
             ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
               `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 14px;text-align:center;">
