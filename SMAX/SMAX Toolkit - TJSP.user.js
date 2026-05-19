@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.81
+// @version      1.82
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.81';
+  const SMAX_TOOLKIT_VERSION = '1.82';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -8229,7 +8229,8 @@
       try {
         const result  = await ApiClient.ems.bulk(body);
         const outcome = Api.summarizeBulkOutcome(result);
-        if (outcome?.ok !== false) {
+        const success = outcome?.ok !== false;
+        if (success) {
           const entry = DataRepository.triageCache.get(id);
           if (entry && (gseWillChange || assigneeWillChange)) {
             DataRepository.triageCache.set(id, Object.assign({}, entry, {
@@ -8239,8 +8240,22 @@
             }));
           }
         }
+        // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
+        ActivityLog.log({
+          ticketId:      id,
+          answered:      hasSolution,
+          assigned:      assigneeWillChange,
+          assignedTo:    hasSolution       ? (prefs.myPersonName || '')
+                       : assigneeWillChange ? (pending.assignee.name || pending.assignee.id)
+                       : '',
+          transferred:   gseWillChange,
+          transferredTo: gseWillChange ? (pending.gse.name || pending.gse.id) : '',
+          usedScript:    false,
+          success,
+        });
         return outcome;
       } catch (e) {
+        ActivityLog.log({ ticketId: id, answered: hasSolution, success: false });
         return { ok: false, msg: e.message };
       }
     };
