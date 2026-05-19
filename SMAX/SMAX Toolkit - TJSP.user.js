@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.78
+// @version      1.80
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rdkvvigjmowtvhxqlrnp.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka3Z2aWdqbW93dHZoeHFscm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjE2OTA4NCwiZXhwIjoyMDU3NzQ1MDg0fQ.7iTGWIPMWoxTqIU_aX4HaardWqnCWCkPVLzz28eg_SM';
 
-  const SMAX_TOOLKIT_VERSION = '1.78';
+  const SMAX_TOOLKIT_VERSION = '1.80';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -593,6 +593,14 @@
     #smax-resp-solution-editor p { margin:0 0 4px; }
     #smax-resp-solution-editor ul, #smax-resp-solution-editor ol { margin:4px 0 4px 20px; }
     .smax-resp-list-desc { font-size:10px; color:#9ca3af; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-style:italic; }
+    .smax-sort-btn { font-size:10px; padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#6b7280; cursor:pointer; transition:all .12s; white-space:nowrap; line-height:1.4; }
+    .smax-sort-btn:hover { color:#9ca3af; border-color:rgba(255,255,255,.2); }
+    .smax-sort-btn.active { background:rgba(59,130,246,.2); border-color:#3b82f6; color:#93c5fd; }
+    .smax-resp-disc-recent { border-color:rgba(59,130,246,.35) !important; background:rgba(59,130,246,.08) !important; }
+    .smax-resp-disc-footer { display:flex; justify-content:flex-end; margin-top:5px; padding-top:4px; border-top:1px solid rgba(255,255,255,.05); }
+    .smax-resp-disc-replicate-btn { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#6b7280; cursor:pointer; transition:all .12s; }
+    .smax-resp-disc-replicate-btn:hover:not(:disabled) { border-color:rgba(59,130,246,.5); color:#93c5fd; background:rgba(59,130,246,.1); }
+    .smax-resp-disc-replicate-btn:disabled { opacity:.5; cursor:default; }
     #smax-resp-attachment-row { display:flex; align-items:center; gap:8px; padding:4px 0; min-height:22px; flex-shrink:0; }
     #smax-resp-attachment-row[data-empty="true"] { display:none; }
     #smax-resp-attachment-list { display:flex; flex-wrap:wrap; gap:5px; flex:1; }
@@ -2906,7 +2914,35 @@
       return { ok: false, messages: [`Operação ${index + 1} falhou sem detalhes (status: ${normalizedStatus || 'desconhecido'}).`] };
     };
 
-    return { postUpdateRequest, postCreateRequestCausesRequest, extractBulkErrorMessages, summarizeBulkOutcome };
+    const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyCode } = {}) => {
+      if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
+      if (!ticketId || !bodyHtml) return Promise.resolve(null);
+      const body = {
+        entities: [{
+          entity_type: 'Request',
+          properties: {
+            Id: String(ticketId),
+            Comments: {
+              complexTypeProperties: [{
+                changeType: 'ADD',
+                properties: {
+                  Body: bodyHtml,
+                  FunctionalPurpose: purposeCode || 'FunctionalPurposeComment',
+                  PrivacyType:       privacyCode || 'PrivacyTypeInternal',
+                }
+              }]
+            }
+          }
+        }],
+        operation: 'UPDATE'
+      };
+      return ApiClient.ems.bulk(body).catch(err => {
+        console.warn('[SMAX] postDiscussion failed:', err);
+        return null;
+      });
+    };
+
+    return { postUpdateRequest, postCreateRequestCausesRequest, postDiscussion, extractBulkErrorMessages, summarizeBulkOutcome };
   })();
 
   /* =========================================================
@@ -4839,15 +4875,17 @@
       const renderForwardingRow = (btn, idx) => {
         const row = document.createElement('div');
         row.className = 'smax-fwd-btn-row';
-        row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+        row.style.cssText = 'display:flex;align-items:flex-start;gap:5px;margin-bottom:6px;';
         row.innerHTML = `
-          <input class="smax-fwd-btn-label" placeholder="Rótulo" value="${Utils.escapeHtml(btn.label || '')}"
-            style="width:110px;padding:4px 7px;border-radius:5px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;outline:none;">
-          <input class="smax-fwd-btn-text" placeholder="Texto de encaminhamento" value="${Utils.escapeHtml(btn.text || '')}"
-            style="flex:1;padding:4px 7px;border-radius:5px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;outline:none;">
-          <button class="smax-fwd-btn-remove" style="padding:2px 8px;border-radius:5px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.1);color:#f87171;font-size:12px;cursor:pointer;flex-shrink:0;">×</button>`;
-        row.querySelector('.smax-fwd-btn-label')?.addEventListener('change', saveForwardingButtons);
-        row.querySelector('.smax-fwd-btn-text')?.addEventListener('change', saveForwardingButtons);
+          <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
+            <input class="smax-fwd-btn-label" placeholder="Rótulo" value="${Utils.escapeHtml(btn.label || '')}"
+              style="width:110px;padding:4px 7px;border-radius:5px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;outline:none;">
+            <button class="smax-fwd-btn-remove" style="padding:2px 8px;border-radius:5px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.1);color:#f87171;font-size:12px;cursor:pointer;">× Remover</button>
+          </div>
+          <textarea class="smax-fwd-btn-text" placeholder="Texto de encaminhamento (pode ser elaborado, com múltiplas linhas)..."
+            style="flex:1;min-height:72px;padding:5px 7px;border-radius:5px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;outline:none;resize:vertical;line-height:1.5;font-family:inherit;">${Utils.escapeHtml(btn.text || '')}</textarea>`;
+        row.querySelector('.smax-fwd-btn-label')?.addEventListener('input', saveForwardingButtons);
+        row.querySelector('.smax-fwd-btn-text')?.addEventListener('input', saveForwardingButtons);
         row.querySelector('.smax-fwd-btn-remove')?.addEventListener('click', () => { row.remove(); saveForwardingButtons(); });
         return row;
       };
@@ -7245,6 +7283,13 @@
     let scriptsCache = null;
     // Alterações pendentes compartilhadas — aplicadas a TODOS os tickets selecionados ao enviar
     let batchPending = {}; // { gse?: {id,name}, assignee?: {id,name} }
+    // Cache das discussões renderizadas — permite lookup por índice no handler do botão Replicar
+    let currentDiscussions = [];
+    // Filtro de texto livre sobre a lista já carregada
+    let textFilter = '';
+    // Ordenação da lista
+    let sortField = 'id';   // 'id' | 'createTime' | 'status' | 'assignee'
+    let sortDir   = 'desc';
 
     const getBatchPending = () => batchPending;
     const setBatchPending = (field, value) => {
@@ -7514,25 +7559,68 @@
       return entry.submitterDisplay || '';
     };
 
+    const replicateDiscussion = async (disc, btn) => {
+      if (!activeTicketId) { setStatusMsg('Nenhum chamado ativo.', '#fca5a5'); return; }
+      if (!prefs.enableRealWrites) { setStatusMsg('⚠️ Escritas reais desativadas.', '#facc15'); return; }
+      if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+      setStatusMsg('Replicando discussão...', '#93c5fd');
+      try {
+        const result = await Api.postDiscussion(activeTicketId, {
+          bodyHtml:    disc.bodyHtml,
+          purposeCode: disc.purposeCode,
+          privacyCode: disc.privacyCode,
+        });
+        const outcome = Api.summarizeBulkOutcome(result);
+        if (outcome?.ok !== false) {
+          setStatusMsg('✓ Discussão replicada.', '#4ade80');
+          await loadTicket(activeTicketId); // recarrega para mostrar a nova discussão
+        } else {
+          setStatusMsg(`Erro: ${(outcome?.messages || []).join('; ')}`, '#fca5a5');
+          if (btn) { btn.disabled = false; btn.textContent = '↺ Replicar'; }
+        }
+      } catch (e) {
+        setStatusMsg(`Erro: ${e.message}`, '#fca5a5');
+        if (btn) { btn.disabled = false; btn.textContent = '↺ Replicar'; }
+      }
+    };
+
     const renderDiscussions = (discussions) => {
       const el = backdrop?.querySelector('#smax-resp-discussions-list');
       if (!el) return;
       if (!discussions || !discussions.length) {
+        currentDiscussions = [];
         el.innerHTML = '<div style="color:#6b7280;font-size:11px;padding:8px;">Sem discussões.</div>';
         return;
       }
-      el.innerHTML = discussions.map(d => {
+      // Ordena por data crescente (mais antigas primeiro, mais recentes no final/baixo)
+      currentDiscussions = [...discussions].sort((a, b) => (a.createdTs || 0) - (b.createdTs || 0));
+      const recentThreshold = 24 * 60 * 60 * 1000; // 24h
+      const nowTs = Date.now();
+      el.innerHTML = currentDiscussions.map((d, idx) => {
         const dateStr = d.createdTs ? new Date(d.createdTs).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
         const submitter = resolveSubmitterName(d);
+        const isRecent = !!(d.createdTs && (nowTs - d.createdTs) < recentThreshold);
         return `
-          <div class="smax-resp-discussion-item">
+          <div class="smax-resp-discussion-item${isRecent ? ' smax-resp-disc-recent' : ''}">
             <div class="smax-resp-disc-meta">
               <span class="smax-resp-disc-author">${Utils.escapeHtml(submitter)}</span>
               <span>${Utils.escapeHtml(dateStr)}</span>
             </div>
             <div class="smax-resp-disc-body">${d.bodyHtml || Utils.escapeHtml(d.body || '')}</div>
+            <div class="smax-resp-disc-footer">
+              <button class="smax-resp-disc-replicate-btn" data-disc-idx="${idx}" title="Relançar esta discussão com o mesmo texto">↺ Replicar</button>
+            </div>
           </div>`;
       }).join('');
+      // Event listeners dos botões Replicar
+      el.querySelectorAll('.smax-resp-disc-replicate-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const disc = currentDiscussions[parseInt(btn.dataset.discIdx, 10)];
+          if (disc) replicateDiscussion(disc, btn);
+        });
+      });
+      // Scroll para a discussão mais recente (último item)
+      requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
     };
 
     const renderTicketDetail = (entry) => {
@@ -7771,10 +7859,36 @@
     };
 
     const applyFilters = () => {
+      const q = textFilter.toLowerCase();
       ticketList = allFetchedEntries.filter(e =>
         (selectedStatuses.size === 0 || selectedStatuses.has(e.statusSCCD)) &&
-        (selectedAssignees.size === 0 || selectedAssignees.has(e.assignee))
+        (selectedAssignees.size === 0 || selectedAssignees.has(e.assignee)) &&
+        (!q ||
+          e.id.includes(q) ||
+          (e.descSnippet     || '').toLowerCase().includes(q) ||
+          (e.requestedForName || '').toLowerCase().includes(q) ||
+          (e.locationName    || '').toLowerCase().includes(q))
       );
+      // Ordenação
+      ticketList.sort((a, b) => {
+        let va, vb;
+        if (sortField === 'createTime') {
+          va = a.createTime || 0;
+          vb = b.createTime || 0;
+        } else if (sortField === 'status') {
+          va = a.statusSCCD || STATUS_LABELS[a.status] || '';
+          vb = b.statusSCCD || STATUS_LABELS[b.status] || '';
+        } else if (sortField === 'assignee') {
+          va = resolveAssigneeName(a.assignee) || '';
+          vb = resolveAssigneeName(b.assignee) || '';
+        } else { // 'id'
+          va = parseInt(a.id, 10) || 0;
+          vb = parseInt(b.id, 10) || 0;
+        }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ?  1 : -1;
+        return 0;
+      });
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
       if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
       setStatusMsg('', '');
@@ -7804,6 +7918,10 @@
         console.warn('[SMAX ResponseHUD] Nenhum GSE ID encontrado nas equipes.');
         return;
       }
+
+      // Preservar filtros ativos para restaurar após recarregar
+      const prevStatuses  = new Set(selectedStatuses);
+      const prevAssignees = new Set(selectedAssignees);
 
       // Resetar estado
       ticketList = [];
@@ -7893,6 +8011,7 @@
             statusSCCD,
             gse: p.AssignedToGroup || '',
             assignee: p.ExpertAssignee || '',
+            createTime: parseInt(p.CreateTime, 10) || 0,
             isVip,
             requestedForName,
             locationName,
@@ -7949,6 +8068,12 @@
         // Gerar pills de filtro
         renderStatusPills(allFetchedEntries);
         renderAssigneePills(allFetchedEntries);
+
+        // Restaurar filtros que ainda existam nos novos dados
+        const newStatusSet   = new Set(allFetchedEntries.map(e => e.statusSCCD).filter(Boolean));
+        const newAssigneeSet = new Set(allFetchedEntries.map(e => e.assignee));
+        prevStatuses.forEach(s  => { if (newStatusSet.has(s))   selectedStatuses.add(s); });
+        prevAssignees.forEach(a => { if (newAssigneeSet.has(a)) selectedAssignees.add(a); });
 
         // Aplicar filtros (vazio = mostrar todos)
         applyFilters();
@@ -8570,6 +8695,22 @@
                 <button id="smax-resp-num-search-btn" type="button" style="padding:4px 10px;border:none;border-radius:5px;background:rgba(59,130,246,.5);color:#fff;font-size:11px;cursor:pointer;white-space:nowrap;">→</button>
               </div>
             </div>
+            <div id="smax-resp-text-filter-bar" style="padding:4px 8px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
+              <div style="position:relative;">
+                <input type="text" id="smax-resp-text-filter" placeholder="Filtrar lista (desc, solicitante, local)..." autocomplete="off"
+                  style="width:100%;box-sizing:border-box;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:5px;padding:4px 24px 4px 8px;color:#fff;font-size:11px;outline:none;">
+                <button id="smax-resp-text-filter-clear" type="button"
+                  style="display:none;position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:#6b7280;cursor:pointer;font-size:13px;line-height:1;padding:0 2px;" title="Limpar filtro">✕</button>
+              </div>
+            </div>
+            <div id="smax-resp-sort-bar" style="padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+              <span style="font-size:9px;color:#4b5563;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Ord.</span>
+              <button class="smax-sort-btn active" data-field="id">ID</button>
+              <button class="smax-sort-btn" data-field="createTime">Data</button>
+              <button class="smax-sort-btn" data-field="status">Status</button>
+              <button class="smax-sort-btn" data-field="assignee">Espec.</button>
+              <button id="smax-sort-dir-btn" type="button" style="margin-left:auto;background:none;border:none;color:#6b7280;font-size:12px;cursor:pointer;padding:0 2px;line-height:1;" title="Inverter ordem">↓</button>
+            </div>
             <div id="smax-resp-ticket-list" style="flex:1;overflow-y:auto;"></div>
             <div id="smax-resp-batch-bar" style="display:none;padding:6px 10px;border-top:1px solid rgba(255,255,255,.06);align-items:center;background:rgba(59,130,246,.08);">
               <span id="smax-resp-batch-count" style="font-size:11px;color:#93c5fd;"></span>
@@ -8926,6 +9067,46 @@
       backdrop.querySelector('#smax-resp-num-search-btn')?.addEventListener('click', doSearchTicket);
       backdrop.querySelector('#smax-resp-num-search-input')?.addEventListener('keydown', e => {
         if (e.key === 'Enter') doSearchTicket();
+      });
+
+      // Filtro de texto livre sobre a lista carregada
+      backdrop.querySelector('#smax-resp-text-filter')?.addEventListener('input', function() {
+        textFilter = this.value;
+        const clearBtn = backdrop.querySelector('#smax-resp-text-filter-clear');
+        if (clearBtn) clearBtn.style.display = this.value ? '' : 'none';
+        applyFilters();
+      });
+      backdrop.querySelector('#smax-resp-text-filter-clear')?.addEventListener('click', () => {
+        textFilter = '';
+        const inp = backdrop.querySelector('#smax-resp-text-filter');
+        if (inp) inp.value = '';
+        const clearBtn = backdrop.querySelector('#smax-resp-text-filter-clear');
+        if (clearBtn) clearBtn.style.display = 'none';
+        applyFilters();
+      });
+
+      // Botões de ordenação
+      backdrop.querySelectorAll('.smax-sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const field = btn.dataset.field;
+          if (sortField === field) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortField = field;
+            sortDir = (field === 'status' || field === 'assignee') ? 'asc' : 'desc';
+          }
+          backdrop.querySelectorAll('.smax-sort-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.field === sortField));
+          const dirBtn = backdrop.querySelector('#smax-sort-dir-btn');
+          if (dirBtn) dirBtn.textContent = sortDir === 'asc' ? '↑' : '↓';
+          applyFilters();
+        });
+      });
+      backdrop.querySelector('#smax-sort-dir-btn')?.addEventListener('click', () => {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        const dirBtn = backdrop.querySelector('#smax-sort-dir-btn');
+        if (dirBtn) dirBtn.textContent = sortDir === 'asc' ? '↑' : '↓';
+        applyFilters();
       });
 
       // Relatório de atividades
