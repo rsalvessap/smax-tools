@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.89
+// @version      1.90
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.89';
+  const SMAX_TOOLKIT_VERSION = '1.90';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -3651,15 +3651,15 @@
       const listHtml = currentTeams.map(t => {
         const isDefault = !!t.isDefault;
         return `
-          <div class="smax-team-item" style="border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:linear-gradient(135deg,rgba(15,23,42,0.8) 0%,rgba(30,41,59,0.4) 100%);transition:border-color .15s ease,box-shadow .15s ease;">
+          <div class="smax-team-item" style="border:1px solid var(--sp-border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--sp-surface-2);transition:border-color .15s ease,box-shadow .15s ease;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
-                <strong style="font-size:13px;color:#f8fafc;">${Utils.escapeHtml(t.name || t.id || 'Sem nome')}</strong>
+                <strong style="font-size:13px;color:var(--sp-text);">${Utils.escapeHtml(t.name || t.id || 'Sem nome')}</strong>
                 ${isDefault ? '<span style="font-size:10px;background:rgba(56,189,248,0.2);color:#38bdf8;padding:2px 6px;border-radius:999px;margin-left:6px;border:1px solid rgba(56,189,248,0.3);">Padrão</span>' : ''}
-                <div class="smax-team-prio-info" style="font-size:11px;color:#94a3b8;margin-top:2px;">Prioridade: ${t.priority || 0} • Membros: ${t.workers ? t.workers.length : 0}</div>
+                <div class="smax-team-prio-info" style="font-size:11px;color:var(--sp-text-muted);margin-top:2px;">Prioridade: ${t.priority || 0} • Membros: ${t.workers ? t.workers.length : 0}</div>
               </div>
               <div style="display:flex;gap:6px;">
-                <button class="smax-team-edit-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;background:rgba(255,255,255,.05);color:#e5e7eb;border:1px solid rgba(255,255,255,.15);border-radius:6px;transition:all .15s ease;">Editar</button>
+                <button class="smax-team-edit-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;background:var(--sp-surface);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:6px;transition:all .15s ease;">Editar</button>
                 ${!isDefault ? `<button class="smax-team-del-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;color:#fca5a5;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);border-radius:6px;transition:all .15s ease;">Remover</button>` : ''}
               </div>
             </div>
@@ -8018,6 +8018,8 @@
       const clearBtn = backdrop?.querySelector('#smax-resp-clear-filters');
       if (clearBtn) clearBtn.style.display = (selectedStatuses.size > 0 || selectedAssignees.size > 0) ? '' : 'none';
       setStatusMsg('', '');
+      // Persiste filtros para próxima sessão
+      try { GM_setValue('smax_resp_filters', JSON.stringify({ statuses: [...selectedStatuses], assignees: [...selectedAssignees], text: textFilter })); } catch {}
       renderTicketList();
       updateBatchBar();
       if (ticketList.length && !activeTicketId) loadTicket(ticketList[0].id);
@@ -8540,7 +8542,13 @@
     };
 
     const closeAllPickers = () => {
-      backdrop?.querySelectorAll('.smax-resp-field-picker').forEach(p => { p.style.display = 'none'; });
+      backdrop?.querySelectorAll('.smax-resp-field-picker').forEach(p => {
+        p.style.display = 'none';
+        if (p._closeHandler) {
+          document.removeEventListener('mousedown', p._closeHandler, true);
+          p._closeHandler = null;
+        }
+      });
     };
 
     const positionPicker = (picker, anchorBtn) => {
@@ -8654,13 +8662,17 @@
               });
             });
 
-            // Voltar
+            // Voltar — remove handler atual (será re-registrado ao final de openGsePicker)
             picker.querySelector('#smax-gse-fwd-back').addEventListener('click', () => {
+              if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
               picker.innerHTML = `<input class="smax-resp-field-picker-search" type="text" placeholder="Buscar grupo..." autocomplete="off"><div class="smax-resp-field-picker-list"></div>`;
               renderGroups('');
               const s = picker.querySelector('.smax-resp-field-picker-search');
               s?.addEventListener('input', () => renderGroups(s.value));
               s?.focus();
+              const newHandler = (e) => { if (!picker.contains(e.target) && e.target !== btn) { picker.style.display = 'none'; document.removeEventListener('mousedown', newHandler, true); picker._closeHandler = null; } };
+              picker._closeHandler = newHandler;
+              setTimeout(() => document.addEventListener('mousedown', newHandler, true), 0);
             });
 
             // Confirmar
@@ -8685,6 +8697,7 @@
                 if (assigneeChipBtn)  { assigneeChipBtn.classList.remove('dirty'); assigneeChipBtn.title = 'Alterar especialista'; }
               }
               updateSendButton();
+              if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
               picker.style.display = 'none';
             });
           });
@@ -8705,8 +8718,11 @@
         if (!picker.contains(e.target) && e.target !== btn) {
           picker.style.display = 'none';
           document.removeEventListener('mousedown', closeOnOutside, true);
+          picker._closeHandler = null;
         }
       };
+      if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+      picker._closeHandler = closeOnOutside;
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
@@ -8777,8 +8793,11 @@
         if (!picker.contains(e.target) && e.target !== btn) {
           picker.style.display = 'none';
           document.removeEventListener('mousedown', closeOnOutside, true);
+          picker._closeHandler = null;
         }
       };
+      if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+      picker._closeHandler = closeOnOutside;
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
@@ -8967,6 +8986,20 @@
         </div>`;
 
       document.body.appendChild(backdrop);
+
+      // Restaura filtros da sessão anterior
+      try {
+        const saved = JSON.parse(GM_getValue('smax_resp_filters', '{}'));
+        if (saved.statuses?.length) saved.statuses.forEach(s => selectedStatuses.add(s));
+        if (saved.assignees?.length) saved.assignees.forEach(a => selectedAssignees.add(a));
+        if (saved.text) {
+          textFilter = saved.text;
+          const tfInp = backdrop.querySelector('#smax-resp-text-filter');
+          const tfClr = backdrop.querySelector('#smax-resp-text-filter-clear');
+          if (tfInp) tfInp.value = textFilter;
+          if (tfClr) tfClr.style.display = textFilter ? '' : 'none';
+        }
+      } catch {}
 
       // Populate team pills
       const teamFilterEl = backdrop.querySelector('#smax-resp-team-filters');
@@ -9852,12 +9885,14 @@
       injectDiscussionBar();
     };
 
+    let _tickInterval = null;
     const init = () => {
+      if (_tickInterval) return; // guard contra múltiplas inicializações
       const schedule = Utils.debounce(tick, 300);
       const obs = new MutationObserver(schedule);
       obs.observe(document.body, { childList: true, subtree: true });
       // Re-scan periódico: Angular pode re-renderizar o container sem disparar mutations
-      setInterval(tick, 1500);
+      _tickInterval = setInterval(tick, 1500);
       tick();
     };
 
@@ -10299,13 +10334,14 @@
       [800, 2000, 4000, 7000].forEach(t => setTimeout(fullScan, t));
     }, 300);
 
+    let _scanInterval = null;
     const init = () => {
+      if (_scanInterval) return; // guard contra múltiplas inicializações
       // Scan inicial
       [500, 1500, 3500, 6000].forEach(t => setTimeout(fullScan, t));
 
       // Periodic sweep: catches content rendered after initial retries
-      // (SMAX may poll for updates and re-render the description)
-      setInterval(fullScan, 4000);
+      _scanInterval = setInterval(fullScan, 4000);
 
       // MutationObserver: captura nós adicionados E alterações de texto (characterData)
       const obs = new MutationObserver((mutations) => {
