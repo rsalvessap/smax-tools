@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.85
+// @version      1.86
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.85';
+  const SMAX_TOOLKIT_VERSION = '1.86';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1605,7 +1605,12 @@
         signal: controller ? controller.signal : undefined
       });
       if (abortTimer) clearTimeout(abortTimer);
-      if (!response.ok) throw new Error(`[ApiClient] HTTP ${response.status}`);
+      if (!response.ok) {
+        let errBody = '';
+        try { errBody = await response.text(); } catch {}
+        if (errBody) console.warn(`[ApiClient] HTTP ${response.status} body:`, errBody.slice(0, 500));
+        throw new Error(`[ApiClient] HTTP ${response.status}`);
+      }
       if (!expectJson) return response.text();
       const text = await response.text();
       if (!text) return null;
@@ -2150,6 +2155,7 @@
         privacyCode,
         privacyRaw,
         privacyLabel,
+        bodyRaw: bodySource,
         bodyHtml: safeHtml,
         bodyText,
         createdTs,
@@ -2989,12 +2995,25 @@
       return { ok: false, messages: [`Operação ${index + 1} falhou sem detalhes (status: ${normalizedStatus || 'desconhecido'}).`] };
     };
 
+    // Converte PrivacyType da forma curta (leitura) para prefixada (escrita)
+    const toSmaxPrivacyType = (raw) => {
+      if (!raw) return 'PrivacyTypeInternal';
+      if (raw.startsWith('PrivacyType')) return raw;
+      const u = raw.toUpperCase();
+      if (u === 'PUBLIC')   return 'PrivacyTypePublic';
+      if (u === 'EXTERNAL') return 'PrivacyTypeExternal';
+      if (u === 'AGENT')    return 'PrivacyTypeAgent';
+      return 'PrivacyTypeInternal';
+    };
+
     const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
       if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
       if (!ticketId || !bodyHtml) return Promise.resolve(null);
-      const props = { CommentBody: bodyHtml };
-      if (purposeCode) props.FunctionalPurpose = purposeCode;
-      if (privacyRaw)  props.PrivacyType = privacyRaw;
+      const props = {
+        CommentBody:       bodyHtml,
+        FunctionalPurpose: purposeCode || 'StatusUpdate',
+        PrivacyType:       toSmaxPrivacyType(privacyRaw),
+      };
       const body = {
         entities: [{
           entity_type: 'Request',
@@ -3010,7 +3029,6 @@
         }],
         operation: 'UPDATE'
       };
-      console.log('[SMAX DEBUG] postDiscussion payload:', JSON.stringify(body, null, 2));
       return ApiClient.ems.bulk(body).catch(err => {
         console.warn('[SMAX] postDiscussion failed:', err);
         return null;
@@ -7677,7 +7695,7 @@
       setStatusMsg('Replicando discussão...', '#93c5fd');
       try {
         const result = await Api.postDiscussion(activeTicketId, {
-          bodyHtml:    disc.bodyHtml,
+          bodyHtml:    disc.bodyRaw || disc.bodyHtml,
           purposeCode: disc.purposeCode,
           privacyRaw:  disc.privacyRaw,
         });
