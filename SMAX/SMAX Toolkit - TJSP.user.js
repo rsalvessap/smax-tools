@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.86
+// @version      1.87
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.86';
+  const SMAX_TOOLKIT_VERSION = '1.87';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -3009,25 +3009,17 @@
     const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
       if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
       if (!ticketId || !bodyHtml) return Promise.resolve(null);
-      const props = {
-        CommentBody:       bodyHtml,
-        FunctionalPurpose: purposeCode || 'StatusUpdate',
-        PrivacyType:       toSmaxPrivacyType(privacyRaw),
-      };
       const body = {
         entities: [{
-          entity_type: 'Request',
+          entity_type: 'RequestComment',
           properties: {
-            Id: String(ticketId),
-            Comments: {
-              complexTypeProperties: [{
-                changeType: 'ADD',
-                properties: props,
-              }]
-            }
+            Request:           String(ticketId),
+            CommentBody:       bodyHtml,
+            FunctionalPurpose: purposeCode || 'StatusUpdate',
+            PrivacyType:       toSmaxPrivacyType(privacyRaw),
           }
         }],
-        operation: 'UPDATE'
+        operation: 'CREATE'
       };
       return ApiClient.ems.bulk(body).catch(err => {
         console.warn('[SMAX] postDiscussion failed:', err);
