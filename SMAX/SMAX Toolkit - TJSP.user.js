@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.94
+// @version      1.95
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.94';
+  const SMAX_TOOLKIT_VERSION = '1.95';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -297,11 +297,12 @@
     // ──────────────────────────────────────────────────────────
 
     const deriveRelevantWork = (data) => {
-      // Priority: RESPONDIDO > VINCULO_GLOBAL > TRANSFERIDO > DESIGNADO
+      // Priority: RESPONDIDO > VINCULO_GLOBAL > TRANSFERIDO > DESIGNADO > STATUS > OUTRO
       if (data.answered) return 'RESPONDIDO';
       if (data.globalAssigned) return 'VINCULO_GLOBAL';
       if (data.transferred) return 'TRANSFERIDO';
       if (data.assigned) return 'DESIGNADO';
+      if (data.statusSCCDChanged) return 'STATUS';
       return 'OUTRO';
     };
 
@@ -310,6 +311,7 @@
       const entry = {
         ts: Date.now(),
         ticketId: String(data.ticketId || ''),
+        ticketSubject: data.ticketSubject || DataRepository.triageCache.get(String(data.ticketId))?.subjectText || '',
         assigned: !!data.assigned,
         assignedTo: data.assignedTo || '',
         globalAssigned: !!data.globalAssigned,
@@ -318,6 +320,8 @@
         transferredTo: data.transferredTo || '',
         answered: !!data.answered,
         usedScript: !!data.usedScript,
+        statusSCCDChanged: !!data.statusSCCDChanged,
+        statusSCCDTo: data.statusSCCDTo || '',
         relevantWork: '',
         user: data.user || prefs.myPersonName || '',
         success: data.success !== false
@@ -3012,15 +3016,16 @@
     const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
       if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
       if (!ticketId || !bodyHtml) return Promise.resolve(null);
+      const commentProps = {
+        Request:    String(ticketId),
+        CommentBody: bodyHtml,
+        PrivacyType: toSmaxPrivacyType(privacyRaw),
+      };
+      if (purposeCode) commentProps.FunctionalPurpose = purposeCode;
       const body = {
         entities: [{
           entity_type: 'Comment',
-          properties: {
-            Request:           String(ticketId),
-            CommentBody:       bodyHtml,
-            FunctionalPurpose: purposeCode || 'StatusUpdate',
-            PrivacyType:       toSmaxPrivacyType(privacyRaw),
-          }
+          properties: commentProps,
         }],
         operation: 'CREATE'
       };
@@ -5043,15 +5048,16 @@
           if (exportBtn) exportBtn.style.display = 'none';
           return;
         }
-        const counts = { RESPONDIDO: 0, VINCULO_GLOBAL: 0, TRANSFERIDO: 0, DESIGNADO: 0, OUTRO: 0 };
+        const counts = { RESPONDIDO: 0, VINCULO_GLOBAL: 0, TRANSFERIDO: 0, DESIGNADO: 0, STATUS: 0, OUTRO: 0 };
         for (const e of entries) counts[e.relevantWork] = (counts[e.relevantWork] || 0) + 1;
         const uniqueTickets = new Set(entries.map(e => e.ticketId)).size;
         const pad2 = n => String(n).padStart(2, '0');
-        const fmtTs = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+        const fmtDate = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; };
+        const fmtTime = ts => { const d = new Date(ts); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
         const summaryHtml = `
           <div style="font-size:10px;color:var(--sp-text-muted);margin-bottom:8px;">Fonte: <b>${source}</b> — ${entries.length} registro(s)</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-            ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
+            ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Status Op.','STATUS','#34d399'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
               `<div style="background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:8px;padding:6px 12px;text-align:center;">
                 <div style="font-size:16px;font-weight:700;color:${color};">${counts[key]||0}</div>
                 <div style="font-size:10px;color:var(--sp-text-muted);">${label}</div>
@@ -5069,7 +5075,8 @@
           <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:11px;">
             <thead><tr style="background:var(--sp-surface-2);">
-              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;white-space:nowrap;">Data/Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;white-space:nowrap;">Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;white-space:nowrap;">Data</th>
               <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Chamado</th>
               <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Descrição</th>
               <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Ação</th>
@@ -5077,10 +5084,11 @@
               <th style="padding:5px 8px;text-align:left;color:var(--sp-text-muted);font-weight:600;">Usuário</th>
             </tr></thead>
             <tbody>${entries.slice().reverse().map((e, i) => {
-              const desc = (DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
-              const detalhe = e.globalChangeId ? `→ Global #${e.globalChangeId}` : e.transferredTo ? `→ ${e.transferredTo}` : e.assignedTo ? `→ ${e.assignedTo}` : '';
+              const desc = (e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
+              const detalhe = e.globalChangeId ? `→ Global #${e.globalChangeId}` : e.statusSCCDTo ? `→ ${STATUS_SCCD_LABELS?.[e.statusSCCDTo] || e.statusSCCDTo}` : e.transferredTo ? `→ ${e.transferredTo}` : e.assignedTo ? `→ ${e.assignedTo}` : '';
               return `<tr style="background:${i%2===0?'transparent':'var(--sp-surface-2)'};border-bottom:1px solid var(--sp-border);">
-                <td style="padding:4px 8px;color:var(--sp-text-muted);white-space:nowrap;">${fmtTs(e.ts)}</td>
+                <td style="padding:4px 8px;color:var(--sp-text);font-weight:600;white-space:nowrap;">${fmtTime(e.ts)}</td>
+                <td style="padding:4px 8px;color:var(--sp-text-muted);white-space:nowrap;">${fmtDate(e.ts)}</td>
                 <td style="padding:4px 8px;color:#60a5fa;white-space:nowrap;">#${Utils.escapeHtml(e.ticketId)}</td>
                 <td style="padding:4px 8px;color:var(--sp-text);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(desc)}">${Utils.escapeHtml(desc)}</td>
                 <td style="padding:4px 8px;color:var(--sp-text);white-space:nowrap;">${Utils.escapeHtml(e.relevantWork)}</td>
@@ -5101,12 +5109,15 @@
         const pad2 = n => String(n).padStart(2, '0');
         const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
         const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-        const headers = ['Data/Hora','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Respondido','Script','Usuário','Sucesso'];
+        const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
         const rows = entriesToExport.map(e => {
-          const desc = (DataRepository.triageCache.get(e.ticketId)?.subjectText || '');
+          const desc = e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
+          const d = new Date(e.ts);
+          const hora = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+          const data = `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
           return [
-            fmtFull(e.ts), e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
-            e.transferredTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
+            hora, data, e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
+            e.transferredTo||'', e.statusSCCDTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
           ].map(esc).join(',');
         });
         const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
@@ -7766,9 +7777,11 @@
           // Re-fetch em background para sincronizar com a API
           loadTicket(activeTicketId);
         } else {
-          const msg = (outcome?.messages || []).join('; ') || 'Falha sem detalhes.';
+          const entityErr = result?.entity_result_list?.[0];
+          const entityMsg = entityErr?.errorDetails || entityErr?.message || entityErr?.completion_status || '';
+          const msg = (outcome?.messages || []).join('; ') || (entityMsg ? String(entityMsg) : 'Falha sem detalhes.');
           setStatusMsg(`Erro ao replicar: ${msg}`, '#fca5a5');
-          console.warn('[SMAX] replicateDiscussion falhou:', result);
+          console.warn('[SMAX] replicateDiscussion falhou — meta:', result?.meta, '— entity[0]:', entityErr);
           if (btn) { btn.disabled = false; btn.textContent = '↺ Replicar'; }
         }
       } catch (e) {
@@ -8452,20 +8465,23 @@
         }
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
         ActivityLog.log({
-          ticketId:      id,
-          answered:      hasSolution,
-          assigned:      assigneeWillChange,
-          assignedTo:    hasSolution       ? (prefs.myPersonName || '')
-                       : assigneeWillChange ? (pending.assignee.name || pending.assignee.id)
-                       : '',
-          transferred:   gseWillChange,
-          transferredTo: gseWillChange ? (pending.gse.name || pending.gse.id) : '',
-          usedScript:    false,
+          ticketId:         id,
+          ticketSubject:    DataRepository.triageCache.get(id)?.subjectText || '',
+          answered:         hasSolution,
+          assigned:         assigneeWillChange,
+          assignedTo:       hasSolution       ? (prefs.myPersonName || '')
+                          : assigneeWillChange ? (pending.assignee.name || pending.assignee.id)
+                          : '',
+          transferred:      gseWillChange,
+          transferredTo:    gseWillChange ? (pending.gse.name || pending.gse.id) : '',
+          statusSCCDChanged: statusSCCDWillChange,
+          statusSCCDTo:     statusSCCDWillChange ? pendingStatusSCCDByTicket[id].key : '',
+          usedScript:       false,
           success,
         });
         return outcome;
       } catch (e) {
-        ActivityLog.log({ ticketId: id, answered: hasSolution, success: false });
+        ActivityLog.log({ ticketId: id, ticketSubject: DataRepository.triageCache.get(id)?.subjectText || '', answered: hasSolution, success: false });
         return { ok: false, msg: e.message };
       }
     };
@@ -9645,15 +9661,16 @@
           return;
         }
         // Resumo por tipo
-        const counts = { RESPONDIDO: 0, VINCULO_GLOBAL: 0, TRANSFERIDO: 0, DESIGNADO: 0, OUTRO: 0 };
+        const counts = { RESPONDIDO: 0, VINCULO_GLOBAL: 0, TRANSFERIDO: 0, DESIGNADO: 0, STATUS: 0, OUTRO: 0 };
         for (const e of entries) counts[e.relevantWork] = (counts[e.relevantWork] || 0) + 1;
         const uniqueTickets = new Set(entries.map(e => e.ticketId)).size;
         const pad2 = n => String(n).padStart(2, '0');
-        const fmtTs = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+        const fmtDate = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; };
+        const fmtTime = ts => { const d = new Date(ts); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
         const summaryHtml = `
           <div style="font-size:10px;color:#6b7280;margin-bottom:8px;">Fonte: <b style="color:#9ca3af;">${source}</b> — ${entries.length} registro(s)</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-            ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
+            ${[['Respondidos','RESPONDIDO','#4ade80'],['Vinc. Global','VINCULO_GLOBAL','#60a5fa'],['Transferidos','TRANSFERIDO','#c084fc'],['Designados','DESIGNADO','#fbbf24'],['Status Op.','STATUS','#34d399'],['Outros','OUTRO','#6b7280']].map(([label, key, color]) =>
               `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 14px;text-align:center;">
                 <div style="font-size:18px;font-weight:700;color:${color};">${counts[key]||0}</div>
                 <div style="font-size:10px;color:#9ca3af;">${label}</div>
@@ -9670,7 +9687,8 @@
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:11px;">
             <thead><tr style="background:rgba(255,255,255,.06);">
-              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;white-space:nowrap;">Data/Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;white-space:nowrap;">Hora</th>
+              <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;white-space:nowrap;">Data</th>
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Chamado</th>
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Descrição</th>
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Ação</th>
@@ -9678,10 +9696,11 @@
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Usuário</th>
             </tr></thead>
             <tbody>${entries.slice().reverse().map((e, i) => {
-              const desc = (DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
-              const detalhe = e.globalChangeId ? `→ Global #${Utils.escapeHtml(e.globalChangeId)}` : e.transferredTo ? `→ ${Utils.escapeHtml(e.transferredTo)}` : e.assignedTo ? `→ ${Utils.escapeHtml(e.assignedTo)}` : '';
+              const desc = (e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
+              const detalhe = e.globalChangeId ? `→ Global #${Utils.escapeHtml(e.globalChangeId)}` : e.statusSCCDTo ? `→ ${Utils.escapeHtml(STATUS_SCCD_LABELS?.[e.statusSCCDTo] || e.statusSCCDTo)}` : e.transferredTo ? `→ ${Utils.escapeHtml(e.transferredTo)}` : e.assignedTo ? `→ ${Utils.escapeHtml(e.assignedTo)}` : '';
               return `<tr style="background:${i%2===0?'transparent':'rgba(255,255,255,.02)'};border-bottom:1px solid rgba(255,255,255,.04);">
-                <td style="padding:4px 8px;color:#6b7280;white-space:nowrap;">${fmtTs(e.ts)}</td>
+                <td style="padding:4px 8px;color:#e5e7eb;font-weight:600;white-space:nowrap;">${fmtTime(e.ts)}</td>
+                <td style="padding:4px 8px;color:#6b7280;white-space:nowrap;">${fmtDate(e.ts)}</td>
                 <td style="padding:4px 8px;color:#60a5fa;white-space:nowrap;">#${Utils.escapeHtml(e.ticketId)}</td>
                 <td style="padding:4px 8px;color:#e5e7eb;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(desc)}">${Utils.escapeHtml(desc)}</td>
                 <td style="padding:4px 8px;color:#e5e7eb;white-space:nowrap;">${Utils.escapeHtml(e.relevantWork)}</td>
@@ -9702,12 +9721,15 @@
         const pad2 = n => String(n).padStart(2, '0');
         const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
         const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-        const headers = ['Data/Hora','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Respondido','Script','Usuário','Sucesso'];
+        const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
         const rows = entriesToExport.map(e => {
-          const desc = DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
+          const desc = e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
+          const d2 = new Date(e.ts);
+          const hora = `${pad2(d2.getHours())}:${pad2(d2.getMinutes())}:${pad2(d2.getSeconds())}`;
+          const data = `${pad2(d2.getDate())}/${pad2(d2.getMonth()+1)}/${d2.getFullYear()}`;
           return [
-            fmtFull(e.ts), e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
-            e.transferredTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
+            hora, data, e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
+            e.transferredTo||'', e.statusSCCDTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
           ].map(esc).join(',');
         });
         const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
