@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.91
+// @version      1.92
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.91';
+  const SMAX_TOOLKIT_VERSION = '1.92';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -709,6 +709,7 @@
     .smax-resp-field-picker-item.active { color:#60a5fa; font-weight:600; }
     .smax-resp-field-picker-item .fpi-sub { font-size:10px; color:#6b7280; margin-left:auto; white-space:nowrap; }
     .smax-resp-field-picker-empty { padding:10px 12px; color:#6b7280; font-size:11px; text-align:center; }
+    #smax-resp-status-picker .smax-resp-field-picker-item.status-current { color:#60a5fa; font-weight:600; }
     #smax-batch-confirm-overlay { position:fixed; inset:0; z-index:9999999; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
     #smax-batch-confirm-box { background:#0f172a; border:1px solid rgba(255,255,255,.12); border-radius:14px; width:100%; max-width:720px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.7); font-family:system-ui,-apple-system,sans-serif; color:#e5e7eb; overflow:hidden; }
     #smax-batch-confirm-header { padding:14px 18px; border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; background:rgba(255,255,255,.03); }
@@ -6195,10 +6196,16 @@
       }
     };
 
+    const QUICK_REPLY_MAX_ATTEMPTS = 60; // ~50s máximo de polling
     const scheduleQuickReplyEditor = () => {
       if (quickReplyEditor) return;
       if (quickReplyEditorPollTimer) clearTimeout(quickReplyEditorPollTimer);
       quickReplyEditorAttempts += 1;
+      if (quickReplyEditorAttempts > QUICK_REPLY_MAX_ATTEMPTS) {
+        quickReplyEditorPollTimer = null;
+        console.warn('[SMAX] scheduleQuickReplyEditor: CKEditor não encontrado após', QUICK_REPLY_MAX_ATTEMPTS, 'tentativas. Polling encerrado.');
+        return;
+      }
       const ck = getPageCKEditor();
       const ckReady = Boolean(ck && ck.replace);
       if (ckReady) {
@@ -7446,7 +7453,7 @@
       const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
       const hasSolution = !!(solEl?.textContent || '').trim();
       const pending = getBatchPending();
-      const hasPending = !!(pending.gse || pending.assignee);
+      const hasPending = !!(pending.gse || pending.assignee || pending.status);
       if (count > 1) {
         btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
         btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
@@ -7847,6 +7854,17 @@
         assigneeBtn.classList.toggle('dirty', !!pending.assignee);
         assigneeBtn.title = pending.assignee ? `Alterar especialista (pendente: ${pending.assignee.name})` : 'Alterar especialista';
       }
+      // Meta-bar: Status chip
+      const statusChipName = backdrop.querySelector('#smax-resp-status-chip-name');
+      const statusBtn = backdrop.querySelector('#smax-resp-status-btn');
+      if (statusChipName && statusBtn) {
+        const displayStatus = pending.status
+          ? (STATUS_LABELS[pending.status.key] || pending.status.key)
+          : (STATUS_LABELS[entry.status] || entry.status || '—');
+        statusChipName.textContent = displayStatus;
+        statusBtn.classList.toggle('dirty', !!pending.status);
+        statusBtn.title = pending.status ? `Alterar status (pendente: ${displayStatus})` : 'Alterar status do chamado';
+      }
 
       const descEl = backdrop.querySelector('#smax-resp-desc-content');
       if (descEl) descEl.innerHTML = entry.descriptionHtml || '<em style="color:#6b7280;">Sem descrição.</em>';
@@ -7854,6 +7872,13 @@
       const solEl = backdrop.querySelector('#smax-resp-solution-editor');
       if (solEl) {
         solEl.innerHTML = entry.solutionHtml || '';
+      }
+
+      // Preencher input Global ID com valor do ticket ativo
+      const globalIdInput = backdrop.querySelector('#smax-resp-global-id');
+      if (globalIdInput) {
+        const gid = entry.globalChangeId || DataRepository.triageCache.get(entry.idText || '')?.globalChangeId || '';
+        globalIdInput.value = gid;
       }
 
       renderDiscussions(entry.discussions || []);
@@ -8308,15 +8333,16 @@
       const gseWillChange = !!(pending.gse?.id) && pending.gse.id !== curGseId;
       const curAssigneeId       = fetched.assignee || cache.expertAssigneeId || '';
       const assigneeWillChange  = !!(pending.assignee?.id) && pending.assignee.id !== curAssigneeId;
+      const statusWillChange    = !!(pending.status?.key) && pending.status.key !== (cache.status || '');
 
-      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange,
-               willAct: hasSolution || gseWillChange || assigneeWillChange };
+      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange, statusWillChange,
+               willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange };
     };
 
     const commitTicket = async (id, solutionRaw) => {
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const pending = getBatchPending();
-      const { hasSolution, gseWillChange, assigneeWillChange, willAct } = analyzeTicket(id, solutionRaw);
+      const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, willAct } = analyzeTicket(id, solutionRaw);
       if (!willAct) return { skipped: true, msg: 'Sem alterações para este chamado.' };
 
       const props = { Id: id };
@@ -8326,6 +8352,7 @@
       }
       if (gseWillChange) props.ExpertGroup = pending.gse.id;
       if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
+      if (statusWillChange) props.Status = pending.status.key;
 
       const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
       try {
@@ -8334,11 +8361,12 @@
         const success = outcome?.ok !== false;
         if (success) {
           const entry = DataRepository.triageCache.get(id);
-          if (entry && (gseWillChange || assigneeWillChange)) {
+          if (entry && (gseWillChange || assigneeWillChange || statusWillChange)) {
             DataRepository.triageCache.set(id, Object.assign({}, entry, {
-              assignmentGroupId:   gseWillChange      ? pending.gse.id      : entry.assignmentGroupId,
-              assignmentGroupName: gseWillChange      ? pending.gse.name    : entry.assignmentGroupName,
-              expertAssigneeId:    assigneeWillChange ? pending.assignee.id : entry.expertAssigneeId,
+              assignmentGroupId:   gseWillChange      ? pending.gse.id       : entry.assignmentGroupId,
+              assignmentGroupName: gseWillChange      ? pending.gse.name     : entry.assignmentGroupName,
+              expertAssigneeId:    assigneeWillChange ? pending.assignee.id  : entry.expertAssigneeId,
+              status:              statusWillChange   ? pending.status.key   : entry.status,
             }));
           }
         }
@@ -8409,6 +8437,21 @@
       } else if (fail === 0 && ok === 0) {
         setStatusMsg('Nenhum chamado com alterações para enviar.', '#fca5a5');
       } else {
+        // Falha parcial ou total: limpar batchPending para evitar estado inconsistente
+        clearBatchPending();
+        const chipGseName = backdrop?.querySelector('#smax-resp-gse-chip-name');
+        const chipGseBtn  = backdrop?.querySelector('#smax-resp-gse-btn');
+        const chipAssName = backdrop?.querySelector('#smax-resp-assignee-chip-name');
+        const chipAssBtn  = backdrop?.querySelector('#smax-resp-assignee-btn');
+        const chipStBtn   = backdrop?.querySelector('#smax-resp-status-btn');
+        const chipStName  = backdrop?.querySelector('#smax-resp-status-chip-name');
+        const entry = DataRepository.triageCache.get(activeTicketId);
+        if (chipGseName && entry) chipGseName.textContent = entry.assignmentGroupName || '—';
+        if (chipGseBtn)  chipGseBtn.classList.remove('dirty');
+        if (chipAssName && entry) chipAssName.textContent = resolveAssigneeName(entry.expertAssigneeId || '') || 'Sem especialista';
+        if (chipAssBtn)  chipAssBtn.classList.remove('dirty');
+        if (chipStName && entry)  chipStName.textContent = STATUS_LABELS[entry.status] || entry.status || '—';
+        if (chipStBtn)   chipStBtn.classList.remove('dirty');
         setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
       }
       updateSendButton();
@@ -8464,8 +8507,9 @@
               <div class="smax-bc-changes">
                 ${pending.gse?.id      ? `<span class="smax-bc-change-pill gse">🏢 GSE → ${Utils.escapeHtml(pending.gse.name)}</span>` : ''}
                 ${pending.assignee?.id ? `<span class="smax-bc-change-pill assignee">👤 Especialista → ${Utils.escapeHtml(pending.assignee.name)}</span>` : ''}
+                ${pending.status?.key  ? `<span class="smax-bc-change-pill" style="background:rgba(99,102,241,.18);color:#a5b4fc;border:1px solid rgba(99,102,241,.35);">🔄 Status → ${Utils.escapeHtml(pending.status.label || STATUS_LABELS[pending.status.key] || pending.status.key)}</span>` : ''}
                 ${solutionPlain   ? `<span class="smax-bc-change-pill solution">📋 Solução: "${Utils.escapeHtml(solutionPreview)}"</span>` : ''}
-                ${!pending.gse?.id && !pending.assignee?.id && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
+                ${!pending.gse?.id && !pending.assignee?.id && !pending.status?.key && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
               </div>
             </div>
             <div>
@@ -8806,6 +8850,81 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
+    // Statuses oferecidos no picker (os mais usados no dia a dia)
+    const CHANGEABLE_STATUSES = [
+      'RequestStatusActive',
+      'RequestStatusInProgress',
+      'RequestStatusPendingCustomer',
+      'RequestStatusPending',
+      'RequestStatusSuspended',
+      'RequestStatusClassify',
+      'RequestStatusReject',
+    ];
+
+    const openStatusPicker = () => {
+      if (!backdrop || !activeTicketId) return;
+      const picker = backdrop.querySelector('#smax-resp-status-picker');
+      const btn = backdrop.querySelector('#smax-resp-status-btn');
+      if (!picker || !btn) return;
+      if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+      closeAllPickers();
+
+      const pending = getBatchPending();
+      const cache = DataRepository.triageCache.get(activeTicketId);
+      const currentStatus = pending.status?.key || cache?.status || '';
+
+      picker.innerHTML = CHANGEABLE_STATUSES.map(key => {
+        const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
+        const isCurrent = key === currentStatus;
+        return `<div class="smax-resp-field-picker-item${isCurrent ? ' status-current' : ''}" data-key="${Utils.escapeHtml(key)}">
+          ${isCurrent ? '✓ ' : ''}<span>${Utils.escapeHtml(label)}</span>
+        </div>`;
+      }).join('');
+
+      positionPicker(picker, btn);
+
+      picker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const key = item.dataset.key;
+          const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
+          const alreadySet = pending.status?.key === key && !item.classList.contains('status-current');
+          if (currentStatus === key && !pending.status) {
+            // já é o status atual, sem pending — ignorar
+            picker.style.display = 'none';
+            return;
+          }
+          if (pending.status?.key === key) {
+            // toggle off
+            setBatchPending('status', null);
+            const chipName = backdrop.querySelector('#smax-resp-status-chip-name');
+            const chipBtn2 = backdrop.querySelector('#smax-resp-status-btn');
+            if (chipName) chipName.textContent = STATUS_LABELS[cache?.status || ''] || cache?.status || '—';
+            if (chipBtn2) { chipBtn2.classList.remove('dirty'); chipBtn2.title = 'Alterar status do chamado'; }
+          } else {
+            setBatchPending('status', { key, label });
+            const chipName = backdrop.querySelector('#smax-resp-status-chip-name');
+            const chipBtn2 = backdrop.querySelector('#smax-resp-status-btn');
+            if (chipName) chipName.textContent = label;
+            if (chipBtn2) { chipBtn2.classList.add('dirty'); chipBtn2.title = `Alterar status (pendente: ${label})`; }
+          }
+          updateSendButton();
+          if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
+          picker.style.display = 'none';
+        });
+      });
+
+      const closeOnOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== btn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside, true);
+          picker._closeHandler = null;
+        }
+      };
+      if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+      picker._closeHandler = closeOnOutside;
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+    };
+
     const open = () => {
       if (!backdrop) return;
       DataRepository.ensurePeopleLoaded();
@@ -8912,7 +9031,7 @@
                   <span>Selecione um chamado para começar.</span>
                 </div>
                 <div id="smax-resp-detail" style="display:none;">
-                  <!-- Meta-bar: GSE e Especialista editáveis -->
+                  <!-- Meta-bar: GSE, Especialista e Status editáveis -->
                   <div id="smax-resp-meta-bar">
                     <button id="smax-resp-gse-btn" class="smax-resp-meta-chip" title="Alterar GSE (Grupo de Suporte)">
                       🏢 <span id="smax-resp-gse-chip-name">—</span><span class="chip-edit">✎</span>
@@ -8920,10 +9039,14 @@
                     <button id="smax-resp-assignee-btn" class="smax-resp-meta-chip" title="Alterar especialista">
                       👤 <span id="smax-resp-assignee-chip-name">Sem especialista</span><span class="chip-edit">✎</span>
                     </button>
+                    <button id="smax-resp-status-btn" class="smax-resp-meta-chip" title="Alterar status do chamado">
+                      🔄 <span id="smax-resp-status-chip-name">—</span><span class="chip-edit">✎</span>
+                    </button>
                   </div>
                   <!-- Pickers fixos (posicionados via JS) -->
                   <div id="smax-resp-gse-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-assignee-picker" class="smax-resp-field-picker"></div>
+                  <div id="smax-resp-status-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-desc-panel">
                     <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
                     <div id="smax-resp-desc-content"></div>
@@ -9138,6 +9261,9 @@
 
       // Especialista picker
       backdrop.querySelector('#smax-resp-assignee-btn')?.addEventListener('click', openAssigneePicker);
+
+      // Status picker
+      backdrop.querySelector('#smax-resp-status-btn')?.addEventListener('click', openStatusPicker);
 
       // Botão Vincular Global — suporte a lote, auto-designar, detectar duplicata
       backdrop.querySelector('#smax-resp-global-link-btn')?.addEventListener('click', async () => {
@@ -9470,9 +9596,10 @@
         dropdownEl = document.createElement('div');
         dropdownEl.id = DROPDOWN_ID;
         document.body.appendChild(dropdownEl);
-        document.addEventListener('mousedown', (e) => {
+        const _radarCloseHandler = (e) => {
           if (!badgeEl.contains(e.target) && !dropdownEl.contains(e.target)) closeDropdown();
-        });
+        };
+        document.addEventListener('mousedown', _radarCloseHandler);
       }
     };
 
@@ -9628,37 +9755,37 @@
           </div>
         `).join('');
 
-      listEl.querySelectorAll('.smax-tpl-item').forEach(el => {
-        el.addEventListener('click', (e) => {
-          if (e.target.classList.contains('smax-tpl-edit-btn')) return;
-          if (e.target.classList.contains('smax-tpl-del-btn')) return;
-          const idx = parseInt(el.dataset.idx, 10);
-          const tpl = loadAll(activeDisc)[idx];
-          if (!tpl) return;
-          if (!insertIntoEditor(tpl.html)) {
-            navigator.clipboard?.writeText(tpl.html).catch(() => {});
-            alert('Editor não encontrado — conteúdo copiado para a área de transferência.');
+      // Event delegation — um único listener na lista, evita acúmulo a cada renderList()
+      if (!listEl._delegated) {
+        listEl._delegated = true;
+        listEl.addEventListener('click', (e) => {
+          const editBtn = e.target.closest('.smax-tpl-edit-btn');
+          if (editBtn) { openForm(parseInt(editBtn.dataset.idx, 10)); return; }
+          const delBtn = e.target.closest('.smax-tpl-del-btn');
+          if (delBtn) {
+            const idx = parseInt(delBtn.dataset.idx, 10);
+            const arr = load(activeDisc);
+            if (confirm(`Excluir "${arr[idx]?.title}"?`)) {
+              arr.splice(idx, 1);
+              save(activeDisc, arr);
+              renderList();
+              hideForm();
+            }
+            return;
           }
-          closeModal();
-        });
-      });
-
-      listEl.querySelectorAll('.smax-tpl-edit-btn').forEach(btn => {
-        btn.addEventListener('click', () => { openForm(parseInt(btn.dataset.idx, 10)); });
-      });
-
-      listEl.querySelectorAll('.smax-tpl-del-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const idx = parseInt(btn.dataset.idx, 10);
-          const arr = load(activeDisc);
-          if (confirm(`Excluir "${arr[idx]?.title}"?`)) {
-            arr.splice(idx, 1);
-            save(activeDisc, arr);
-            renderList();
-            hideForm();
+          const item = e.target.closest('.smax-tpl-item');
+          if (item) {
+            const idx = parseInt(item.dataset.idx, 10);
+            const tpl = loadAll(activeDisc)[idx];
+            if (!tpl) return;
+            if (!insertIntoEditor(tpl.html)) {
+              navigator.clipboard?.writeText(tpl.html).catch(() => {});
+              alert('Editor não encontrado — conteúdo copiado para a área de transferência.');
+            }
+            closeModal();
           }
         });
-      });
+      }
     };
 
     const openForm = (idx = null) => {
