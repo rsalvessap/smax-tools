@@ -487,6 +487,60 @@
       --sp-success-text: #16a34a;
     }
 
+    /* ── Tema claro: HUD de Triagem ── */
+    body[data-smax-theme="light"] #smax-triage-hud-backdrop { background:linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.3) 100%); }
+    body[data-smax-theme="light"] #smax-triage-hud { background:#f8fafc; color:#0f172a; box-shadow:0 25px 60px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.08) inset; }
+    body[data-smax-theme="light"] #smax-triage-hud-body { background:rgba(241,245,249,0.95); border:1px solid rgba(0,0,0,.08); }
+    body[data-smax-theme="light"] #smax-triage-hud-footer { color:#0f172a; }
+    body[data-smax-theme="light"] #smax-triage-sidebar { background:#e8ecf3; border-right:1px solid rgba(0,0,0,.1); }
+    body[data-smax-theme="light"] .smax-triage-sidebar-section { color:#475569; }
+    body[data-smax-theme="light"] .smax-triage-queue-item { background:rgba(0,0,0,.03); border:1px solid rgba(0,0,0,.08); color:#0f172a; }
+    body[data-smax-theme="light"] .smax-triage-queue-item:hover { background:rgba(19,91,236,.06); }
+    body[data-smax-theme="light"] .smax-triage-queue-item.active { background:rgba(19,91,236,.1); border-color:rgba(19,91,236,.3); }
+    body[data-smax-theme="light"] .smax-triage-queue-item .tqi-id { color:#135bec; }
+    body[data-smax-theme="light"] .smax-triage-queue-item .tqi-subject { color:#1e293b; }
+    body[data-smax-theme="light"] .smax-triage-queue-item .tqi-meta { color:#64748b; }
+    body[data-smax-theme="light"] #smax-ticket-info-bar { background:rgba(241,245,249,.9); border-bottom:1px solid rgba(0,0,0,.08); color:#334155; }
+    body[data-smax-theme="light"] #smax-ticket-info-bar span { color:#475569; }
+    body[data-smax-theme="light"] .smax-triage-field-label { color:#475569; }
+    body[data-smax-theme="light"] .smax-triage-field-value { color:#0f172a; }
+    body[data-smax-theme="light"] .smax-triage-divider { border-color:rgba(0,0,0,.08); }
+    body[data-smax-theme="light"] #smax-triage-solution-editor { background:#fff; color:#0f172a; border-color:rgba(0,0,0,.15); }
+    body[data-smax-theme="light"] .smax-triage-btn-secondary { background:rgba(0,0,0,.06); color:#1e293b; border-color:rgba(0,0,0,.12); }
+    body[data-smax-theme="light"] .smax-triage-btn-secondary:hover { background:rgba(0,0,0,.1); }
+
+    /* ── Tema claro: ResponseHUD ── */
+    body[data-smax-theme="light"] #smax-resp-hud-backdrop { background:linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.3) 100%); }
+    body[data-smax-theme="light"] #smax-resp-hud { background:#f8fafc; color:#0f172a; box-shadow:0 25px 60px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.08) inset; }
+    body[data-smax-theme="light"] #smax-resp-hud-list { background:#e8ecf3; border-right:1px solid rgba(0,0,0,.1); }
+    body[data-smax-theme="light"] #smax-resp-hud-main { background:#f8fafc; }
+    body[data-smax-theme="light"] #smax-resp-hud-body { background:#f8fafc; }
+    body[data-smax-theme="light"] #smax-resp-hud-footer { background:rgba(241,245,249,.9); border-top:1px solid rgba(0,0,0,.08); }
+    body[data-smax-theme="light"] #smax-resp-hud-discussions { background:#eef2f7; border-left:1px solid rgba(0,0,0,.08); }
+    body[data-smax-theme="light"] #smax-resp-content-area { background:#f8fafc; }
+    body[data-smax-theme="light"] #smax-resp-detail { color:#0f172a; }
+    body[data-smax-theme="light"] .smax-resp-meta-chip { background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.12); color:#334155; }
+    body[data-smax-theme="light"] .smax-resp-meta-chip:hover { background:rgba(0,0,0,.1); color:#0f172a; }
+    body[data-smax-theme="light"] .smax-resp-ticket-item { background:rgba(0,0,0,.02); border-bottom:1px solid rgba(0,0,0,.06); color:#334155; }
+    body[data-smax-theme="light"] .smax-resp-ticket-item:hover { background:rgba(19,91,236,.05); }
+    body[data-smax-theme="light"] .smax-resp-ticket-item.active { background:rgba(19,91,236,.09); }
+    body[data-smax-theme="light"] .smax-resp-ticket-item .rti-id { color:#135bec; }
+    body[data-smax-theme="light"] .smax-resp-ticket-item .rti-subject { color:#1e293b; }
+    body[data-smax-theme="light"] .smax-resp-ticket-item .rti-meta { color:#64748b; }
+    body[data-smax-theme="light"] #smax-resp-solution-editor { background:#fff; color:#0f172a; border-color:rgba(0,0,0,.15); }
+    body[data-smax-theme="light"] #smax-resp-desc-content { color:#1e293b; }
+    body[data-smax-theme="light"] .smax-resp-discussion-item { background:rgba(0,0,0,.02); border-bottom:1px solid rgba(0,0,0,.05); }
+    body[data-smax-theme="light"] .smax-resp-discussion-item .disc-body { color:#1e293b; }
+    body[data-smax-theme="light"] .smax-resp-discussion-item .disc-meta { color:#64748b; }
+    body[data-smax-theme="light"] .smax-resp-field-picker { background:#fff; border-color:rgba(0,0,0,.15); box-shadow:0 8px 24px rgba(0,0,0,.15); }
+    body[data-smax-theme="light"] .smax-resp-field-picker-item { color:#1e293b; }
+    body[data-smax-theme="light"] .smax-resp-field-picker-item:hover { background:rgba(19,91,236,.07); }
+    body[data-smax-theme="light"] .smax-resp-field-picker-item.active { color:#135bec; }
+    body[data-smax-theme="light"] #smax-resp-search { background:#fff; border-color:rgba(0,0,0,.15); color:#0f172a; }
+    body[data-smax-theme="light"] #smax-resp-global-id { background:#fff; border-color:rgba(0,0,0,.15); color:#0f172a; }
+    body[data-smax-theme="light"] #smax-resp-status-msg { color:#475569; }
+    body[data-smax-theme="light"] #smax-resp-no-ticket { color:#94a3b8; }
+
     .slick-cell.tmx-namecell { font-weight:700 !important; transition: box-shadow .15s ease; }
     .slick-cell.tmx-namecell a { color: inherit !important; }
     .slick-cell.tmx-namecell:focus-within { outline: 2px solid rgba(0,0,0,.25); outline-offset: 2px; }
@@ -10575,6 +10629,8 @@
           if (parent.dataset.smaxProc) return NodeFilter.FILTER_REJECT;
           if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
           if (parent.closest && parent.closest('#smax-triage-hud-backdrop')) return NodeFilter.FILTER_REJECT;
+          // Não linkificar dentro de <a> — evita converter nomes de anexo em links de processo
+          if (parent.closest && parent.closest('a')) return NodeFilter.FILTER_REJECT;
           if (!hasCNJ(node.nodeValue)) return NodeFilter.FILTER_SKIP;
           return NodeFilter.FILTER_ACCEPT;
         }
