@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.93
+// @version      1.94
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.93';
+  const SMAX_TOOLKIT_VERSION = '1.94';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -7394,6 +7394,7 @@
     // Alterações pendentes compartilhadas — aplicadas a TODOS os tickets selecionados ao enviar
     let batchPending = {}; // { gse?: {id,name}, assignee?: {id,name} }
     let pendingStatusByTicket = {}; // { [ticketId]: {key, label} } — por ticket, fora do batchPending
+    let pendingStatusSCCDByTicket = {}; // { [ticketId]: {key, label} } — StatusSCCDSMAX_c por ticket
     // Cache das discussões renderizadas — permite lookup por índice no handler do botão Replicar
     let currentDiscussions = [];
     // Filtro de texto livre sobre a lista já carregada
@@ -7429,6 +7430,42 @@
       RequestStatusPendingChange: 'Aguardando Mudança',
     };
 
+    const STATUS_SCCD_LABELS = {
+      Agendado_c: 'Agendado',
+      Aguardando3Nivel_c: 'Aguardando 3º Nível',
+      AguardandoAceiteDefinitivo_c: 'Aguardando Aceite Definitivo',
+      AguardandoAceiteCancelamento_c: 'Aguardando Aceite do Cancelamento',
+      AguardandoAtendimento_c: 'Aguardando Atendimento',
+      AguardandoCliente_c: 'Aguardando Cliente',
+      AguardandoClienteContato1_c: 'Aguardando Cliente – Contato 1',
+      AguardandoClienteContato1DiaZero_c: 'Aguardando Cliente – Contato 1 (Dia Zero)',
+      AguardandoClienteContato2_c: 'Aguardando Cliente – Contato 2',
+      AguardandoClienteContato3_c: 'Aguardando Cliente – Contato 3',
+      AguardandoContinuidadeAtendimento_c: 'Aguardando Continuidade de Atendimento',
+      AguardandoDocumentacao_c: 'Aguardando Documentação',
+      AguardandoEquipeConfiguracao_c: 'Aguardando Equipe de Configuração',
+      AguardandoInformacaoProcedimento_c: 'Aguardando Informação de Procedimento',
+      AguardandoInstalacaoProducao_c: 'Aguardando Instalação em Produção',
+      AguardandoOutraEquipe_c: 'Aguardando Outra Equipe',
+      AguardandoRetornoCliente_c: 'Aguardando Retorno do Cliente',
+      AguardandoRetornoFornecedor_c: 'Aguardando Retorno do Fornecedor',
+      AguardandoSTI_c: 'Aguardando STI',
+      ATUALIZADOUSUARIOTEAMS_c: 'Atualizado pelo Usuário do Teams',
+      DevolucaoFaltaSubsidio_c: 'Devolução falta de subsídio',
+      DevolucaoAtendimentoIT2B_c: 'Devolução para Atendimento IT2B',
+      AnaliseATIPG_c: 'Em Análise ATIPG',
+      EmAnaliseEmpresa_c: 'Em Análise Empresa',
+      AnaliseSAAB_c: 'Em Análise SAAB',
+      EmAnaliseTJSP_c: 'Em Análise TJSP',
+      EmAtendimento_c: 'Em Atendimento',
+      ErroIntegracao_c: 'Erro na Integração',
+      Fechado_c: 'Fechado',
+      DecursoPrazo_c: 'Fechado por Decurso de Prazo',
+      PedidoRecategorizacao_c: 'Pedido de Recategorização',
+      RetornoAnalise_c: 'Retorno Análise',
+      RetornoAtividade_c: 'Retorno de Atividade',
+    };
+
     const FILTER_STATUSES = [
       'RequestStatusActive',
       'RequestStatusInProgress',
@@ -7454,7 +7491,7 @@
       const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
       const hasSolution = !!(solEl?.textContent || '').trim();
       const pending = getBatchPending();
-      const hasPending = !!(pending.gse || pending.assignee || pendingStatusByTicket[activeTicketId]);
+      const hasPending = !!(pending.gse || pending.assignee || pendingStatusByTicket[activeTicketId] || pendingStatusSCCDByTicket[activeTicketId]);
       if (count > 1) {
         btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
         btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
@@ -7890,6 +7927,18 @@
         statusChipName.textContent = displayStatus;
         statusBtn.classList.toggle('dirty', !!pendSt);
         statusBtn.title = pendSt ? `Alterar status (pendente: ${displayStatus})` : 'Alterar status do chamado';
+      }
+      // Meta-bar: Status Operacional chip (por ticket)
+      const sccdChipName = backdrop.querySelector('#smax-resp-statussccd-chip-name');
+      const sccdBtn = backdrop.querySelector('#smax-resp-statussccd-btn');
+      if (sccdChipName && sccdBtn) {
+        const tid = entry.idText || '';
+        const pendSCCD = pendingStatusSCCDByTicket[tid];
+        const ownSCCD = STATUS_SCCD_LABELS[entry.statusSCCD] || entry.statusSCCD || '—';
+        const displaySCCD = pendSCCD ? (STATUS_SCCD_LABELS[pendSCCD.key] || pendSCCD.key) : ownSCCD;
+        sccdChipName.textContent = displaySCCD;
+        sccdBtn.classList.toggle('dirty', !!pendSCCD);
+        sccdBtn.title = pendSCCD ? `Alterar status operacional (pendente: ${displaySCCD})` : 'Alterar status operacional';
       }
 
       const descEl = backdrop.querySelector('#smax-resp-desc-content');
@@ -8361,15 +8410,17 @@
       const assigneeWillChange  = !!(pending.assignee?.id) && pending.assignee.id !== curAssigneeId;
       const pendingStatus   = pendingStatusByTicket[id];
       const statusWillChange = !!(pendingStatus?.key) && pendingStatus.key !== (cache.status || '');
+      const pendingStatusSCCD = pendingStatusSCCDByTicket[id];
+      const statusSCCDWillChange = !!(pendingStatusSCCD?.key) && pendingStatusSCCD.key !== (cache.statusSCCD || '');
 
-      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange, statusWillChange,
-               willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange };
+      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange, statusWillChange, statusSCCDWillChange,
+               willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange };
     };
 
     const commitTicket = async (id, solutionRaw) => {
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const pending = getBatchPending();
-      const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, willAct } = analyzeTicket(id, solutionRaw);
+      const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, statusSCCDWillChange, willAct } = analyzeTicket(id, solutionRaw);
       if (!willAct) return { skipped: true, msg: 'Sem alterações para este chamado.' };
 
       const props = { Id: id };
@@ -8380,6 +8431,7 @@
       if (gseWillChange) props.ExpertGroup = pending.gse.id;
       if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
       if (statusWillChange) props.Status = pendingStatusByTicket[id].key;
+      if (statusSCCDWillChange) props.StatusSCCDSMAX_c = pendingStatusSCCDByTicket[id].key;
 
       const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
       try {
@@ -8388,12 +8440,13 @@
         const success = outcome?.ok !== false;
         if (success) {
           const entry = DataRepository.triageCache.get(id);
-          if (entry && (gseWillChange || assigneeWillChange || statusWillChange)) {
+          if (entry && (gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange)) {
             DataRepository.triageCache.set(id, Object.assign({}, entry, {
-              assignmentGroupId:   gseWillChange      ? pending.gse.id       : entry.assignmentGroupId,
-              assignmentGroupName: gseWillChange      ? pending.gse.name     : entry.assignmentGroupName,
-              expertAssigneeId:    assigneeWillChange ? pending.assignee.id  : entry.expertAssigneeId,
-              status:              statusWillChange   ? pendingStatusByTicket[id].key : entry.status,
+              assignmentGroupId:   gseWillChange        ? pending.gse.id                         : entry.assignmentGroupId,
+              assignmentGroupName: gseWillChange        ? pending.gse.name                       : entry.assignmentGroupName,
+              expertAssigneeId:    assigneeWillChange   ? pending.assignee.id                    : entry.expertAssigneeId,
+              status:              statusWillChange     ? pendingStatusByTicket[id].key          : entry.status,
+              statusSCCD:          statusSCCDWillChange ? pendingStatusSCCDByTicket[id].key      : entry.statusSCCD,
             }));
           }
         }
@@ -8439,7 +8492,7 @@
         const fwdText = pendingBeforeClear.forwarding?.text || '';
         clearBatchPending();
         // Limpar status pendente de cada ticket processado
-        targets.forEach(id => { delete pendingStatusByTicket[id]; });
+        targets.forEach(id => { delete pendingStatusByTicket[id]; delete pendingStatusSCCDByTicket[id]; });
         const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
         if (solEl) solEl.innerHTML = '';
         if (activeTicketId) {
@@ -8468,15 +8521,19 @@
       } else {
         // Falha parcial ou total: limpar batchPending para evitar estado inconsistente
         clearBatchPending();
-        const chipGseName = backdrop?.querySelector('#smax-resp-gse-chip-name');
-        const chipGseBtn  = backdrop?.querySelector('#smax-resp-gse-btn');
-        const chipAssName = backdrop?.querySelector('#smax-resp-assignee-chip-name');
-        const chipAssBtn  = backdrop?.querySelector('#smax-resp-assignee-btn');
+        const chipGseName   = backdrop?.querySelector('#smax-resp-gse-chip-name');
+        const chipGseBtn    = backdrop?.querySelector('#smax-resp-gse-btn');
+        const chipAssName   = backdrop?.querySelector('#smax-resp-assignee-chip-name');
+        const chipAssBtn    = backdrop?.querySelector('#smax-resp-assignee-btn');
+        const chipSccdName  = backdrop?.querySelector('#smax-resp-statussccd-chip-name');
+        const chipSccdBtn   = backdrop?.querySelector('#smax-resp-statussccd-btn');
         const entry = DataRepository.triageCache.get(activeTicketId);
         if (chipGseName && entry) chipGseName.textContent = entry.assignmentGroupName || '—';
         if (chipGseBtn)  chipGseBtn.classList.remove('dirty');
         if (chipAssName && entry) chipAssName.textContent = resolveAssigneeName(entry.expertAssigneeId || '') || 'Sem especialista';
         if (chipAssBtn)  chipAssBtn.classList.remove('dirty');
+        if (chipSccdName && entry) chipSccdName.textContent = STATUS_SCCD_LABELS[entry.statusSCCD] || entry.statusSCCD || '—';
+        if (chipSccdBtn)  chipSccdBtn.classList.remove('dirty');
         setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
       }
       updateSendButton();
@@ -8960,6 +9017,78 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
+    const openStatusSCCDPicker = () => {
+      if (!backdrop || !activeTicketId) return;
+      const picker = backdrop.querySelector('#smax-resp-statussccd-picker');
+      const btn = backdrop.querySelector('#smax-resp-statussccd-btn');
+      if (!picker || !btn) return;
+      if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+      closeAllPickers();
+
+      const tid = activeTicketId;
+      const cache = DataRepository.triageCache.get(tid);
+      const pendSCCD = pendingStatusSCCDByTicket[tid];
+      const ownSCCD = cache?.statusSCCD || '';
+
+      const cancelHtml = pendSCCD
+        ? `<div class="smax-resp-field-picker-item" data-key="__clear__" style="color:#f87171;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:8px;margin-bottom:4px;">× Cancelar alteração de status operacional</div>`
+        : '';
+
+      picker.innerHTML = cancelHtml + Object.entries(STATUS_SCCD_LABELS).map(([key, label]) => {
+        const isPending = pendSCCD?.key === key;
+        const isOwn = !pendSCCD && key === ownSCCD;
+        return `<div class="smax-resp-field-picker-item${(isPending || isOwn) ? ' active' : ''}" data-key="${key}">
+          ${label}${(isPending || isOwn) ? ' <span style="font-size:10px;opacity:.6;">✓</span>' : ''}
+        </div>`;
+      }).join('');
+
+      positionPicker(picker, btn);
+
+      const updateChip = (key, label) => {
+        const chipName = backdrop.querySelector('#smax-resp-statussccd-chip-name');
+        const chipBtn2 = backdrop.querySelector('#smax-resp-statussccd-btn');
+        if (chipName) chipName.textContent = label;
+        if (chipBtn2) {
+          chipBtn2.classList.toggle('dirty', !!key);
+          chipBtn2.title = key ? `Alterar status operacional (pendente: ${label})` : 'Alterar status operacional';
+        }
+        updateSendButton();
+      };
+
+      picker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const key = item.dataset.key;
+          if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
+          picker.style.display = 'none';
+
+          if (key === '__clear__') {
+            delete pendingStatusSCCDByTicket[tid];
+            updateChip('', STATUS_SCCD_LABELS[ownSCCD] || ownSCCD || '—');
+            return;
+          }
+          if ((pendSCCD?.key === key) || (!pendSCCD && key === ownSCCD)) {
+            delete pendingStatusSCCDByTicket[tid];
+            updateChip('', STATUS_SCCD_LABELS[ownSCCD] || ownSCCD || '—');
+            return;
+          }
+          const label = STATUS_SCCD_LABELS[key] || key;
+          pendingStatusSCCDByTicket[tid] = { key, label };
+          updateChip(key, label);
+        });
+      });
+
+      const closeOnOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== btn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside, true);
+          picker._closeHandler = null;
+        }
+      };
+      if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+      picker._closeHandler = closeOnOutside;
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+    };
+
     const open = () => {
       if (!backdrop) return;
       DataRepository.ensurePeopleLoaded();
@@ -9077,11 +9206,15 @@
                     <button id="smax-resp-status-btn" class="smax-resp-meta-chip" title="Alterar status do chamado">
                       🔄 <span id="smax-resp-status-chip-name">—</span><span class="chip-edit">✎</span>
                     </button>
+                    <button id="smax-resp-statussccd-btn" class="smax-resp-meta-chip" title="Alterar status operacional">
+                      🏷️ <span id="smax-resp-statussccd-chip-name">—</span><span class="chip-edit">✎</span>
+                    </button>
                   </div>
                   <!-- Pickers fixos (posicionados via JS) -->
                   <div id="smax-resp-gse-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-assignee-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-status-picker" class="smax-resp-field-picker"></div>
+                  <div id="smax-resp-statussccd-picker" class="smax-resp-field-picker" style="max-height:320px;overflow-y:auto;"></div>
                   <div id="smax-resp-desc-panel">
                     <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
                     <div id="smax-resp-desc-content"></div>
@@ -9299,6 +9432,8 @@
 
       // Status picker
       backdrop.querySelector('#smax-resp-status-btn')?.addEventListener('click', openStatusPicker);
+      // Status Operacional picker
+      backdrop.querySelector('#smax-resp-statussccd-btn')?.addEventListener('click', openStatusSCCDPicker);
 
       // Botão Vincular Global — suporte a lote, auto-designar, detectar duplicata
       backdrop.querySelector('#smax-resp-global-link-btn')?.addEventListener('click', async () => {
