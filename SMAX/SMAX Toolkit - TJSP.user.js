@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.92
+// @version      1.93
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.92';
+  const SMAX_TOOLKIT_VERSION = '1.93';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -7393,6 +7393,7 @@
     let scriptsCache = null;
     // Alterações pendentes compartilhadas — aplicadas a TODOS os tickets selecionados ao enviar
     let batchPending = {}; // { gse?: {id,name}, assignee?: {id,name} }
+    let pendingStatusByTicket = {}; // { [ticketId]: {key, label} } — por ticket, fora do batchPending
     // Cache das discussões renderizadas — permite lookup por índice no handler do botão Replicar
     let currentDiscussions = [];
     // Filtro de texto livre sobre a lista já carregada
@@ -7453,7 +7454,7 @@
       const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
       const hasSolution = !!(solEl?.textContent || '').trim();
       const pending = getBatchPending();
-      const hasPending = !!(pending.gse || pending.assignee || pending.status);
+      const hasPending = !!(pending.gse || pending.assignee || pendingStatusByTicket[activeTicketId]);
       if (count > 1) {
         btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
         btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
@@ -7696,22 +7697,46 @@
       if (!prefs.enableRealWrites) { setStatusMsg('⚠️ Escritas reais desativadas.', '#facc15'); return; }
       if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
       setStatusMsg('Replicando discussão...', '#93c5fd');
+      const bodyHtml = disc.bodyRaw || disc.bodyHtml || '';
       try {
         const result = await Api.postDiscussion(activeTicketId, {
-          bodyHtml:    disc.bodyRaw || disc.bodyHtml,
+          bodyHtml,
           purposeCode: disc.purposeCode,
           privacyRaw:  disc.privacyRaw,
         });
         const outcome = Api.summarizeBulkOutcome(result);
         if (outcome?.ok !== false) {
           setStatusMsg('✓ Discussão replicada.', '#4ade80');
-          await loadTicket(activeTicketId); // recarrega para mostrar a nova discussão
+          if (btn) { btn.disabled = false; btn.textContent = '↺ Replicar'; }
+          // Inserção otimista: adiciona nova discussão no cache e re-renderiza imediatamente
+          const entry = DataRepository.triageCache.get(activeTicketId);
+          if (entry) {
+            const newDisc = {
+              id: 'opt-' + Date.now(),
+              bodyRaw: bodyHtml,
+              bodyHtml: Utils.sanitizeRichText(bodyHtml) || bodyHtml,
+              bodyText: '',
+              purposeCode: disc.purposeCode || '',
+              privacyRaw: disc.privacyRaw || '',
+              createdTs: Date.now(),
+              submitterDisplay: prefs.myPersonName || '',
+              systemGenerated: false,
+            };
+            const updated = [...(entry.discussions || []), newDisc];
+            DataRepository.triageCache.set(activeTicketId, Object.assign({}, entry, { discussions: updated }));
+            renderDiscussions(updated);
+          }
+          // Re-fetch em background para sincronizar com a API
+          loadTicket(activeTicketId);
         } else {
-          setStatusMsg(`Erro: ${(outcome?.messages || []).join('; ')}`, '#fca5a5');
+          const msg = (outcome?.messages || []).join('; ') || 'Falha sem detalhes.';
+          setStatusMsg(`Erro ao replicar: ${msg}`, '#fca5a5');
+          console.warn('[SMAX] replicateDiscussion falhou:', result);
           if (btn) { btn.disabled = false; btn.textContent = '↺ Replicar'; }
         }
       } catch (e) {
         setStatusMsg(`Erro: ${e.message}`, '#fca5a5');
+        console.warn('[SMAX] replicateDiscussion exceção:', e);
         if (btn) { btn.disabled = false; btn.textContent = '↺ Replicar'; }
       }
     };
@@ -7854,16 +7879,17 @@
         assigneeBtn.classList.toggle('dirty', !!pending.assignee);
         assigneeBtn.title = pending.assignee ? `Alterar especialista (pendente: ${pending.assignee.name})` : 'Alterar especialista';
       }
-      // Meta-bar: Status chip
+      // Meta-bar: Status chip (por ticket — não usa batchPending)
       const statusChipName = backdrop.querySelector('#smax-resp-status-chip-name');
       const statusBtn = backdrop.querySelector('#smax-resp-status-btn');
       if (statusChipName && statusBtn) {
-        const displayStatus = pending.status
-          ? (STATUS_LABELS[pending.status.key] || pending.status.key)
-          : (STATUS_LABELS[entry.status] || entry.status || '—');
+        const tid = entry.idText || '';
+        const pendSt = pendingStatusByTicket[tid];
+        const ownStatus = STATUS_LABELS[entry.status] || entry.status || '—';
+        const displayStatus = pendSt ? (STATUS_LABELS[pendSt.key] || pendSt.key) : ownStatus;
         statusChipName.textContent = displayStatus;
-        statusBtn.classList.toggle('dirty', !!pending.status);
-        statusBtn.title = pending.status ? `Alterar status (pendente: ${displayStatus})` : 'Alterar status do chamado';
+        statusBtn.classList.toggle('dirty', !!pendSt);
+        statusBtn.title = pendSt ? `Alterar status (pendente: ${displayStatus})` : 'Alterar status do chamado';
       }
 
       const descEl = backdrop.querySelector('#smax-resp-desc-content');
@@ -8333,7 +8359,8 @@
       const gseWillChange = !!(pending.gse?.id) && pending.gse.id !== curGseId;
       const curAssigneeId       = fetched.assignee || cache.expertAssigneeId || '';
       const assigneeWillChange  = !!(pending.assignee?.id) && pending.assignee.id !== curAssigneeId;
-      const statusWillChange    = !!(pending.status?.key) && pending.status.key !== (cache.status || '');
+      const pendingStatus   = pendingStatusByTicket[id];
+      const statusWillChange = !!(pendingStatus?.key) && pendingStatus.key !== (cache.status || '');
 
       return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange, statusWillChange,
                willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange };
@@ -8352,7 +8379,7 @@
       }
       if (gseWillChange) props.ExpertGroup = pending.gse.id;
       if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
-      if (statusWillChange) props.Status = pending.status.key;
+      if (statusWillChange) props.Status = pendingStatusByTicket[id].key;
 
       const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
       try {
@@ -8366,7 +8393,7 @@
               assignmentGroupId:   gseWillChange      ? pending.gse.id       : entry.assignmentGroupId,
               assignmentGroupName: gseWillChange      ? pending.gse.name     : entry.assignmentGroupName,
               expertAssigneeId:    assigneeWillChange ? pending.assignee.id  : entry.expertAssigneeId,
-              status:              statusWillChange   ? pending.status.key   : entry.status,
+              status:              statusWillChange   ? pendingStatusByTicket[id].key : entry.status,
             }));
           }
         }
@@ -8411,6 +8438,8 @@
         const pendingBeforeClear = getBatchPending();
         const fwdText = pendingBeforeClear.forwarding?.text || '';
         clearBatchPending();
+        // Limpar status pendente de cada ticket processado
+        targets.forEach(id => { delete pendingStatusByTicket[id]; });
         const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
         if (solEl) solEl.innerHTML = '';
         if (activeTicketId) {
@@ -8443,15 +8472,11 @@
         const chipGseBtn  = backdrop?.querySelector('#smax-resp-gse-btn');
         const chipAssName = backdrop?.querySelector('#smax-resp-assignee-chip-name');
         const chipAssBtn  = backdrop?.querySelector('#smax-resp-assignee-btn');
-        const chipStBtn   = backdrop?.querySelector('#smax-resp-status-btn');
-        const chipStName  = backdrop?.querySelector('#smax-resp-status-chip-name');
         const entry = DataRepository.triageCache.get(activeTicketId);
         if (chipGseName && entry) chipGseName.textContent = entry.assignmentGroupName || '—';
         if (chipGseBtn)  chipGseBtn.classList.remove('dirty');
         if (chipAssName && entry) chipAssName.textContent = resolveAssigneeName(entry.expertAssigneeId || '') || 'Sem especialista';
         if (chipAssBtn)  chipAssBtn.classList.remove('dirty');
-        if (chipStName && entry)  chipStName.textContent = STATUS_LABELS[entry.status] || entry.status || '—';
-        if (chipStBtn)   chipStBtn.classList.remove('dirty');
         setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
       }
       updateSendButton();
@@ -8507,9 +8532,8 @@
               <div class="smax-bc-changes">
                 ${pending.gse?.id      ? `<span class="smax-bc-change-pill gse">🏢 GSE → ${Utils.escapeHtml(pending.gse.name)}</span>` : ''}
                 ${pending.assignee?.id ? `<span class="smax-bc-change-pill assignee">👤 Especialista → ${Utils.escapeHtml(pending.assignee.name)}</span>` : ''}
-                ${pending.status?.key  ? `<span class="smax-bc-change-pill" style="background:rgba(99,102,241,.18);color:#a5b4fc;border:1px solid rgba(99,102,241,.35);">🔄 Status → ${Utils.escapeHtml(pending.status.label || STATUS_LABELS[pending.status.key] || pending.status.key)}</span>` : ''}
                 ${solutionPlain   ? `<span class="smax-bc-change-pill solution">📋 Solução: "${Utils.escapeHtml(solutionPreview)}"</span>` : ''}
-                ${!pending.gse?.id && !pending.assignee?.id && !pending.status?.key && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
+                ${!pending.gse?.id && !pending.assignee?.id && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
               </div>
             </div>
             <div>
@@ -8869,47 +8893,58 @@
       if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
       closeAllPickers();
 
-      const pending = getBatchPending();
-      const cache = DataRepository.triageCache.get(activeTicketId);
-      const currentStatus = pending.status?.key || cache?.status || '';
+      const tid = activeTicketId;
+      const cache = DataRepository.triageCache.get(tid);
+      const pendSt = pendingStatusByTicket[tid];
+      const ownStatus = cache?.status || '';
 
-      picker.innerHTML = CHANGEABLE_STATUSES.map(key => {
+      const cancelHtml = pendSt
+        ? `<div class="smax-resp-field-picker-item" data-key="__clear__" style="color:#f87171;border-bottom:1px solid rgba(255,255,255,.1);">× Cancelar alteração de status</div>`
+        : '';
+
+      picker.innerHTML = cancelHtml + CHANGEABLE_STATUSES.map(key => {
         const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
-        const isCurrent = key === currentStatus;
-        return `<div class="smax-resp-field-picker-item${isCurrent ? ' status-current' : ''}" data-key="${Utils.escapeHtml(key)}">
-          ${isCurrent ? '✓ ' : ''}<span>${Utils.escapeHtml(label)}</span>
+        const isPending  = pendSt?.key === key;
+        const isOwn      = !pendSt && key === ownStatus;
+        const cls = (isPending || isOwn) ? ' status-current' : '';
+        return `<div class="smax-resp-field-picker-item${cls}" data-key="${Utils.escapeHtml(key)}">
+          ${(isPending || isOwn) ? '✓ ' : ''}<span>${Utils.escapeHtml(label)}</span>
         </div>`;
       }).join('');
 
       positionPicker(picker, btn);
 
+      const updateChip = (key, label) => {
+        const chipName = backdrop.querySelector('#smax-resp-status-chip-name');
+        const chipBtn2 = backdrop.querySelector('#smax-resp-status-btn');
+        if (chipName) chipName.textContent = label;
+        if (chipBtn2) {
+          chipBtn2.classList.toggle('dirty', !!key);
+          chipBtn2.title = key ? `Alterar status (pendente: ${label})` : 'Alterar status do chamado';
+        }
+        updateSendButton();
+      };
+
       picker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
         item.addEventListener('click', () => {
           const key = item.dataset.key;
-          const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
-          const alreadySet = pending.status?.key === key && !item.classList.contains('status-current');
-          if (currentStatus === key && !pending.status) {
-            // já é o status atual, sem pending — ignorar
-            picker.style.display = 'none';
-            return;
-          }
-          if (pending.status?.key === key) {
-            // toggle off
-            setBatchPending('status', null);
-            const chipName = backdrop.querySelector('#smax-resp-status-chip-name');
-            const chipBtn2 = backdrop.querySelector('#smax-resp-status-btn');
-            if (chipName) chipName.textContent = STATUS_LABELS[cache?.status || ''] || cache?.status || '—';
-            if (chipBtn2) { chipBtn2.classList.remove('dirty'); chipBtn2.title = 'Alterar status do chamado'; }
-          } else {
-            setBatchPending('status', { key, label });
-            const chipName = backdrop.querySelector('#smax-resp-status-chip-name');
-            const chipBtn2 = backdrop.querySelector('#smax-resp-status-btn');
-            if (chipName) chipName.textContent = label;
-            if (chipBtn2) { chipBtn2.classList.add('dirty'); chipBtn2.title = `Alterar status (pendente: ${label})`; }
-          }
-          updateSendButton();
           if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
           picker.style.display = 'none';
+
+          if (key === '__clear__') {
+            delete pendingStatusByTicket[tid];
+            updateChip('', STATUS_LABELS[ownStatus] || ownStatus || '—');
+            return;
+          }
+          // Clicar no status já pendente ou no status atual sem pending → limpar
+          if ((pendSt?.key === key) || (!pendSt && key === ownStatus)) {
+            delete pendingStatusByTicket[tid];
+            updateChip('', STATUS_LABELS[ownStatus] || ownStatus || '—');
+            return;
+          }
+          const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
+          pendingStatusByTicket[tid] = { key, label };
+          updateChip(key, label);
         });
       });
 
