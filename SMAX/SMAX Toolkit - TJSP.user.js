@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.90
+// @version      1.91
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.90';
+  const SMAX_TOOLKIT_VERSION = '1.91';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -699,7 +699,9 @@
     .smax-resp-meta-chip:hover { border-color:rgba(255,255,255,.3); background:rgba(255,255,255,.1); color:#fff; }
     .smax-resp-meta-chip.dirty { border-color:#f59e0b; background:rgba(245,158,11,.15); color:#fcd34d; }
     .smax-resp-meta-chip .chip-edit { font-size:9px; opacity:.5; margin-left:2px; }
-    .smax-resp-field-picker { display:none; position:fixed; z-index:999999; background:#0d1117; border:1px solid rgba(255,255,255,.16); border-radius:10px; box-shadow:0 12px 36px rgba(0,0,0,.75); overflow:hidden; width:290px; }
+    .smax-resp-field-picker { display:none; position:fixed; z-index:999999; background:#0d1117; border:1px solid rgba(255,255,255,.16); border-radius:10px; box-shadow:0 12px 36px rgba(0,0,0,.75); overflow:hidden; width:380px; }
+    #smax-gse-fwd-editor { min-height:80px; max-height:220px; overflow-y:auto; border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:7px 9px; color:#e2e8f0; font-size:12px; line-height:1.5; background:rgba(255,255,255,.04); outline:none; cursor:text; }
+    #smax-gse-fwd-editor:empty:before { content:attr(data-placeholder); color:#6b7280; pointer-events:none; }
     .smax-resp-field-picker-search { display:block; width:100%; box-sizing:border-box; background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,.1); padding:9px 12px; color:#e5e7eb; font-size:12px; outline:none; font-family:inherit; }
     .smax-resp-field-picker-list { max-height:230px; overflow-y:auto; }
     .smax-resp-field-picker-item { padding:7px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.04); font-size:12px; color:#d1d5db; transition:background .1s; display:flex; align-items:center; gap:7px; }
@@ -3022,7 +3024,6 @@
         operation: 'CREATE'
       };
       return ApiClient.ems.bulk(body).then(res => {
-        console.log('[SMAX DEBUG] postDiscussion response:', JSON.stringify(res, null, 2));
         return res;
       }).catch(err => {
         console.warn('[SMAX] postDiscussion failed:', err);
@@ -8561,7 +8562,7 @@
       } else {
         picker.style.top = (rect.bottom + 4) + 'px';
       }
-      picker.style.left = Math.min(rect.left, window.innerWidth - 298) + 'px';
+      picker.style.left = Math.min(rect.left, window.innerWidth - 388) + 'px';
     };
 
     const openGsePicker = async () => {
@@ -8613,6 +8614,12 @@
             }
 
             // Mostrar painel de confirmação + encaminhamento
+            // Remover closeOnOutside enquanto estiver no painel de confirmação — evita fechar ao clicar no editor
+            if (picker._closeHandler) {
+              document.removeEventListener('mousedown', picker._closeHandler, true);
+              picker._closeHandler = null;
+            }
+
             let QUICK_BTNS = [];
             try { QUICK_BTNS = JSON.parse(prefs.forwardingButtonsRaw || '[]'); } catch {}
             if (!QUICK_BTNS.length) QUICK_BTNS = [
@@ -8662,9 +8669,8 @@
               });
             });
 
-            // Voltar — remove handler atual (será re-registrado ao final de openGsePicker)
+            // Voltar — volta para a lista de grupos e re-registra closeOnOutside
             picker.querySelector('#smax-gse-fwd-back').addEventListener('click', () => {
-              if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
               picker.innerHTML = `<input class="smax-resp-field-picker-search" type="text" placeholder="Buscar grupo..." autocomplete="off"><div class="smax-resp-field-picker-list"></div>`;
               renderGroups('');
               const s = picker.querySelector('.smax-resp-field-picker-search');
@@ -8697,7 +8703,6 @@
                 if (assigneeChipBtn)  { assigneeChipBtn.classList.remove('dirty'); assigneeChipBtn.title = 'Alterar especialista'; }
               }
               updateSendButton();
-              if (picker._closeHandler) { document.removeEventListener('mousedown', picker._closeHandler, true); picker._closeHandler = null; }
               picker.style.display = 'none';
             });
           });
