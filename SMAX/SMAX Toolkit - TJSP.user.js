@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.99
+// @version      2.00
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.99';
+  const SMAX_TOOLKIT_VERSION = '2.00';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -2611,7 +2611,7 @@
           for (let skip = basePeopleParams.size; skip < needed; skip += basePeopleParams.size) {
             tasks.push(fetchPeoplePage(skip));
           }
-          return Promise.all(tasks).then(() => {
+          return Promise.allSettled(tasks).then(() => {
             peopleLoadedOnce = true;
             console.log('[SMAX] People cache ready:', peopleCache.size, '/', needed);
           });
@@ -2640,7 +2640,7 @@
           for (let skip = supportGroupBaseParams.size; skip < total; skip += supportGroupBaseParams.size) {
             tasks.push(fetchSupportGroupPage(skip));
           }
-          return Promise.all(tasks).then(() => getSupportGroupsSnapshot());
+          return Promise.allSettled(tasks).then(() => getSupportGroupsSnapshot());
         })
         .catch((err) => {
           console.warn('[SMAX] Failed to load support groups via API:', err);
@@ -5046,7 +5046,7 @@
       const resetSyncBtn = container.querySelector('#smax-log-reset-syncfail');
       if (resetSyncBtn) resetSyncBtn.addEventListener('click', () => {
         ActivityLog.resetSyncFailCount();
-        navigateTo('triagem');
+        renderPanel();
       });
     };
 
@@ -8579,10 +8579,10 @@
       if (sendBtn)  sendBtn.disabled  = true;
       if (batchBtn) batchBtn.disabled = true;
 
-      setStatusMsg(`Enviando ${targets.length} chamado(s)...`, '#93c5fd');
       let ok = 0, fail = 0, skipped = 0;
-      for (const id of targets) {
-        const r = await commitTicket(id, solutionRaw);
+      for (let i = 0; i < targets.length; i++) {
+        setStatusMsg(`Enviando ${i + 1}/${targets.length}...`, '#93c5fd');
+        const r = await commitTicket(targets[i], solutionRaw);
         if (r?.skipped) skipped++;
         else if (r?.ok !== false) ok++;
         else fail++;
