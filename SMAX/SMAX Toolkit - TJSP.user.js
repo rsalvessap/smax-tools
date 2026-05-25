@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.95
+// @version      1.99
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '1.95';
+  const SMAX_TOOLKIT_VERSION = '1.99';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -200,6 +200,7 @@
     const STORAGE_KEY = 'smax_activity_log';
     const MAX_ENTRIES = 5000;
     let entries = [];
+    let syncFailCount = 0;
 
     const load = () => {
       try {
@@ -260,12 +261,17 @@
           equipe_id:        equipeId             || null,
           success:          entry.success !== false,
         };
+        const sbWriteCtrl = new AbortController();
+        const sbWriteTimer = setTimeout(() => sbWriteCtrl.abort(), 8000);
         fetch(`${SMAX_SB_URL}/rest/v1/smax_activity_log`, {
           method:  'POST',
           headers: SB_WRITE_HEADERS,
           body:    JSON.stringify(row),
-        }).catch(e => console.warn('[SMAX] ActivityLog Supabase sync failed:', e));
+          signal:  sbWriteCtrl.signal,
+        }).then(() => clearTimeout(sbWriteTimer))
+          .catch(e => { clearTimeout(sbWriteTimer); syncFailCount++; console.warn('[SMAX] ActivityLog Supabase sync failed:', e); });
       } catch (e) {
+        syncFailCount++;
         console.warn('[SMAX] ActivityLog syncToSupabase error:', e);
       }
     };
@@ -275,7 +281,10 @@
       const eqFilter = equipeId ? `&equipe_id=eq.${encodeURIComponent(equipeId)}` : '';
       const url = `${SMAX_SB_URL}/rest/v1/smax_activity_log`
         + `?ts=gte.${fromTs}&ts=lte.${toTs}&order=ts.asc&limit=10000${eqFilter}`;
-      const resp = await fetch(url, { headers: SB_READ_HEADERS });
+      const sbReadCtrl = new AbortController();
+      const sbReadTimer = setTimeout(() => sbReadCtrl.abort(), 8000);
+      const resp = await fetch(url, { headers: SB_READ_HEADERS, signal: sbReadCtrl.signal });
+      clearTimeout(sbReadTimer);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       return (data || []).map(r => ({
@@ -362,14 +371,16 @@
         alert('Nenhuma entrada para exportar.');
         return;
       }
-      const headers = ['Data', 'Hora', 'Chamado', 'Trabalho Relevante', 'Atribuído Para', 'Global', 'Transferido Para', 'Respondido', 'Script Utilizado', 'Usuário', 'Sucesso'];
+      const headers = ['Data', 'Hora', 'Chamado', 'Assunto', 'Trabalho Relevante', 'Atribuído Para', 'Global', 'Transferido Para', 'Respondido', 'Script Utilizado', 'Usuário', 'Sucesso'];
       const rows = toExport.map((e) => {
         const fullDate = formatDateBrazilian(e.ts);
         const [datePart, timePart] = fullDate.split(' ');
+        const subject = e.ticketSubject || DataRepository.triageCache.get(String(e.ticketId))?.subjectText || '';
         return [
           datePart || '',
           timePart || '',
           e.ticketId,
+          subject,
           e.relevantWork,
           e.assignedTo,
           e.globalChangeId,
@@ -424,7 +435,10 @@
 
     load();
 
-    return { log, exportCsv, clear, getCount, getEntries, getGlobalMap, load, fetchFromSupabase };
+    const getSyncFailCount = () => syncFailCount;
+    const resetSyncFailCount = () => { syncFailCount = 0; };
+
+    return { log, exportCsv, clear, getCount, getEntries, getGlobalMap, load, fetchFromSupabase, getSyncFailCount, resetSyncFailCount };
   })();
 
   /* =========================================================
@@ -1641,7 +1655,7 @@
         includeTenantParam = false,
         useXsrf = false,
         expectJson = true,
-        timeout = 0
+        timeout = 30000
       } = options;
       const finalHeaders = {
         Accept: 'application/json, text/plain, */*',
@@ -2009,6 +2023,21 @@
     const triageCache = new Map();
     let triageIds = [];
     const peopleCache = new Map();
+
+    // Eviction: mantém os caches dentro de limites razoáveis para sessões longas
+    const TRIAGE_CACHE_MAX  = 400;
+    const TRIAGE_CACHE_TRIM = 150; // quantas entradas mais antigas remover quando excede o limite
+    const PEOPLE_CACHE_MAX  = 600;
+    const PEOPLE_CACHE_TRIM = 200;
+    const trimMap = (map, max, trim) => {
+      if (map.size <= max) return;
+      let removed = 0;
+      for (const key of map.keys()) {
+        if (removed >= trim) break;
+        map.delete(key);
+        removed++;
+      }
+    };
     const manualPeopleSeed = [
       {
         id: '95970',
@@ -2422,6 +2451,7 @@
         statusSCCD: props.StatusSCCDSMAX_c || existing.statusSCCD || '',
         globalChangeId
       }));
+      trimMap(triageCache, TRIAGE_CACHE_MAX, TRIAGE_CACHE_TRIM);
     };
 
     const ingestRequestListPayload = (obj) => {
@@ -2512,6 +2542,7 @@
           if (!payload.email && !payload.upn) continue;
           peopleCache.set(id, payload);
         }
+        trimMap(peopleCache, PEOPLE_CACHE_MAX, PEOPLE_CACHE_TRIM);
         notifyPeopleListeners();
       } catch (err) {
         console.warn('[SMAX] Failed to ingest person payload:', err);
@@ -2563,43 +2594,6 @@
       return payload;
     };
 
-    const buildLegacyPeopleUrl = (size, skip) => {
-      const encode = (value) => encodeURIComponent(value);
-      const base = `${ApiClient.restUrl('ems/Person')}?filter=${encode(basePeopleParams.filter)}&layout=${encode(basePeopleParams.layout)}&meta=${encode(basePeopleParams.meta)}&order=${encode(basePeopleParams.order)}`;
-      return `${base}&size=${encode(String(size))}&skip=${encode(String(skip || 0))}`;
-    };
-
-    const legacyFetchPeoplePages = () => {
-      const pageSize = basePeopleParams.size || 50;
-      const headers = { Accept: 'application/json, text/plain, */*', 'X-Requested-With': 'XMLHttpRequest' };
-      const fetchPage = (skip) => fetch(buildLegacyPeopleUrl(pageSize, skip), { credentials: 'include', headers })
-        .then((r) => r.text())
-        .then((txt) => {
-          if (!txt) return;
-          try {
-            ingestPersonListPayload(JSON.parse(txt));
-          } catch (err) {
-            console.warn('[SMAX] Legacy people fetch failed to parse page:', err);
-          }
-        })
-        .catch((err) => console.warn('[SMAX] Legacy people fetch failed:', err));
-
-      return fetchPage(0).then(() => {
-        if (typeof peopleTotal !== 'number' || peopleTotal <= peopleCache.size) {
-          peopleLoadedOnce = true;
-          return;
-        }
-        const tasks = [];
-        for (let skip = pageSize; skip < peopleTotal; skip += pageSize) {
-          tasks.push(fetchPage(skip));
-        }
-        return Promise.all(tasks).then(() => {
-          peopleLoadedOnce = true;
-          console.log('[SMAX] Legacy people cache ready:', peopleCache.size, '/', peopleTotal);
-        });
-      });
-    };
-
     const ensurePeopleLoaded = ({ force = false } = {}) => {
       if (peopleLoadedOnce && !force) return peopleLoadPromise || Promise.resolve();
       if (peopleLoadPromise) return peopleLoadPromise;
@@ -2623,8 +2617,7 @@
           });
         })
         .catch((err) => {
-          console.warn('[SMAX] Failed to load people via API, falling back:', err);
-          return legacyFetchPeoplePages();
+          console.warn('[SMAX] Failed to load people via API:', err);
         })
         .finally(() => {
           peopleLoadPromise = null;
@@ -2815,6 +2808,27 @@
         if (typeof fn !== 'function') return () => { };
         supportGroupListeners.add(fn);
         return () => supportGroupListeners.delete(fn);
+      },
+      resolveName: (personId) => {
+        if (!personId) return '';
+        const p = peopleCache.get(String(personId));
+        return p?.name || p?.fullName || String(personId);
+      },
+      resolvePersonId: (name) => {
+        const target = Utils.normalizeText(name);
+        if (!target) return '';
+        let resolved = '';
+        peopleCache.forEach((person) => {
+          if (resolved || !person) return;
+          const match = [
+            person.name,
+            [person.firstName, person.lastName].filter(Boolean).join(' '),
+            person.DisplayLabel,
+            person.FullName
+          ].find((entry) => entry && Utils.normalizeText(entry) === target);
+          if (match) resolved = String(person.id);
+        });
+        return resolved;
       }
     };
   })();
@@ -3659,13 +3673,16 @@
       { id: 'respostas',     icon: '📨',  label: 'Respostas' },
     ];
 
-    // Load fresh config from prefs
+    // Load fresh config from prefs — shared teams are excluded from editing
     const reloadConfig = () => {
-      currentTeams = TeamsConfig.getTeams().map(t => JSON.parse(JSON.stringify(t)));
+      currentTeams = TeamsConfig.getTeams()
+        .filter(t => !t._shared)
+        .map(t => JSON.parse(JSON.stringify(t)));
     };
 
     const saveConfig = () => {
-      prefs.teamsConfigRaw = JSON.stringify(currentTeams, null, 2);
+      // Never persist shared teams (_shared: true) into local storage
+      prefs.teamsConfigRaw = JSON.stringify(currentTeams.filter(t => !t._shared), null, 2);
       savePrefs();
       TeamsConfig.reload();
       RefreshOverlay.show();
@@ -3709,19 +3726,26 @@
     const renderTeamsList = () => {
       if (editingTeamId) return renderTeamEditor(editingTeamId);
 
-      const listHtml = currentTeams.map(t => {
+      const allTeams = [
+        ...currentTeams,
+        ...TeamsConfig.getTeams().filter(t => t._shared),
+      ];
+      const listHtml = allTeams.map(t => {
         const isDefault = !!t.isDefault;
+        const isShared = !!t._shared;
         return `
-          <div class="smax-team-item" style="border:1px solid var(--sp-border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--sp-surface-2);transition:border-color .15s ease,box-shadow .15s ease;">
+          <div class="smax-team-item" style="border:1px solid ${isShared ? 'rgba(251,191,36,.3)' : 'var(--sp-border)'};border-radius:10px;padding:10px 12px;margin-bottom:8px;background:${isShared ? 'rgba(251,191,36,.05)' : 'var(--sp-surface-2)'};transition:border-color .15s ease,box-shadow .15s ease;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
                 <strong style="font-size:13px;color:var(--sp-text);">${Utils.escapeHtml(t.name || t.id || 'Sem nome')}</strong>
                 ${isDefault ? '<span style="font-size:10px;background:rgba(56,189,248,0.2);color:#38bdf8;padding:2px 6px;border-radius:999px;margin-left:6px;border:1px solid rgba(56,189,248,0.3);">Padrão</span>' : ''}
+                ${isShared ? '<span style="font-size:10px;background:rgba(251,191,36,.15);color:#fbbf24;padding:2px 6px;border-radius:999px;margin-left:6px;border:1px solid rgba(251,191,36,.35);" title="Carregada do Config. Compartilhada — somente leitura">☁️ Compartilhada</span>' : ''}
                 <div class="smax-team-prio-info" style="font-size:11px;color:var(--sp-text-muted);margin-top:2px;">Prioridade: ${t.priority || 0} • Membros: ${t.workers ? t.workers.length : 0}</div>
               </div>
               <div style="display:flex;gap:6px;">
-                <button class="smax-team-edit-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;background:var(--sp-surface);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:6px;transition:all .15s ease;">Editar</button>
-                ${!isDefault ? `<button class="smax-team-del-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;color:#fca5a5;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);border-radius:6px;transition:all .15s ease;">Remover</button>` : ''}
+                ${!isShared ? `<button class="smax-team-edit-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;background:var(--sp-surface);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:6px;transition:all .15s ease;">Editar</button>` : ''}
+                ${!isDefault && !isShared ? `<button class="smax-team-del-btn" data-id="${t.id}" style="font-size:11px;padding:6px 12px;cursor:pointer;color:#fca5a5;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);border-radius:6px;transition:all .15s ease;">Remover</button>` : ''}
+                ${isShared ? '<span style="font-size:11px;color:#6b7280;padding:6px 8px;">somente leitura</span>' : ''}
               </div>
             </div>
           </div>
@@ -3955,6 +3979,24 @@
           });
           // Sort workers alphabetically by name for better UX
           newWorkers.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
+
+          // Validate digit range overlaps between workers
+          const digitOwnerMap = {};
+          const overlapDetails = [];
+          for (const w of newWorkers) {
+            const parsed = Utils.parseDigitRanges(w.digits);
+            for (const d of parsed) {
+              if (digitOwnerMap[d] !== undefined) {
+                overlapDetails.push(`dígito ${d}: "${digitOwnerMap[d]}" e "${w.name}"`);
+              } else {
+                digitOwnerMap[d] = w.name;
+              }
+            }
+          }
+          if (overlapDetails.length) {
+            const msg = `⚠️ Sobreposição de dígitos detectada:\n${overlapDetails.slice(0, 5).join('\n')}${overlapDetails.length > 5 ? `\n...e mais ${overlapDetails.length - 5}` : ''}\n\nSalvar assim pode causar distribuição imprevisível. Continuar?`;
+            if (!confirm(msg)) return;
+          }
 
           // Collect matchers from both scope sections
           const newMatchers = [];
@@ -4331,6 +4373,17 @@
             <button type="button" id="smax-shared-refresh-btn" style="padding:7px 14px;border:1px solid var(--sp-border);border-radius:7px;background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;cursor:pointer;">↺ Atualizar</button>
           </div>
           <div id="smax-shared-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;"></div>
+        </div>
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">🔧 Exportar / Importar Configuração</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">JSON com todas as configurações, incluindo equipes. Copie para compartilhar ou cole para restaurar.</div>
+          <textarea id="smax-config-io-textarea" spellcheck="false"
+            style="width:100%;min-height:180px;max-height:320px;resize:vertical;padding:10px 12px;border-radius:8px;font-size:11px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;line-height:1.5;box-sizing:border-box;transition:border-color .15s ease;"></textarea>
+          <div id="smax-config-io-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin:8px 0;"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:12px;cursor:pointer;">📋 Copiar</button>
+            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
+          </div>
         </div>`;
     };
 
@@ -4476,20 +4529,10 @@
         <div class="smax-sp-card">
           <div class="smax-sp-section-title">📊 Log de Atividades</div>
           <div class="smax-sp-muted" style="margin-bottom:10px;">${ActivityLog.getCount()} registros armazenados localmente.</div>
+          ${ActivityLog.getSyncFailCount() > 0 ? `<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;padding:7px 12px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#f87171;font-size:12px;">⚠️ ${ActivityLog.getSyncFailCount()} falha(s) de sincronização com Supabase nesta sessão. <button type="button" id="smax-log-reset-syncfail" style="border:none;background:none;color:#f87171;cursor:pointer;font-size:11px;text-decoration:underline;padding:0;">Limpar</button></div>` : ''}
           <button type="button" id="smax-log-export-all" style="padding:9px 18px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
             📥 Exportar CSV
           </button>
-        </div>
-        <div class="smax-sp-card">
-          <div class="smax-sp-section-title">🔧 Configuração JSON</div>
-          <div class="smax-sp-muted" style="margin-bottom:10px;">Edite e clique Salvar. Copie para compartilhar com colegas.</div>
-          <textarea id="smax-config-io-textarea" spellcheck="false"
-            style="width:100%;min-height:180px;max-height:320px;resize:vertical;padding:10px 12px;border-radius:8px;font-size:11px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;line-height:1.5;box-sizing:border-box;transition:border-color .15s ease;"></textarea>
-          <div id="smax-config-io-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin:8px 0;"></div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
-            <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:12px;cursor:pointer;">📋 Copiar</button>
-            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
-          </div>
         </div>
       </div>`;
 
@@ -4652,6 +4695,29 @@
         if (sharedStatusEl) sharedStatusEl.textContent = '⏳ Buscando...';
         await SharedConfig.refresh(true);
         showSharedStatus();
+      });
+
+      // Exportar / Importar Configuração JSON
+      const cfgTextarea = container.querySelector('#smax-config-io-textarea');
+      const cfgStatusEl = container.querySelector('#smax-config-io-status');
+      const cfgCopyBtn  = container.querySelector('#smax-config-copy-btn');
+      const cfgSaveBtn  = container.querySelector('#smax-config-save-btn');
+      if (cfgTextarea) cfgTextarea.value = buildConfigJSON();
+      const setCfgStatus = (msg, color) => {
+        if (cfgStatusEl) { cfgStatusEl.textContent = msg; cfgStatusEl.style.color = color || 'var(--sp-text-muted)'; }
+      };
+      cfgCopyBtn?.addEventListener('click', () => {
+        if (!cfgTextarea?.value.trim()) return;
+        navigator.clipboard.writeText(cfgTextarea.value)
+          .then(() => setCfgStatus('Copiado! ✓', '#4ade80'))
+          .catch(() => { cfgTextarea.select(); document.execCommand('copy'); setCfgStatus('Copiado! ✓', '#4ade80'); });
+      });
+      cfgSaveBtn?.addEventListener('click', () => {
+        const raw = (cfgTextarea?.value || '').trim();
+        if (!raw) { setCfgStatus('O campo está vazio.', '#fca5a5'); return; }
+        const result = applyConfigJSON(raw);
+        setCfgStatus(result.msg, result.ok ? '#4ade80' : '#fca5a5');
+        if (result.ok) setTimeout(() => renderPanel(), 300);
       });
     };
 
@@ -4974,31 +5040,13 @@
         });
       }
 
-      // Log + config (reuse same logic)
-      const textarea = container.querySelector('#smax-config-io-textarea');
-      const statusEl = container.querySelector('#smax-config-io-status');
-      const copyBtn  = container.querySelector('#smax-config-copy-btn');
-      const saveBtn  = container.querySelector('#smax-config-save-btn');
-      const logBtn   = container.querySelector('#smax-log-export-all');
-
-      if (textarea) textarea.value = buildConfigJSON();
-
-      const setIOStatus = (msg, color) => {
-        if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color || 'var(--sp-text-muted)'; }
-      };
+      // Log de Atividades
+      const logBtn = container.querySelector('#smax-log-export-all');
       if (logBtn) logBtn.addEventListener('click', () => ActivityLog.exportCsv());
-      if (copyBtn) copyBtn.addEventListener('click', () => {
-        if (!textarea?.value.trim()) return;
-        navigator.clipboard.writeText(textarea.value)
-          .then(() => setIOStatus('Copiado! ✓', '#4ade80'))
-          .catch(() => { textarea.select(); document.execCommand('copy'); setIOStatus('Copiado! ✓', '#4ade80'); });
-      });
-      if (saveBtn) saveBtn.addEventListener('click', () => {
-        const raw = (textarea?.value || '').trim();
-        if (!raw) { setIOStatus('O campo está vazio.', '#fca5a5'); return; }
-        const result = applyConfigJSON(raw);
-        setIOStatus(result.msg, result.ok ? '#4ade80' : '#fca5a5');
-        if (result.ok) setTimeout(() => renderPanel(), 300);
+      const resetSyncBtn = container.querySelector('#smax-log-reset-syncfail');
+      if (resetSyncBtn) resetSyncBtn.addEventListener('click', () => {
+        ActivityLog.resetSyncFailCount();
+        navigateTo('triagem');
       });
     };
 
@@ -5529,6 +5577,67 @@
   })();
 
   /* =========================================================
+   * Shared status maps (TriageHUD + ResponseHUD + SettingsPanel)
+   * =======================================================*/
+  const REQUEST_STATUS_LABELS = {
+    RequestStatusInProgress:      'Em Andamento',
+    RequestStatusActive:          'Ativo',
+    RequestStatusSuspended:       'Suspenso',
+    RequestStatusComplete:        'Concluído',
+    RequestStatusAccepted:        'Aceito',
+    RequestStatusReject:          'Rejeitado',
+    RequestStatusPendingApproval: 'Aguardando Aprovação',
+    RequestStatusPendingCustomer: 'Aguardando Solicitante',
+    RequestStatusClassify:        'Classificar',
+    RequestStatusAbandon:         'Abandonado',
+    RequestStatusPendingChange:   'Aguardando Mudança',
+    RequestStatusPending:         'Usuário Final Pendente',
+    RequestStatusReady:           'Pronto',
+  };
+
+  const STATUS_SCCD_LABELS = {
+    Agendado_c:                          'Agendado',
+    Aguardando3Nivel_c:                  'Aguardando 3º Nível',
+    AguardandoAceiteDefinitivo_c:        'Aguardando Aceite Definitivo',
+    AguardandoAceiteCancelamento_c:      'Aguardando Aceite do Cancelamento',
+    AguardandoAtendimento_c:             'Aguardando Atendimento',
+    AguardandoCliente_c:                 'Aguardando Cliente',
+    AguardandoClienteContato1_c:         'Aguardando Cliente \u2013 Contato 1',
+    AguardandoClienteContato1DiaZero_c:  'Aguardando Cliente \u2013 Contato 1 (Dia Zero)',
+    AguardandoClienteContato2_c:         'Aguardando Cliente \u2013 Contato 2',
+    AguardandoClienteContato3_c:         'Aguardando Cliente \u2013 Contato 3',
+    AguardandoContinuidadeAtendimento_c: 'Aguardando Continuidade de Atendimento',
+    AguardandoDocumentacao_c:            'Aguardando Documenta\u00e7\u00e3o',
+    AguardandoEquipeConfiguracao_c:      'Aguardando Equipe de Configura\u00e7\u00e3o',
+    AguardandoInformacaoProcedimento_c:  'Aguardando Informa\u00e7\u00e3o de Procedimento',
+    AguardandoInstalacaoProducao_c:      'Aguardando Instala\u00e7\u00e3o em Produ\u00e7\u00e3o',
+    AguardandoOutraEquipe_c:             'Aguardando Outra Equipe',
+    AguardandoRetornoCliente_c:          'Aguardando Retorno do Cliente',
+    AguardandoRetornoFornecedor_c:       'Aguardando Retorno do Fornecedor',
+    AguardandoSTI_c:                     'Aguardando STI',
+    ATUALIZADOUSUARIOTEAMS_c:            'Atualizado pelo Usu\u00e1rio do Teams',
+    DevolucaoFaltaSubsidio_c:            'Devolu\u00e7\u00e3o falta de subs\u00eddio',
+    DevolucaoAtendimentoIT2B_c:          'Devolu\u00e7\u00e3o para Atendimento IT2B',
+    AnaliseATIPG_c:                      'Em An\u00e1lise ATIPG',
+    EmAnaliseEmpresa_c:                  'Em An\u00e1lise Empresa',
+    AnaliseSAAB_c:                       'Em An\u00e1lise SAAB',
+    EmAnaliseTJSP_c:                     'Em An\u00e1lise TJSP',
+    EmAtendimento_c:                     'Em Atendimento',
+    ErroIntegracao_c:                    'Erro na Integra\u00e7\u00e3o',
+    Fechado_c:                           'Fechado',
+    DecursoPrazo_c:                      'Fechado por Decurso de Prazo',
+    PedidoRecategorizacao_c:             'Pedido de Recategoriza\u00e7\u00e3o',
+    RetornoAnalise_c:                    'Retorno An\u00e1lise',
+    RetornoAtividade_c:                  'Retorno de Atividade',
+  };
+
+  const humanReadableStatus = (raw) => {
+    if (!raw) return '';
+    if (REQUEST_STATUS_LABELS[raw]) return REQUEST_STATUS_LABELS[raw];
+    return raw.replace(/^RequestStatus/i, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+  };
+
+  /* =========================================================
    * Triage HUD
    * =======================================================*/
   const TriageHUD = (() => {
@@ -5679,22 +5788,6 @@
       crit: { Urgency: 'TotalLossOfService', ImpactScope: 'Enterprise' }
     };
 
-    const REQUEST_STATUS_MAP = {
-      RequestStatusInProgress: 'Em Andamento',
-      RequestStatusActive: 'Ativo',
-      RequestStatusSuspended: 'Suspenso',
-      RequestStatusComplete: 'Concluído',
-      RequestStatusAccepted: 'Aceito',
-      RequestStatusReject: 'Rejeitado',
-      RequestStatusPendingApproval: 'Aguardando Aprovação',
-      RequestStatusPendingCustomer: 'Aguardando Solicitante',
-      RequestStatusClassify: 'Classificar',
-      RequestStatusAbandon: 'Abandonado',
-      RequestStatusPendingChange: 'Aguardando Mudança',
-      RequestStatusPending: 'Usuário Final Pendente',
-      RequestStatusReady: 'Pronto'
-    };
-
     // Statuses exposed to the user in the dropdown (subset of the full map)
     const EDITABLE_STATUSES = [
       'RequestStatusSuspended',
@@ -5704,13 +5797,6 @@
       'RequestStatusReject',
       'RequestStatusComplete'
     ];
-
-    const humanReadableStatus = (raw) => {
-      if (!raw) return '';
-      if (REQUEST_STATUS_MAP[raw]) return REQUEST_STATUS_MAP[raw];
-      // Fallback: strip 'RequestStatus' prefix and add spaces before capitals
-      return raw.replace(/^RequestStatus/i, '').replace(/([a-z])([A-Z])/g, '$1 $2');
-    };
 
     let currentTicketOriginalStatus = ''; // tracks the ticket's API status so user can revert
 
@@ -6414,23 +6500,6 @@
       return worker ? worker.name : null;
     };
 
-    const resolvePersonIdByName = (name) => {
-      const target = Utils.normalizeText(name);
-      if (!target) return '';
-      let resolved = '';
-      DataRepository.peopleCache.forEach((person) => {
-        if (resolved || !person) return;
-        const composite = [
-          person.name,
-          [person.firstName, person.lastName].filter(Boolean).join(' '),
-          person.DisplayLabel,
-          person.FullName
-        ].find((entry) => entry && Utils.normalizeText(entry) === target);
-        if (composite) resolved = String(person.id);
-      });
-      return resolved;
-    };
-
     const DISCUSSION_DATE_OPTIONS = {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit'
@@ -6569,9 +6638,12 @@
         triageIndex = -1;
         if (ticketDetailsEl) ticketDetailsEl.innerHTML = '<div style="font-size:14px;color:#e5e7eb;">Nenhum chamado encontrado na lista atual. Verifique o campo "meus finais", logo acima.</div>';
         if (discussionsEl) discussionsEl.innerHTML = '<div class="smax-discussions-placeholder">Nenhuma discussão disponível.</div>';
+        const rawFinals = (prefs.personalFinalsRaw || '').trim();
         statusEl.textContent = personalFinalsSet.size
           ? 'Nenhum chamado corresponde aos finais configurados.'
-          : 'Verifique se a visão contém ID, Descrição e Hora de Criação.';
+          : rawFinals
+            ? '⚠️ "Meus finais" não contém dígitos válidos. Exemplo: 0-32,50'
+            : 'Verifique se a visão contém ID, Descrição e Hora de Criação.';
         if (nextBtn) nextBtn.disabled = true;
         if (prevBtn) prevBtn.disabled = true;
         Object.values(urgencyButtons).forEach((btn) => { btn.disabled = true; btn.dataset.active = 'false'; });
@@ -6821,7 +6893,7 @@
 
       const hasOwner = !!effectiveOwner;
       const urgencySet = !!stagedState.urgency;
-      const resolvedPersonId = hasOwner ? resolvePersonIdByName(effectiveOwner) : '';
+      const resolvedPersonId = hasOwner ? DataRepository.resolvePersonId(effectiveOwner) : '';
       if (hasOwner) {
         console.debug('[SMAX][Triagem] Owner mapping check', {
           owner: effectiveOwner,
@@ -7010,7 +7082,14 @@
           })
         );
       }
-      Promise.all(tasks).then((results) => {
+      Promise.allSettled(tasks).then((settled) => {
+        const results = settled.map((s, idx) => {
+          if (s.status === 'rejected') {
+            console.warn(`[SMAX Triagem] Task ${idx} rejeitada:`, s.reason);
+            return null; // summarizeBulkOutcome(null) → {ok:false, messages:['SMAX não retornou resposta.']}
+          }
+          return s.value;
+        });
         const outcomes = results.map((payload, idx) => Api.summarizeBulkOutcome(payload, idx));
         const firstFailure = outcomes.find((entry) => !entry.ok);
         if (!firstFailure && props.Solution) {
@@ -7174,6 +7253,7 @@
     const openHud = () => {
       DataRepository.ensurePeopleLoaded();
       ensureSupportGroupsReady();
+      refreshPersonalFinalsSet(); // garante sincronismo se prefs mudou via JSON import
       if (startBtn) startBtn.style.display = 'none';
       backdrop.style.display = 'flex';
       const finalsInput = backdrop.querySelector('#smax-personal-finals-input');
@@ -7414,10 +7494,19 @@
         finalsInput.addEventListener('input', () => {
           const cleaned = finalsInput.value.replace(/[^0-9,\-\s]/g, '');
           if (cleaned !== finalsInput.value) finalsInput.value = cleaned;
-          prefs.personalFinalsRaw = cleaned.trim();
+          const trimmed = cleaned.trim();
+          prefs.personalFinalsRaw = trimmed;
           refreshPersonalFinalsSet();
           savePrefs();
           rebuildQueueForPersonalFinals();
+          // Feedback visual: entrada preenchida mas nenhum dígito válido parseado
+          if (trimmed && !personalFinalsSet.size) {
+            finalsInput.style.borderColor = '#f87171';
+            finalsInput.title = 'Nenhum dígito válido. Use: 0-32,50 ou 0,5,10';
+          } else {
+            finalsInput.style.borderColor = '';
+            finalsInput.title = '';
+          }
         });
       }
       rebuildQueueForPersonalFinals();
@@ -7474,62 +7563,6 @@
       else batchPending[field] = value;
     };
     const clearBatchPending = () => { batchPending = {}; };
-
-    const resolveAssigneeName = (personId) => {
-      if (!personId) return '';
-      const p = DataRepository.peopleCache.get(personId);
-      return p?.name || p?.fullName || personId;
-    };
-
-    const STATUS_LABELS = {
-      RequestStatusActive: 'Ativo',
-      RequestStatusInProgress: 'Em Andamento',
-      RequestStatusSuspended: 'Suspenso',
-      RequestStatusComplete: 'Concluído',
-      RequestStatusPendingCustomer: 'Aguardando Solicitante',
-      RequestStatusClassify: 'Classificar',
-      RequestStatusPending: 'Usuário Final Pendente',
-      RequestStatusReject: 'Rejeitado',
-      RequestStatusReady: 'Pronto',
-      RequestStatusPendingApproval: 'Aguardando Aprovação',
-      RequestStatusPendingChange: 'Aguardando Mudança',
-    };
-
-    const STATUS_SCCD_LABELS = {
-      Agendado_c: 'Agendado',
-      Aguardando3Nivel_c: 'Aguardando 3º Nível',
-      AguardandoAceiteDefinitivo_c: 'Aguardando Aceite Definitivo',
-      AguardandoAceiteCancelamento_c: 'Aguardando Aceite do Cancelamento',
-      AguardandoAtendimento_c: 'Aguardando Atendimento',
-      AguardandoCliente_c: 'Aguardando Cliente',
-      AguardandoClienteContato1_c: 'Aguardando Cliente – Contato 1',
-      AguardandoClienteContato1DiaZero_c: 'Aguardando Cliente – Contato 1 (Dia Zero)',
-      AguardandoClienteContato2_c: 'Aguardando Cliente – Contato 2',
-      AguardandoClienteContato3_c: 'Aguardando Cliente – Contato 3',
-      AguardandoContinuidadeAtendimento_c: 'Aguardando Continuidade de Atendimento',
-      AguardandoDocumentacao_c: 'Aguardando Documentação',
-      AguardandoEquipeConfiguracao_c: 'Aguardando Equipe de Configuração',
-      AguardandoInformacaoProcedimento_c: 'Aguardando Informação de Procedimento',
-      AguardandoInstalacaoProducao_c: 'Aguardando Instalação em Produção',
-      AguardandoOutraEquipe_c: 'Aguardando Outra Equipe',
-      AguardandoRetornoCliente_c: 'Aguardando Retorno do Cliente',
-      AguardandoRetornoFornecedor_c: 'Aguardando Retorno do Fornecedor',
-      AguardandoSTI_c: 'Aguardando STI',
-      ATUALIZADOUSUARIOTEAMS_c: 'Atualizado pelo Usuário do Teams',
-      DevolucaoFaltaSubsidio_c: 'Devolução falta de subsídio',
-      DevolucaoAtendimentoIT2B_c: 'Devolução para Atendimento IT2B',
-      AnaliseATIPG_c: 'Em Análise ATIPG',
-      EmAnaliseEmpresa_c: 'Em Análise Empresa',
-      AnaliseSAAB_c: 'Em Análise SAAB',
-      EmAnaliseTJSP_c: 'Em Análise TJSP',
-      EmAtendimento_c: 'Em Atendimento',
-      ErroIntegracao_c: 'Erro na Integração',
-      Fechado_c: 'Fechado',
-      DecursoPrazo_c: 'Fechado por Decurso de Prazo',
-      PedidoRecategorizacao_c: 'Pedido de Recategorização',
-      RetornoAnalise_c: 'Retorno Análise',
-      RetornoAtividade_c: 'Retorno de Atividade',
-    };
 
     const FILTER_STATUSES = [
       'RequestStatusActive',
@@ -7716,7 +7749,7 @@
       listEl.innerHTML = ticketList.map(t => {
         const isActive = t.id === activeTicketId;
         const isChecked = selectedTicketIds.has(t.id);
-        const statusLabel = t.statusSCCD || STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
+        const statusLabel = t.statusSCCD || REQUEST_STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
         const globalChangeId = getGlobalId(t.id);              // este chamado é filho de globalChangeId
         const isGlobalParent = realChildCountMap.has(t.id) || localChildCount.has(t.id);
         const childCount = realChildCountMap.get(t.id) ?? localChildCount.get(t.id) ?? 0;
@@ -7945,7 +7978,7 @@
       }
 
       const statusLabel = backdrop.querySelector('#smax-resp-status-label');
-      if (statusLabel) statusLabel.textContent = STATUS_LABELS[entry.status] || (entry.status || '').replace('RequestStatus', '') || '';
+      if (statusLabel) statusLabel.textContent = REQUEST_STATUS_LABELS[entry.status] || (entry.status || '').replace('RequestStatus', '') || '';
 
       const sccdLabel = backdrop.querySelector('#smax-resp-sccd-label');
       if (sccdLabel) {
@@ -7977,7 +8010,7 @@
           displayAssignee = pending.assignee.name || pending.assignee.id;
         } else {
           const aid = entry.expertAssigneeId || '';
-          displayAssignee = aid ? (resolveAssigneeName(aid) || aid) : 'Sem especialista';
+          displayAssignee = aid ? (DataRepository.resolveName(aid) || aid) : 'Sem especialista';
         }
         assigneeChipName.textContent = displayAssignee;
         assigneeBtn.classList.toggle('dirty', !!pending.assignee);
@@ -7989,8 +8022,8 @@
       if (statusChipName && statusBtn) {
         const tid = entry.idText || '';
         const pendSt = pendingStatusByTicket[tid];
-        const ownStatus = STATUS_LABELS[entry.status] || entry.status || '—';
-        const displayStatus = pendSt ? (STATUS_LABELS[pendSt.key] || pendSt.key) : ownStatus;
+        const ownStatus = REQUEST_STATUS_LABELS[entry.status] || entry.status || '—';
+        const displayStatus = pendSt ? (REQUEST_STATUS_LABELS[pendSt.key] || pendSt.key) : ownStatus;
         statusChipName.textContent = displayStatus;
         statusBtn.classList.toggle('dirty', !!pendSt);
         statusBtn.title = pendSt ? `Alterar status (pendente: ${displayStatus})` : 'Alterar status do chamado';
@@ -8168,11 +8201,11 @@
           va = a.createTime || 0;
           vb = b.createTime || 0;
         } else if (sortField === 'status') {
-          va = a.statusSCCD || STATUS_LABELS[a.status] || '';
-          vb = b.statusSCCD || STATUS_LABELS[b.status] || '';
+          va = a.statusSCCD || REQUEST_STATUS_LABELS[a.status] || '';
+          vb = b.statusSCCD || REQUEST_STATUS_LABELS[b.status] || '';
         } else if (sortField === 'assignee') {
-          va = resolveAssigneeName(a.assignee) || '';
-          vb = resolveAssigneeName(b.assignee) || '';
+          va = DataRepository.resolveName(a.assignee) || '';
+          vb = DataRepository.resolveName(b.assignee) || '';
         } else { // 'id'
           va = parseInt(a.id, 10) || 0;
           vb = parseInt(b.id, 10) || 0;
@@ -8600,7 +8633,7 @@
         const entry = DataRepository.triageCache.get(activeTicketId);
         if (chipGseName && entry) chipGseName.textContent = entry.assignmentGroupName || '—';
         if (chipGseBtn)  chipGseBtn.classList.remove('dirty');
-        if (chipAssName && entry) chipAssName.textContent = resolveAssigneeName(entry.expertAssigneeId || '') || 'Sem especialista';
+        if (chipAssName && entry) chipAssName.textContent = DataRepository.resolveName(entry.expertAssigneeId || '') || 'Sem especialista';
         if (chipAssBtn)  chipAssBtn.classList.remove('dirty');
         if (chipSccdName && entry) chipSccdName.textContent = STATUS_SCCD_LABELS[entry.statusSCCD] || entry.statusSCCD || '—';
         if (chipSccdBtn)  chipSccdBtn.classList.remove('dirty');
@@ -8617,7 +8650,7 @@
       const rows = targets.map(id => {
         const a = analyzeTicket(id, solutionRaw);
         const curGseName      = groupMap.get(a.curGseId)      || a.curGseId      || '—';
-        const curAssigneeName = resolveAssigneeName(a.curAssigneeId) || a.curAssigneeId || '—';
+        const curAssigneeName = DataRepository.resolveName(a.curAssigneeId) || a.curAssigneeId || '—';
         return { id, ...a, curGseName, curAssigneeName };
       });
 
@@ -8894,7 +8927,7 @@
                 const assigneeChipName = backdrop.querySelector('#smax-resp-assignee-chip-name');
                 const assigneeChipBtn  = backdrop.querySelector('#smax-resp-assignee-btn');
                 const origEntry = DataRepository.triageCache.get(activeTicketId);
-                if (assigneeChipName) assigneeChipName.textContent = resolveAssigneeName(origEntry?.expertAssigneeId || '') || 'Sem especialista';
+                if (assigneeChipName) assigneeChipName.textContent = DataRepository.resolveName(origEntry?.expertAssigneeId || '') || 'Sem especialista';
                 if (assigneeChipBtn)  { assigneeChipBtn.classList.remove('dirty'); assigneeChipBtn.title = 'Alterar especialista'; }
               }
               updateSendButton();
@@ -8968,7 +9001,7 @@
             setBatchPending('assignee', alreadySet ? null : { id: pid, name: pname });
             const isDirty = !alreadySet;
             const origEntry = DataRepository.triageCache.get(activeTicketId);
-            if (chipEl) chipEl.textContent = isDirty ? pname : (resolveAssigneeName(origEntry?.expertAssigneeId || '') || 'Sem especialista');
+            if (chipEl) chipEl.textContent = isDirty ? pname : (DataRepository.resolveName(origEntry?.expertAssigneeId || '') || 'Sem especialista');
             if (chipBtn) {
               chipBtn.classList.toggle('dirty', isDirty);
               chipBtn.title = isDirty ? `Alterar especialista → ${pname} (todos selecionados)` : 'Alterar especialista';
@@ -9030,7 +9063,7 @@
         : '';
 
       picker.innerHTML = cancelHtml + CHANGEABLE_STATUSES.map(key => {
-        const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
+        const label = REQUEST_STATUS_LABELS[key] || key.replace('RequestStatus', '');
         const isPending  = pendSt?.key === key;
         const isOwn      = !pendSt && key === ownStatus;
         const cls = (isPending || isOwn) ? ' status-current' : '';
@@ -9060,16 +9093,16 @@
 
           if (key === '__clear__') {
             delete pendingStatusByTicket[tid];
-            updateChip('', STATUS_LABELS[ownStatus] || ownStatus || '—');
+            updateChip('', REQUEST_STATUS_LABELS[ownStatus] || ownStatus || '—');
             return;
           }
           // Clicar no status já pendente ou no status atual sem pending → limpar
           if ((pendSt?.key === key) || (!pendSt && key === ownStatus)) {
             delete pendingStatusByTicket[tid];
-            updateChip('', STATUS_LABELS[ownStatus] || ownStatus || '—');
+            updateChip('', REQUEST_STATUS_LABELS[ownStatus] || ownStatus || '—');
             return;
           }
-          const label = STATUS_LABELS[key] || key.replace('RequestStatus', '');
+          const label = REQUEST_STATUS_LABELS[key] || key.replace('RequestStatus', '');
           pendingStatusByTicket[tid] = { key, label };
           updateChip(key, label);
         });
@@ -10983,7 +11016,18 @@
 
     const init = () => {
       loadCache();
-      if (data) applyToModules(); // aplica cache imediatamente
+      if (data) {
+        applyToModules(); // aplica cache imediatamente
+        const ageMs = Date.now() - fetchedAt;
+        if (ageMs > TTL_MS) {
+          const ageMin = Math.round(ageMs / 60000);
+          statusText = `⚠️ Cache desatualizado (${ageMin > 90 ? Math.round(ageMin / 60) + 'h' : ageMin + 'min'}) — atualizando...`;
+        } else {
+          const d = new Date(fetchedAt);
+          const hm = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+          statusText = `✓ v${data._version || '1'} — cache de ${hm}`;
+        }
+      }
       refresh();                  // atualiza em segundo plano (sem await)
     };
 
