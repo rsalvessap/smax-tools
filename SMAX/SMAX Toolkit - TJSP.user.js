@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.02
+// @version      2.03
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.02';
+  const SMAX_TOOLKIT_VERSION = '2.03';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -2344,8 +2344,12 @@
       const idNum = parseInt(id.replace(/\D/g, ''), 10);
       const existing = triageCache.get(id) || {};
       let requestedForName = '';
+      let requestedForPersonId = existing.requestedForPersonId || '';
+      let requestedForTitle = existing.requestedForTitle || '';
       const requestedRel = rel && rel.RequestedForPerson ? rel.RequestedForPerson : null;
       const requestedProps = props && props.RequestedForPerson ? props.RequestedForPerson : null;
+      if (requestedRel && requestedRel.Id) requestedForPersonId = String(requestedRel.Id);
+      if (requestedRel && requestedRel.Title) requestedForTitle = String(requestedRel.Title).trim();
       const requestedCandidates = [
         requestedRel && requestedRel.DisplayLabel,
         requestedRel && requestedRel.Name,
@@ -2440,6 +2444,8 @@
         solutionHtml: String(solutionHtml),
         solutionText,
         requestedForName,
+        requestedForPersonId,
+        requestedForTitle,
         discussions,
         assignmentGroupId,
         assignmentGroupName,
@@ -2537,7 +2543,8 @@
             employeeNumber: props.EmployeeNumber || '',
             firstName: props.FirstName || '',
             lastName: props.LastName || '',
-            location: props.Location || ''
+            location: props.Location || '',
+            title: (props.Title || '').toString().trim()
           };
           if (!payload.email && !payload.upn) continue;
           peopleCache.set(id, payload);
@@ -2551,7 +2558,7 @@
 
     const basePeopleParams = {
       filter: '(PersonToGroup[Id in (51642955)])',
-      layout: 'Name,Avatar,Location,IsVIP,OrganizationalGroup,Upn,IsDeleted,FirstName,LastName,EmployeeNumber,Email',
+      layout: 'Name,Avatar,Location,IsVIP,OrganizationalGroup,Upn,IsDeleted,FirstName,LastName,EmployeeNumber,Email,Title',
       meta: 'totalCount',
       order: 'Name asc',
       size: 50,
@@ -8003,6 +8010,34 @@
       const openerEl = backdrop.querySelector('#smax-resp-opener');
       if (openerEl) openerEl.textContent = entry.requestedForName ? `👤 ${entry.requestedForName}` : '';
 
+      // Título/cargo do solicitante — busca no peopleCache pelo ID, fallback ao campo da resposta
+      const titleEl = backdrop.querySelector('#smax-resp-requester-title');
+      if (titleEl) {
+        let personTitle = entry.requestedForTitle || '';
+        if (!personTitle && entry.requestedForPersonId) {
+          personTitle = DataRepository.peopleCache.get(entry.requestedForPersonId)?.title || '';
+        }
+        if (personTitle) {
+          titleEl.textContent = personTitle;
+          titleEl.style.display = '';
+        } else {
+          titleEl.style.display = 'none';
+        }
+      }
+
+      // Data de abertura formatada como dd/mm/aaaa - hh:mm
+      const createdEl = backdrop.querySelector('#smax-resp-created-label');
+      if (createdEl) {
+        if (entry.createdTs) {
+          const d = new Date(entry.createdTs);
+          const pad = n => String(n).padStart(2, '0');
+          createdEl.textContent = `🕐 ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          createdEl.style.display = '';
+        } else {
+          createdEl.style.display = 'none';
+        }
+      }
+
       const vipBadge = backdrop.querySelector('#smax-resp-vip-badge');
       if (vipBadge) vipBadge.style.display = entry.isVip ? '' : 'none';
 
@@ -8015,20 +8050,6 @@
         } else {
           locationLabel.style.display = 'none';
           locationLabel.dataset.fullLocation = '';
-        }
-      }
-
-      const statusLabel = backdrop.querySelector('#smax-resp-status-label');
-      if (statusLabel) statusLabel.textContent = REQUEST_STATUS_LABELS[entry.status] || (entry.status || '').replace('RequestStatus', '') || '';
-
-      const sccdLabel = backdrop.querySelector('#smax-resp-sccd-label');
-      if (sccdLabel) {
-        const sccdVal = entry.statusSCCD || '';
-        if (sccdVal) {
-          sccdLabel.textContent = sccdVal.replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
-          sccdLabel.style.display = '';
-        } else {
-          sccdLabel.style.display = 'none';
         }
       }
 
@@ -9327,14 +9348,14 @@
           <!-- Right: detail -->
           <div id="smax-resp-hud-main">
             <div id="smax-resp-hud-header">
-              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;flex-wrap:wrap;">
                 <a id="smax-resp-ticket-id-link" href="#" target="_blank" style="font-size:14px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;opacity:.9;">—</a>
                 <span id="smax-resp-detail-global-badge" style="display:none;flex-shrink:0;"></span>
-                <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                 <span id="smax-resp-vip-badge" style="display:none;padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;flex-shrink:0;">VIP</span>
-                <span id="smax-resp-location-label" style="display:none;font-size:10px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;cursor:pointer;" title="Clique para ver nome completo"></span>
-                <span id="smax-resp-status-label" style="font-size:10px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);flex-shrink:0;" title="Status SMAX"></span>
-                <span id="smax-resp-sccd-label" style="font-size:10px;background:rgba(245,158,11,.2);color:#fcd34d;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid rgba(245,158,11,.4);flex-shrink:0;display:none;" title="Status Operacional"></span>
+                <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;flex-shrink:0;"></span>
+                <span id="smax-resp-requester-title" style="display:none;font-size:10px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;flex-shrink:0;font-style:italic;"></span>
+                <span id="smax-resp-location-label" style="display:none;font-size:10px;color:rgba(255,255,255,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;cursor:pointer;" title="Clique para ver nome completo"></span>
+                <span id="smax-resp-created-label" style="display:none;font-size:10px;color:rgba(255,255,255,.4);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <input type="text" id="smax-resp-global-id" placeholder="Global ID" inputmode="numeric" autocomplete="off"
