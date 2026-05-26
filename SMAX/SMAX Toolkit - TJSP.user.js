@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.03
+// @version      2.05
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.03';
+  const SMAX_TOOLKIT_VERSION = '2.05';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -759,6 +759,36 @@
     .smax-resp-disc-author { color:#94a3b8; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
     .smax-resp-disc-body { color:#d1d5db; line-height:1.45; font-size:11px; max-height:80px; overflow-y:auto; }
     .smax-resp-disc-body p { margin:0 0 4px; }
+    .smax-resp-disc-expand-btn { font-size:10px; padding:2px 7px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#6b7280; cursor:pointer; transition:all .12s; }
+    .smax-resp-disc-expand-btn:hover { border-color:rgba(148,163,184,.4); color:#94a3b8; background:rgba(148,163,184,.08); }
+    #smax-disc-modal { display:none; position:absolute; inset:0; z-index:20; background:rgba(2,6,23,.97); border-radius:inherit; flex-direction:column; overflow:hidden; }
+    #smax-disc-modal-header { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,.08); flex-shrink:0; }
+    #smax-disc-modal-meta { flex:1; min-width:0; }
+    #smax-disc-modal-author { font-size:13px; font-weight:700; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #smax-disc-modal-date { font-size:10px; color:#6b7280; margin-top:2px; }
+    #smax-disc-modal-badges { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+    .smax-disc-modal-badge { font-size:9px; padding:1px 7px; border-radius:10px; border:1px solid rgba(255,255,255,.13); color:#94a3b8; background:rgba(255,255,255,.04); }
+    #smax-disc-modal-nav { display:flex; gap:4px; flex-shrink:0; margin-top:2px; }
+    #smax-disc-modal-nav button { padding:3px 10px; border-radius:6px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#d1d5db; font-size:14px; cursor:pointer; line-height:1; }
+    #smax-disc-modal-nav button:disabled { opacity:.3; cursor:default; }
+    #smax-disc-modal-close { flex-shrink:0; border:1px solid rgba(255,255,255,.2); background:rgba(0,0,0,.3); color:rgba(255,255,255,.8); font-size:14px; width:28px; height:28px; border-radius:6px; cursor:pointer; margin-top:1px; }
+    #smax-disc-modal-body { flex:1; overflow-y:auto; padding:16px 20px; color:#d1d5db; line-height:1.65; font-size:13px; }
+    #smax-disc-modal-body img { max-width:100%; height:auto; border-radius:6px; margin:4px 0; display:block; }
+    #smax-disc-modal-body p { margin:0 0 8px; }
+    #smax-disc-modal-body ul,#smax-disc-modal-body ol { margin:0 0 8px; padding-left:20px; }
+    #smax-disc-modal-footer { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-top:1px solid rgba(255,255,255,.07); flex-shrink:0; gap:8px; }
+    #smax-disc-modal-counter { font-size:11px; color:#6b7280; }
+    #smax-disc-modal-replicate { font-size:11px; padding:4px 14px; border-radius:6px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#d1d5db; cursor:pointer; transition:all .12s; }
+    #smax-disc-modal-replicate:hover:not(:disabled) { border-color:rgba(59,130,246,.5); color:#93c5fd; background:rgba(59,130,246,.1); }
+    #smax-disc-modal-replicate:disabled { opacity:.5; cursor:default; }
+    body[data-smax-theme="light"] #smax-disc-modal { background:rgba(240,245,255,.98); }
+    body[data-smax-theme="light"] #smax-disc-modal-body { color:#1e293b; }
+    body[data-smax-theme="light"] #smax-disc-modal-author { color:#0f172a; }
+    body[data-smax-theme="light"] .smax-disc-modal-badge { color:#475569; border-color:rgba(0,0,0,.15); background:rgba(0,0,0,.04); }
+    body[data-smax-theme="light"] #smax-disc-modal-nav button { background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.15); color:#374151; }
+    body[data-smax-theme="light"] #smax-disc-modal-close { background:rgba(0,0,0,.06); border-color:rgba(0,0,0,.2); color:#374151; }
+    body[data-smax-theme="light"] #smax-disc-modal-footer { border-color:rgba(0,0,0,.08); }
+    body[data-smax-theme="light"] #smax-disc-modal-header { border-color:rgba(0,0,0,.08); }
     #smax-resp-hud-footer { padding:10px 16px; border-top:1px solid rgba(255,255,255,.07); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; background:rgba(2,6,23,.4); }
     #smax-resp-script-picker { display:none; position:absolute; left:0; right:0; bottom:100%; z-index:20; background:#0d1117; border:1px solid rgba(255,255,255,.15); border-radius:10px; margin-bottom:6px; box-shadow:0 8px 28px rgba(0,0,0,.55); overflow:hidden; }
     .smax-resp-script-item { padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05); font-size:12px; color:#d1d5db; transition:background .1s; }
@@ -3088,27 +3118,76 @@
       return 'PrivacyTypeInternal';
     };
 
-    const postDiscussion = (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
-      if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
-      if (!ticketId || !bodyHtml) return Promise.resolve(null);
-      const commentProps = {
+    const postDiscussion = async (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
+      if (!prefs.enableRealWrites) return { skipped: true };
+      if (!ticketId || !bodyHtml) return null;
+
+      // SMAX exige: Comments como string JSON com TODOS os comentários existentes + o novo,
+      // e LastUpdateTime do ticket. Fazemos GET fresco para obter esses valores.
+      let lastUpdateTime = 0;
+      let existingComments = [];
+      try {
+        const fresh = await ApiClient.request(`ems/Request/${encodeURIComponent(String(ticketId))}`, {
+          method: 'GET',
+          searchParams: { layout: 'Id,Comments,LastUpdateTime' },
+          includeTenantParam: true
+        });
+        const ent = Array.isArray(fresh?.entities) ? (fresh.entities[0] || {}) : {};
+        const props = ent.properties || {};
+        lastUpdateTime = props.LastUpdateTime || 0;
+        if (props.Comments) {
+          const parsed = typeof props.Comments === 'string' ? JSON.parse(props.Comments) : props.Comments;
+          existingComments = Array.isArray(parsed?.Comment) ? parsed.Comment : [];
+        }
+      } catch (err) {
+        console.warn('[SMAX] postDiscussion: falha ao buscar ticket para Comments:', err);
+        return null;
+      }
+
+      // Gera CommentId no mesmo formato hex de 36 chars usado pelo SMAX
+      const commentId = Array.from({ length: 36 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+      // Mapeia privacyRaw para o valor curto que o campo Comments aceita (PUBLIC/INTERNAL/etc.)
+      const privacyShort = (() => {
+        if (!privacyRaw) return 'INTERNAL';
+        const u = privacyRaw.toUpperCase();
+        if (u === 'PUBLIC')             return 'PUBLIC';
+        if (u === 'EXTERNAL')           return 'EXTERNAL';
+        if (u === 'AGENT')              return 'AGENT';
+        if (u.startsWith('PRIVACYTYPE')) return u.replace('PRIVACYTYPE', '');
+        return 'INTERNAL';
+      })();
+
+      const newComment = {
+        CommentId: commentId,
+        Submitter: prefs.myPersonId ? `Person/${prefs.myPersonId}` : '',
+        CreateTime: Date.now(),
+        UpdateTime: 0,
+        IsSystem: false,
+        ActualInterface: 'SAW',
+        CommentMedia: 'UI',
+        CommentFrom: 'Agent',
+        FunctionalPurpose: purposeCode || 'StatusUpdate',
+        PrivacyType: privacyShort,
+        CommentTo: 'Agent',
         CommentBody: bodyHtml,
-        PrivacyType: toSmaxPrivacyType(privacyRaw),
+        DeltaCreateTime: 1,
+        AttachmentIds: ''
       };
-      if (purposeCode) commentProps.FunctionalPurpose = purposeCode;
-      // SMAX desta instância não aceita entity_type 'Comment' diretamente.
-      // Discussões são adicionadas via UPDATE no Request, no campo complexo Comments.
+
       const body = {
         entities: [{
           entity_type: 'Request',
           properties: {
             Id: String(ticketId),
-            Comments: { complexTypeProperties: [{ properties: commentProps }] }
+            LastUpdateTime: lastUpdateTime,
+            Comments: JSON.stringify({ Comment: [...existingComments, newComment] })
           }
         }],
         operation: 'UPDATE'
       };
-      return ApiClient.ems.bulk(body).then(res => res).catch(err => {
+
+      return ApiClient.ems.bulk(body).catch(err => {
         console.warn('[SMAX] postDiscussion failed:', err);
         return null;
       });
@@ -7950,19 +8029,58 @@
             </div>
             <div class="smax-resp-disc-body">${d.bodyHtml || Utils.escapeHtml(d.body || '')}</div>
             <div class="smax-resp-disc-footer">
+              <button class="smax-resp-disc-expand-btn" data-disc-idx="${idx}" title="Expandir discussão">⤢</button>
               <button class="smax-resp-disc-replicate-btn" data-disc-idx="${idx}" title="Relançar esta discussão com o mesmo texto">↺ Replicar</button>
             </div>
           </div>`;
       }).join('');
-      // Event listeners dos botões Replicar
+      // Event listeners dos botões Replicar e Expandir
       el.querySelectorAll('.smax-resp-disc-replicate-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const disc = currentDiscussions[parseInt(btn.dataset.discIdx, 10)];
           if (disc) replicateDiscussion(disc, btn);
         });
       });
+      el.querySelectorAll('.smax-resp-disc-expand-btn').forEach(btn => {
+        btn.addEventListener('click', () => openDiscModal(parseInt(btn.dataset.discIdx, 10)));
+      });
       // Scroll para a discussão mais recente (último item)
       requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    };
+
+    let discModalIdx = 0;
+
+    const renderDiscModal = () => {
+      const modal = backdrop?.querySelector('#smax-disc-modal');
+      if (!modal || !currentDiscussions.length) return;
+      const d = currentDiscussions[discModalIdx];
+      if (!d) return;
+      const dateStr = d.createdTs
+        ? new Date(d.createdTs).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '';
+      const submitter = resolveSubmitterName(d);
+      modal.querySelector('#smax-disc-modal-author').textContent = submitter || '—';
+      modal.querySelector('#smax-disc-modal-date').textContent = dateStr;
+      const badges = [];
+      if (d.privacyLabel) badges.push(d.privacyLabel);
+      if (d.purposeLabel) badges.push(d.purposeLabel);
+      modal.querySelector('#smax-disc-modal-badges').innerHTML =
+        badges.map(b => `<span class="smax-disc-modal-badge">${Utils.escapeHtml(b)}</span>`).join('');
+      modal.querySelector('#smax-disc-modal-body').innerHTML = d.bodyHtml || Utils.escapeHtml(d.bodyText || '');
+      modal.querySelector('#smax-disc-modal-counter').textContent = `${discModalIdx + 1} de ${currentDiscussions.length}`;
+      modal.querySelector('#smax-disc-modal-prev').disabled = discModalIdx === 0;
+      modal.querySelector('#smax-disc-modal-next').disabled = discModalIdx === currentDiscussions.length - 1;
+      // Reset replicar btn
+      const repBtn = modal.querySelector('#smax-disc-modal-replicate');
+      if (repBtn) { repBtn.disabled = false; repBtn.textContent = '↺ Replicar'; }
+    };
+
+    const openDiscModal = (idx) => {
+      const modal = backdrop?.querySelector('#smax-disc-modal');
+      if (!modal || !currentDiscussions.length) return;
+      discModalIdx = Math.max(0, Math.min(idx, currentDiscussions.length - 1));
+      renderDiscModal();
+      modal.style.display = 'flex';
     };
 
     const renderTicketDetail = (entry) => {
@@ -8634,7 +8752,7 @@
           // Postar texto de encaminhamento como discussão (quando GSE muda com forwarding)
           const fwdHtml = pending.forwarding?.text || '';
           if (gseWillChange && fwdHtml) {
-            await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'PUBLIC' });
+            await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'INTERNAL' });
           }
         }
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
@@ -9437,6 +9555,27 @@
               </div>
             </div>
           </div>
+          <!-- Discussion Expand Modal (overlay) -->
+          <div id="smax-disc-modal">
+            <div id="smax-disc-modal-header">
+              <div id="smax-disc-modal-meta">
+                <div id="smax-disc-modal-author"></div>
+                <div id="smax-disc-modal-date"></div>
+                <div id="smax-disc-modal-badges"></div>
+              </div>
+              <div id="smax-disc-modal-nav">
+                <button id="smax-disc-modal-prev" title="Discussão anterior">←</button>
+                <button id="smax-disc-modal-next" title="Próxima discussão">→</button>
+              </div>
+              <button id="smax-disc-modal-close" title="Fechar">✕</button>
+            </div>
+            <div id="smax-disc-modal-body"></div>
+            <div id="smax-disc-modal-footer">
+              <span id="smax-disc-modal-counter"></span>
+              <button id="smax-disc-modal-replicate">↺ Replicar</button>
+            </div>
+          </div>
+
           <!-- Activity Report Modal (overlay) -->
           <div id="smax-resp-report-modal" style="display:none;position:absolute;inset:0;background:rgba(2,6,23,.97);z-index:10;border-radius:inherit;flex-direction:column;overflow:hidden;">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;">
@@ -9773,6 +9912,22 @@
         const dirBtn = backdrop.querySelector('#smax-sort-dir-btn');
         if (dirBtn) dirBtn.textContent = sortDir === 'asc' ? '↑' : '↓';
         applyFilters();
+      });
+
+      // Modal de expansão de discussão
+      const discModal = backdrop.querySelector('#smax-disc-modal');
+      backdrop.querySelector('#smax-disc-modal-close')?.addEventListener('click', () => {
+        if (discModal) discModal.style.display = 'none';
+      });
+      backdrop.querySelector('#smax-disc-modal-prev')?.addEventListener('click', () => {
+        if (discModalIdx > 0) { discModalIdx--; renderDiscModal(); }
+      });
+      backdrop.querySelector('#smax-disc-modal-next')?.addEventListener('click', () => {
+        if (discModalIdx < currentDiscussions.length - 1) { discModalIdx++; renderDiscModal(); }
+      });
+      backdrop.querySelector('#smax-disc-modal-replicate')?.addEventListener('click', function() {
+        const disc = currentDiscussions[discModalIdx];
+        if (disc) replicateDiscussion(disc, this);
       });
 
       // Relatório de atividades
