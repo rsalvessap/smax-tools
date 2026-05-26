@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.00
+// @version      2.02
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.00';
+  const SMAX_TOOLKIT_VERSION = '2.02';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -3085,21 +3085,23 @@
       if (!prefs.enableRealWrites) return Promise.resolve({ skipped: true });
       if (!ticketId || !bodyHtml) return Promise.resolve(null);
       const commentProps = {
-        Request:    String(ticketId),
         CommentBody: bodyHtml,
         PrivacyType: toSmaxPrivacyType(privacyRaw),
       };
       if (purposeCode) commentProps.FunctionalPurpose = purposeCode;
+      // SMAX desta instância não aceita entity_type 'Comment' diretamente.
+      // Discussões são adicionadas via UPDATE no Request, no campo complexo Comments.
       const body = {
         entities: [{
-          entity_type: 'Comment',
-          properties: commentProps,
+          entity_type: 'Request',
+          properties: {
+            Id: String(ticketId),
+            Comments: { complexTypeProperties: [{ properties: commentProps }] }
+          }
         }],
-        operation: 'CREATE'
+        operation: 'UPDATE'
       };
-      return ApiClient.ems.bulk(body).then(res => {
-        return res;
-      }).catch(err => {
+      return ApiClient.ems.bulk(body).then(res => res).catch(err => {
         console.warn('[SMAX] postDiscussion failed:', err);
         return null;
       });
@@ -7556,6 +7558,11 @@
     // Ordenação da lista
     let sortField = 'id';   // 'id' | 'createTime' | 'status' | 'assignee'
     let sortDir   = 'desc';
+    // Virtual scroll
+    const VS_ITEM_H   = 66; // altura estimada por item (px) — média entre 2 e 3 linhas
+    const VS_OVERSCAN = 8;  // itens extras acima/abaixo do viewport
+    let _vsRafId = null;
+    let _vsProgrammaticScroll = false;
 
     const getBatchPending = () => batchPending;
     const setBatchPending = (field, value) => {
@@ -7725,7 +7732,48 @@
       });
     };
 
-    const renderTicketList = () => {
+    // Constrói o HTML de um único item da lista (extraído para reuso no virtual scroll)
+    const buildTicketItemHtml = (t, getGlobalId, localChildCount) => {
+      const isActive  = t.id === activeTicketId;
+      const isChecked = selectedTicketIds.has(t.id);
+      const statusLabel = t.statusSCCD || REQUEST_STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
+      const globalChangeId  = getGlobalId(t.id);
+      const isGlobalParent  = realChildCountMap.has(t.id) || localChildCount.has(t.id);
+      const childCount      = realChildCountMap.get(t.id) ?? localChildCount.get(t.id) ?? 0;
+      const isBothParentAndChild = isGlobalParent && !!globalChangeId;
+
+      let idLineHtml;
+      if (isBothParentAndChild) {
+        idLineHtml = `<span style="color:#fb923c;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
+          + ` <span class="smax-warning-badge" style="color:#fb923c;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(251,146,60,.5);vertical-align:middle;">⚠️ Global — filho de #${Utils.escapeHtml(globalChangeId)}</span>`;
+      } else if (isGlobalParent) {
+        idLineHtml = `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
+          + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);vertical-align:middle;">🌐 Global (${childCount} filho${childCount !== 1 ? 's' : ''})</span>`;
+      } else if (globalChangeId) {
+        idLineHtml = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
+          + ` <span style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalChangeId)}</span>`;
+      } else {
+        idLineHtml = `#${Utils.escapeHtml(t.id)}`;
+      }
+      if (t.isVip) idLineHtml += ' <span style="padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;vertical-align:middle;">VIP</span>';
+
+      const subjectText = t.subject && t.subject !== t.id ? (t.subject || '').slice(0, 55) : '';
+
+      return `
+        <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
+          <div class="smax-resp-tick-sel" data-id="${Utils.escapeHtml(t.id)}" title="Selecionar para lote"
+            style="flex-shrink:0;width:16px;height:16px;border-radius:4px;margin-top:2px;border:1.5px solid ${isChecked ? '#3b82f6' : 'rgba(255,255,255,.25)'};background:${isChecked ? '#3b82f6' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;transition:all .12s;cursor:pointer;">
+            ${isChecked ? '✓' : ''}
+          </div>
+          <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
+            <div class="smax-resp-ticket-id">${idLineHtml}</div>
+            ${t.descSnippet ? `<div class="smax-resp-list-desc" title="${Utils.escapeHtml(t.descSnippet)}">${Utils.escapeHtml(t.descSnippet.slice(0, 80))}</div>` : ''}
+            <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
+          </div>
+        </div>`;
+    };
+
+    const renderTicketList = ({ preserveScroll = false } = {}) => {
       const listEl = backdrop?.querySelector('#smax-resp-ticket-list');
       if (!listEl) return;
       if (!ticketList.length) {
@@ -7735,87 +7783,80 @@
       }
 
       // Mapa de vínculo global: combina ActivityLog + triageCache
-      const globalLogMap = ActivityLog.getGlobalMap(); // ticketId -> globalChangeId (via log de ações)
+      const globalLogMap = ActivityLog.getGlobalMap();
       const getGlobalId = (tid) =>
         globalLogMap.get(tid) || DataRepository.triageCache.get(tid)?.globalChangeId || '';
 
-      // Contagem local (filhos visíveis na lista) — só usada como fallback antes da API responder
+      // Contagem local (filhos visíveis na lista)
       const localChildCount = new Map();
       for (const t of ticketList) {
         const gid = getGlobalId(t.id);
         if (gid) localChildCount.set(gid, (localChildCount.get(gid) || 0) + 1);
       }
 
-      listEl.innerHTML = ticketList.map(t => {
-        const isActive = t.id === activeTicketId;
-        const isChecked = selectedTicketIds.has(t.id);
-        const statusLabel = t.statusSCCD || REQUEST_STATUS_LABELS[t.status] || (t.status || '').replace('RequestStatus', '') || '';
-        const globalChangeId = getGlobalId(t.id);              // este chamado é filho de globalChangeId
-        const isGlobalParent = realChildCountMap.has(t.id) || localChildCount.has(t.id);
-        const childCount = realChildCountMap.get(t.id) ?? localChildCount.get(t.id) ?? 0;
-        const isBothParentAndChild = isGlobalParent && !!globalChangeId; // cenário inválido
+      // Virtual scroll: calcular janela visível
+      const savedScroll = preserveScroll ? listEl.scrollTop : 0;
+      const clientH = listEl.clientHeight || 420;
+      const start = Math.max(0, Math.floor(savedScroll / VS_ITEM_H) - VS_OVERSCAN);
+      const end   = Math.min(ticketList.length, Math.ceil((savedScroll + clientH) / VS_ITEM_H) + VS_OVERSCAN);
 
-        // Linha do ID: número + badge de global (tudo inline)
-        let idLineHtml;
-        if (isBothParentAndChild) {
-          // Ticket é ao mesmo tempo pai e filho de outro global — configuração inválida
-          idLineHtml = `<span style="color:#fb923c;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-            + ` <span class="smax-warning-badge" style="color:#fb923c;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(251,146,60,.5);vertical-align:middle;">⚠️ Global — filho de #${Utils.escapeHtml(globalChangeId)}</span>`;
-        } else if (isGlobalParent) {
-          idLineHtml = `<span style="color:#4ade80;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-            + `<span style="margin-left:5px;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(74,222,128,.45);vertical-align:middle;">🌐 Global (${childCount} filho${childCount !== 1 ? 's' : ''})</span>`;
-        } else if (globalChangeId) {
-          idLineHtml = `<span style="color:#60a5fa;font-weight:700;">#${Utils.escapeHtml(t.id)}</span>`
-            + ` <span style="color:#f87171;font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid rgba(248,113,113,.35);vertical-align:middle;">⬆ Global #${Utils.escapeHtml(globalChangeId)}</span>`;
-        } else {
-          idLineHtml = `#${Utils.escapeHtml(t.id)}`;
-        }
-        if (t.isVip) idLineHtml += ' <span style="padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;vertical-align:middle;">VIP</span>';
+      const topH = start * VS_ITEM_H;
+      const botH = Math.max(0, (ticketList.length - end) * VS_ITEM_H);
 
-        // Assunto: não mostra se for igual ao ID (placeholder antes do carregamento completo)
-        const subjectText = t.subject && t.subject !== t.id ? (t.subject || '').slice(0, 55) : '';
+      const items = ticketList.slice(start, end)
+        .map(t => buildTicketItemHtml(t, getGlobalId, localChildCount))
+        .join('');
 
-        return `
-          <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
-            <div class="smax-resp-tick-sel" data-id="${Utils.escapeHtml(t.id)}" title="Selecionar para lote"
-              style="flex-shrink:0;width:16px;height:16px;border-radius:4px;margin-top:2px;border:1.5px solid ${isChecked ? '#3b82f6' : 'rgba(255,255,255,.25)'};background:${isChecked ? '#3b82f6' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;transition:all .12s;cursor:pointer;">
-              ${isChecked ? '✓' : ''}
-            </div>
-            <div class="smax-resp-ticket-info" style="flex:1;min-width:0;">
-              <div class="smax-resp-ticket-id">${idLineHtml}</div>
-              ${t.descSnippet ? `<div class="smax-resp-list-desc" title="${Utils.escapeHtml(t.descSnippet)}">${Utils.escapeHtml(t.descSnippet.slice(0, 80))}</div>` : ''}
-              <div class="smax-resp-ticket-status">${Utils.escapeHtml(statusLabel)}</div>
-            </div>
-          </div>`;
-      }).join('');
+      listEl.innerHTML =
+        `<div aria-hidden="true" style="height:${topH}px;flex-shrink:0;pointer-events:none;"></div>` +
+        items +
+        `<div aria-hidden="true" style="height:${botH}px;flex-shrink:0;pointer-events:none;"></div>`;
+
+      if (preserveScroll && savedScroll) {
+        _vsProgrammaticScroll = true;
+        listEl.scrollTop = savedScroll;
+        requestAnimationFrame(() => { _vsProgrammaticScroll = false; });
+      }
+
       applyDestaqueHighlights();
       updateSendButton();
 
-      listEl.querySelectorAll('.smax-resp-tick-sel').forEach(sel => {
-        sel.addEventListener('click', e => {
-          e.stopPropagation();
-          const id = sel.dataset.id;
-          if (selectedTicketIds.has(id)) {
-            selectedTicketIds.delete(id);
-            sel.style.border = '1.5px solid rgba(255,255,255,.25)';
-            sel.style.background = 'transparent';
-            sel.textContent = '';
-          } else {
-            selectedTicketIds.add(id);
-            sel.style.border = '1.5px solid #3b82f6';
-            sel.style.background = '#3b82f6';
-            sel.textContent = '✓';
-          }
-          updateBatchBar();
-        });
-      });
+      // Event delegation — anexado uma única vez ao container
+      if (!listEl._smaxVsDelegated) {
+        listEl._smaxVsDelegated = true;
 
-      listEl.querySelectorAll('.smax-resp-ticket-item').forEach(row => {
-        row.addEventListener('click', e => {
-          if (e.target.closest('.smax-resp-tick-sel')) return;
-          loadTicket(row.dataset.id);
+        listEl.addEventListener('click', e => {
+          const sel = e.target.closest('.smax-resp-tick-sel');
+          if (sel) {
+            e.stopPropagation();
+            const id = sel.dataset.id;
+            if (selectedTicketIds.has(id)) {
+              selectedTicketIds.delete(id);
+              sel.style.border = '1.5px solid rgba(255,255,255,.25)';
+              sel.style.background = 'transparent';
+              sel.textContent = '';
+            } else {
+              selectedTicketIds.add(id);
+              sel.style.border = '1.5px solid #3b82f6';
+              sel.style.background = '#3b82f6';
+              sel.textContent = '✓';
+            }
+            updateBatchBar();
+            return;
+          }
+          const row = e.target.closest('.smax-resp-ticket-item');
+          if (row) loadTicket(row.dataset.id);
         });
-      });
+
+        listEl.addEventListener('scroll', () => {
+          if (_vsProgrammaticScroll) return;
+          if (_vsRafId) return;
+          _vsRafId = requestAnimationFrame(() => {
+            _vsRafId = null;
+            renderTicketList({ preserveScroll: true });
+          });
+        }, { passive: true });
+      }
     };
 
     const resolveSubmitterName = (entry) => {
@@ -8063,6 +8104,26 @@
     const loadTicket = async (id) => {
       if (!id) return;
       activeTicketId = id;
+      // Garante que o item ativo está na janela renderizada (virtual scroll)
+      const _listElLt = backdrop?.querySelector('#smax-resp-ticket-list');
+      if (_listElLt) {
+        const idx = ticketList.findIndex(t => t.id === id);
+        if (idx >= 0) {
+          const itemTop = idx * VS_ITEM_H;
+          const itemBot = itemTop + VS_ITEM_H;
+          const scrollTop = _listElLt.scrollTop;
+          const clientH   = _listElLt.clientHeight || 420;
+          if (itemBot < scrollTop || itemTop > scrollTop + clientH) {
+            // Item fora do viewport — scroll para centralizar
+            _vsProgrammaticScroll = true;
+            _listElLt.scrollTop = Math.max(0, itemTop - clientH / 2);
+            requestAnimationFrame(() => {
+              _vsProgrammaticScroll = false;
+              renderTicketList({ preserveScroll: true });
+            });
+          }
+        }
+      }
       backdrop?.querySelectorAll('.smax-resp-ticket-item').forEach(el => {
         el.classList.toggle('active', el.dataset.id === id);
       });
@@ -8549,6 +8610,11 @@
               statusSCCD:          statusSCCDWillChange ? pendingStatusSCCDByTicket[id].key      : entry.statusSCCD,
             }));
           }
+          // Postar texto de encaminhamento como discussão (quando GSE muda com forwarding)
+          const fwdHtml = pending.forwarding?.text || '';
+          if (gseWillChange && fwdHtml) {
+            await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'PUBLIC' });
+          }
         }
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
         ActivityLog.log({
@@ -8602,22 +8668,8 @@
           const entry = DataRepository.triageCache.get(activeTicketId);
           if (entry) renderTicketDetail(entry);
         }
-        // Inserir texto de encaminhamento no CKEditor de discussão da página SMAX
-        if (fwdText) {
-          try {
-            const inst = Utils.locateSolutionEditor?.();
-            if (inst) {
-              inst.focus();
-              inst.insertHtml(fwdText);
-            } else {
-              // Fallback direto ao elemento contenteditable da discussão
-              const ed = document.querySelector('.cke_wysiwyg_div[contenteditable="true"]');
-              if (ed) { ed.focus(); document.execCommand('insertHTML', false, fwdText); }
-            }
-          } catch {}
-        }
         const skipNote = skipped > 0 ? ` (${skipped} ignorado${skipped !== 1 ? 's' : ''} — sem alterações)` : '';
-        const fwdNote = fwdText ? ' | 📤 Encaminhamento inserido no editor.' : '';
+        const fwdNote = fwdText ? ' | 📤 Encaminhamento postado como discussão.' : '';
         setStatusMsg(`✓ ${ok} chamado(s) atualizado(s).${skipNote}${fwdNote}`, '#4ade80');
       } else if (fail === 0 && ok === 0) {
         setStatusMsg('Nenhum chamado com alterações para enviar.', '#fca5a5');
