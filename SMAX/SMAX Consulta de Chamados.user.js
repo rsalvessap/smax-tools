@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.01
-// @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças e exportação em Word/Markdown/CSV.
+// @version      2.10
+// @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
 // @run-at       document-idle
@@ -60,6 +60,7 @@
     { key:'createTime',   label:'Data de abertura',   group:'Básico',   tracked:false },
     { key:'lastUpdate',   label:'Últ. atualização',   group:'Básico',   tracked:true  },
     { key:'global',       label:'Global pai',         group:'Relações', tracked:true  },
+    { key:'linkedCount',  label:'Vinculados',         group:'Relações', tracked:true  },
     { key:'requestedFor', label:'Solicitante',        group:'Relações', tracked:false },
     { key:'group',        label:'Grupo (GSE)',        group:'Relações', tracked:true  },
     { key:'assignee',     label:'Especialista',       group:'Relações', tracked:true  },
@@ -67,7 +68,7 @@
     { key:'solution',     label:'Solução',            group:'Conteúdo', tracked:false },
     { key:'comments',     label:'Comentários',        group:'Conteúdo', tracked:true  },
   ];
-  const DEFAULT_FIELDS = ['status','statusSCCD','lastUpdate','global','group','comments'];
+  const DEFAULT_FIELDS = ['status','statusSCCD','lastUpdate','global','linkedCount','group','comments'];
 
   // ══════════════════════════════════════════════════════════════════
   // STORAGE
@@ -91,6 +92,13 @@
   const nowStr = () => new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const todayStr = () => new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
 
+  const isToday = (ts) => {
+    if (!ts) return false;
+    const d = new Date(Number(ts));
+    const n = new Date();
+    return d.getDate()===n.getDate() && d.getMonth()===n.getMonth() && d.getFullYear()===n.getFullYear();
+  };
+
   const fmtDate = (ts) => {
     if (!ts) return '—';
     return new Date(Number(ts)).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -110,6 +118,8 @@
 
   const parseIds = (text) =>
     text.split(/[\n,;\s]+/).map(s=>s.trim()).filter(s=>/^\d+$/.test(s));
+
+  const truncate = (s, n) => s.length > n ? s.slice(0,n).trim() + '…' : s;
 
   // ══════════════════════════════════════════════════════════════════
   // TENANT + API
@@ -140,6 +150,19 @@
   // EXTRAÇÃO DE DADOS
   // ══════════════════════════════════════════════════════════════════
 
+  const extractLinkedCount = (props, rel) => {
+    // Try various possible API paths for linked/related request count
+    for (const key of ['RequestCausesRequest','UpstreamRequest','DownstreamRequest','RelatedRequest']) {
+      const v = rel[key];
+      if (!v) continue;
+      if (typeof v.count === 'number') return v.count;
+      if (Array.isArray(v)) return v.length;
+      if (Array.isArray(v.entities)) return v.entities.length;
+    }
+    if (props.RequestCausesRequestCount) return Number(props.RequestCausesRequestCount) || 0;
+    return 0;
+  };
+
   const extractTicketData = (payload, id) => {
     let ent = {};
     if (Array.isArray(payload?.entities) && payload.entities.length) ent = payload.entities[0];
@@ -166,6 +189,8 @@
     const globalName = globalRel.Name ? String(globalRel.Name) : '';
     const isGlobal   = !!globalId;
 
+    const linkedCount = extractLinkedCount(props, rel);
+
     const requestedFor = rel.RequestedForPerson?.DisplayLabel || rel.RequestedForPerson?.Name
       || String(props.RequestedForPerson||props.RequestedForDisplayLabel||'') || '—';
     const group    = rel.ExpertGroup?.Name || rel.AssignedToGroup?.Name || rel.ExpertGroup?.DisplayLabel || '—';
@@ -181,7 +206,7 @@
         const parsed = typeof props.Comments === 'string' ? JSON.parse(props.Comments) : props.Comments;
         const all = Array.isArray(parsed?.Comment) ? parsed.Comment : [];
         all.filter(c=>!c.IsSystem).sort((a,b)=>(Number(b.CreateTime)||0)-(Number(a.CreateTime)||0))
-          .slice(0,3).forEach(c => lastComments.push({
+          .slice(0,5).forEach(c => lastComments.push({
             body    : c.CommentBody || '',
             bodyText: htmlToText(c.CommentBody||''),
             date    : fmtDateShort(c.CreateTime),
@@ -198,6 +223,7 @@
       statusSCCDRaw, statusSCCDLabel,
       createTime, lastUpdateTs, lastUpdateTime,
       isGlobal, globalId, globalName,
+      linkedCount,
       requestedFor, group, assignee,
       descHtml, solutionHtml, lastComments,
     };
@@ -215,6 +241,7 @@
     group:           d.group,
     assignee:        d.assignee,
     globalId:        d.globalId,
+    linkedCount:     d.linkedCount,
     lastUpdateTs:    d.lastUpdateTs,
     lastUpdateTime:  d.lastUpdateTime,
     lastCommentTs:   d.lastComments.length ? Math.max(...d.lastComments.map(c=>c.ts||0)) : 0,
@@ -223,16 +250,18 @@
   const detectChanges = (cur, prev, fields) => {
     if (!prev) return { isNew:true, hasChanges:true, changes:[] };
     const changes = [];
-    if (fields.has('status')     && cur.statusRaw     !== prev.statusRaw)
+    if (fields.has('status')      && cur.statusRaw      !== prev.statusRaw)
       changes.push({ label:'Status',             from:prev.statusLabel,     to:cur.statusLabel });
-    if (fields.has('statusSCCD') && cur.statusSCCDRaw !== prev.statusSCCDRaw)
+    if (fields.has('statusSCCD')  && cur.statusSCCDRaw  !== prev.statusSCCDRaw)
       changes.push({ label:'Status Operacional', from:prev.statusSCCDLabel, to:cur.statusSCCDLabel });
-    if (fields.has('group')      && cur.group     !== prev.group)
+    if (fields.has('group')       && cur.group          !== prev.group)
       changes.push({ label:'Grupo',              from:prev.group,           to:cur.group });
-    if (fields.has('assignee')   && cur.assignee  !== prev.assignee)
-      changes.push({ label:'Especialista',        from:prev.assignee,        to:cur.assignee });
-    if (fields.has('global')     && cur.globalId  !== prev.globalId)
+    if (fields.has('assignee')    && cur.assignee       !== prev.assignee)
+      changes.push({ label:'Especialista',       from:prev.assignee,        to:cur.assignee });
+    if (fields.has('global')      && cur.globalId       !== prev.globalId)
       changes.push({ label:'Global',             from:prev.globalId||'—',   to:cur.globalId||'—' });
+    if (fields.has('linkedCount') && prev.linkedCount !== undefined && cur.linkedCount !== prev.linkedCount)
+      changes.push({ label:'Vinculados', from:String(prev.linkedCount), to:String(cur.linkedCount), isLinkedChange:true });
     if (fields.has('comments')) {
       const prevMaxTs   = prev.lastCommentTs || 0;
       const newComments = cur.lastComments.filter(c=>(c.ts||0)>prevMaxTs);
@@ -263,7 +292,7 @@
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // EXPORTAÇÃO — MARKDOWN
+  // EXPORTAÇÃO — MARKDOWN (simples)
   // ══════════════════════════════════════════════════════════════════
 
   const buildMarkdown = (results, ids, changes, listName) => {
@@ -274,16 +303,16 @@
 
     const lines = [`# ${title}`, '', '---', ''];
 
-    const mdTicket = (id, i, sectionLabel) => {
+    const mdTicket = (id, i) => {
       const r = results[i];
-      if (!r) return [`❌ **${id}** — Sem resposta.`, '', '&nbsp;', '', '---', '', '&nbsp;', ''];
-      if (!r.ok) return [`❌ **${id}** — Erro: ${r.error||'desconhecido'}`, '', '&nbsp;', '', '---', '', '&nbsp;', ''];
+      if (!r) return [`❌ **${id}** — Sem resposta.`, '', '---', ''];
+      if (!r.ok) return [`❌ **${id}** — Erro: ${r.error||'desconhecido'}`, '', '---', ''];
       const d = r.data;
       const chg = changes?.[id];
       const out = [];
-      const globalPart  = d.isGlobal ? ` — Global pai: #${d.globalId}` : '';
-      const subjectPart = d.subject  ? ` — ${d.subject}` : '';
-      out.push(`${d.statusEmoji} **${d.ticketId}**${subjectPart}${globalPart}`);
+      const globalPart = d.isGlobal ? ` — Global pai: #${d.globalId}` : '';
+      const linkedPart = fields.has('linkedCount') && d.linkedCount ? ` · ${d.linkedCount} vinculados` : '';
+      out.push(`${d.statusEmoji} **${d.ticketId}**${d.subject ? ' — ' + d.subject : ''}${globalPart}${linkedPart}`);
       const metaParts = [];
       if (fields.has('status'))       metaParts.push(`**Status:** ${d.statusLabel}`);
       if (fields.has('statusSCCD'))   metaParts.push(`**Status Operacional:** ${d.statusSCCDLabel}`);
@@ -293,7 +322,6 @@
       if (fields.has('createTime'))   metaParts.push(`**Abertura:** ${d.createTime}`);
       if (fields.has('lastUpdate'))   metaParts.push(`**Última atualização:** ${d.lastUpdateTime}`);
       out.push(metaParts.join(' | '), '');
-      // Mudanças detectadas
       if (isComparison && chg?.hasChanges && !chg.isNew) {
         const textChanges = chg.changes.filter(c=>!c.newComments);
         if (textChanges.length) {
@@ -302,13 +330,11 @@
           out.push('');
         }
       }
-      // Comentários
       if (fields.has('comments')) {
         const commentsToShow = isComparison && chg?.hasChanges
           ? (chg.changes.find(c=>c.newComments)?.newComments || [])
           : [...d.lastComments].sort((a,b)=>a.ts-b.ts);
-        if (!commentsToShow.length && !isComparison)
-          out.push('*Sem comentários registrados.*', '');
+        if (!commentsToShow.length && !isComparison) out.push('*Sem comentários registrados.*', '');
         commentsToShow.forEach(c => {
           out.push(`> **${c.from||'Agente'} | ${c.date}**`);
           (c.bodyText||'').split(/\n/).map(l=>l.trim()).filter(Boolean).forEach(l=>out.push(`> ${l}`));
@@ -316,34 +342,212 @@
           out.push('');
         });
       }
-      out.push('&nbsp;', '', '---', '', '&nbsp;', '');
+      out.push('---', '');
       return out;
     };
 
     if (isComparison) {
       const groups = [
-        { label:'## ✅ ENCERRADO',        filter: (id,i) => { const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
-        { label:'## 🔄 COM ATUALIZAÇÃO',  filter: (id,i) => { const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
-        { label:'## ⏸️ SEM ATUALIZAÇÃO', filter: (id,i) => { const r=results[i]; return r?.ok && !changes[id]?.hasChanges; } },
+        { label:'## ✅ ENCERRADO',        filter:(id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
+        { label:'## 🔄 COM ATUALIZAÇÃO',  filter:(id,i)=>{ const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
+        { label:'## ⏸️ SEM ATUALIZAÇÃO', filter:(id,i)=>{ const r=results[i]; return r?.ok && !changes[id]?.hasChanges; } },
       ];
       groups.forEach(g => {
         const ticketsInGroup = ids.filter((id,i)=>g.filter(id,i));
         if (!ticketsInGroup.length) return;
-        lines.push(g.label, '', '&nbsp;', '');
-        ticketsInGroup.forEach(id => {
-          const i = ids.indexOf(id);
-          mdTicket(id, i).forEach(l => lines.push(l));
-        });
+        lines.push(g.label, '');
+        ticketsInGroup.forEach(id => mdTicket(id, ids.indexOf(id)).forEach(l => lines.push(l)));
       });
     } else {
       ids.forEach((id,i) => mdTicket(id,i).forEach(l=>lines.push(l)));
     }
-
     return lines.join('\n');
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // EXPORTAÇÃO — WORD (.doc)
+  // EXPORTAÇÃO — RELATÓRIO (novo formato — replica o exemplo)
+  // ══════════════════════════════════════════════════════════════════
+
+  const buildRelatorioMd = (results, ids, changes, listName) => {
+    const title = `Atualização do status de chamados${listName ? ' sobre ' + listName : ''} — ${todayStr()}`;
+    const lines = [title, ''];
+
+    const fmtLinked = (d, chg) => {
+      const linkedChange = chg?.changes?.find(c=>c.isLinkedChange);
+      return linkedChange ? `${d.linkedCount} (era ${linkedChange.from})` : String(d.linkedCount||0);
+    };
+
+    const ticketLines = (id, i) => {
+      const r = results[i];
+      if (!r?.ok) return [`❌ ${id} — ${r?.error||'Sem resposta.'}`, ''];
+      const d = r.data;
+      const chg = changes?.[id];
+      const out = [];
+
+      const isClosed = CLOSED_STATUSES.has(d.statusRaw);
+      const isNew    = chg?.isNew;
+      const lineEmoji = isNew ? '🆕' : (isClosed ? '🟢' : '🔴');
+      const newMarker = isNew ? ' (NOVO)' : '';
+      const globalPart = d.isGlobal ? ` — Global pai: #${d.globalId}` : '';
+      out.push(`${lineEmoji} ${d.ticketId}${newMarker}${d.subject ? ' — ' + d.subject : ''}${globalPart}`);
+
+      const todayMark = isToday(d.lastUpdateTs) ? ' 🆕 HOJE' : '';
+      const metaParts = [];
+      if (fields.has('linkedCount')) metaParts.push(`Vinculados: ${fmtLinked(d, chg)}`);
+      if (fields.has('statusSCCD'))  metaParts.push(`Status Operacional: ${d.statusSCCDLabel}`);
+      if (fields.has('group'))       metaParts.push(`GSE: ${d.group}`);
+      if (fields.has('lastUpdate'))  metaParts.push(`Última atualização: ${d.lastUpdateTime}${todayMark}`);
+      out.push(metaParts.join(' | '));
+
+      // Field changes (não-comentários, não-linkedCount — já está na metadata)
+      if (changes && chg?.hasChanges && !chg.isNew) {
+        const textChanges = chg.changes.filter(c=>!c.newComments && !c.isLinkedChange);
+        textChanges.forEach(c => out.push(`  ↳ ${c.label}: ${c.from} → ${c.to}`));
+      }
+
+      // Comments
+      if (fields.has('comments')) {
+        let commentsToShow = [];
+        if (changes && chg?.hasChanges) {
+          commentsToShow = chg.changes.find(c=>c.newComments)?.newComments || [];
+        } else {
+          commentsToShow = [...d.lastComments].sort((a,b)=>a.ts-b.ts).slice(0,3);
+        }
+        if (!commentsToShow.length) {
+          out.push('Nenhuma discussão registrada.');
+        } else {
+          out.push('');
+          commentsToShow.forEach(c => {
+            out.push(`${c.from||'Agente'} | ${c.date}`);
+            const text = (c.bodyText||'').trim();
+            if (text) out.push(text);
+          });
+        }
+      }
+      out.push('');
+      return out;
+    };
+
+    if (changes) {
+      const sections = [
+        { label:'✅ ENCERRADO',       filter:(id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
+        { label:'⏸️ SEM ATUALIZAÇÃO', filter:(id,i)=>{ const r=results[i]; return r?.ok && !changes[id]?.hasChanges; } },
+        { label:'🆕 NOVA ATUALIZAÇÃO', filter:(id,i)=>{ const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
+      ];
+      sections.forEach(s => {
+        const inSection = ids.filter((id,i)=>s.filter(id,i));
+        if (!inSection.length) return;
+        lines.push(s.label, '');
+        inSection.forEach(id => ticketLines(id, ids.indexOf(id)).forEach(l => lines.push(l)));
+      });
+    } else {
+      ids.forEach((id,i) => ticketLines(id,i).forEach(l => lines.push(l)));
+    }
+    return lines.join('\n');
+  };
+
+  const buildRelatorioWord = (results, ids, changes, listName) => {
+    const title = `Atualização do status de chamados${listName ? ' sobre ' + listName : ''} — ${todayStr()}`;
+
+    const fmtLinked = (d, chg) => {
+      const linkedChange = chg?.changes?.find(c=>c.isLinkedChange);
+      return linkedChange ? `${d.linkedCount} (era ${linkedChange.from})` : String(d.linkedCount||0);
+    };
+
+    const ticketHtml = (id, i) => {
+      const r = results[i];
+      if (!r?.ok) return `<p style="color:#c00"><b>❌ ${esc(id)}</b> — ${esc(r?.error||'Sem resposta.')}</p>`;
+      const d = r.data;
+      const chg = changes?.[id];
+
+      const isClosed  = CLOSED_STATUSES.has(d.statusRaw);
+      const isNew     = chg?.isNew;
+      const lineEmoji = isNew ? '🆕' : (isClosed ? '🟢' : '🔴');
+      const newMarker = isNew ? ' <span style="color:#059669;font-weight:bold;">(NOVO)</span>' : '';
+      const globalPart = d.isGlobal
+        ? ` <span style="color:#6b7280;font-weight:normal;font-size:10pt;">— Global pai: <b>#${esc(d.globalId)}</b></span>` : '';
+
+      const todayMark = isToday(d.lastUpdateTs)
+        ? ' <span style="color:#f59e0b;font-size:8pt;font-weight:bold;">🆕 HOJE</span>' : '';
+      const metaParts = [];
+      if (fields.has('linkedCount')) metaParts.push(`Vinculados: <b>${esc(fmtLinked(d, chg))}</b>`);
+      if (fields.has('statusSCCD'))  metaParts.push(`Status Operacional: <b>${esc(d.statusSCCDLabel)}</b>`);
+      if (fields.has('group'))       metaParts.push(`GSE: <b>${esc(d.group)}</b>`);
+      if (fields.has('lastUpdate'))  metaParts.push(`Última atualização: <b>${esc(d.lastUpdateTime)}</b>${todayMark}`);
+      const metaLine = metaParts.join(' | ');
+
+      // Field changes
+      let changesHtml = '';
+      if (changes && chg?.hasChanges && !chg.isNew) {
+        const textChanges = chg.changes.filter(c=>!c.newComments && !c.isLinkedChange);
+        if (textChanges.length) {
+          changesHtml = textChanges.map(c=>
+            `<div style="font-size:9pt;color:#78350f;margin-left:16pt;">↳ ${esc(c.label)}: <span style="color:#dc2626;">${esc(c.from)}</span> → <span style="color:#16a34a;font-weight:bold;">${esc(c.to)}</span></div>`
+          ).join('');
+        }
+      }
+
+      // Comments
+      let commentsHtml = '';
+      if (fields.has('comments')) {
+        let commentsToShow = [];
+        if (changes && chg?.hasChanges) {
+          commentsToShow = chg.changes.find(c=>c.newComments)?.newComments || [];
+        } else {
+          commentsToShow = [...d.lastComments].sort((a,b)=>a.ts-b.ts).slice(0,3);
+        }
+        if (!commentsToShow.length) {
+          commentsHtml = `<p style="margin:4pt 0;font-size:9pt;color:#9ca3af;font-style:italic;">Nenhuma discussão registrada.</p>`;
+        } else {
+          commentsHtml = commentsToShow.map(c=>`
+            <div style="margin:6pt 0 0 8pt;border-left:3pt solid #3b82f6;padding-left:8pt;">
+              <p style="margin:0;font-size:9pt;color:#374151;font-weight:bold;">${esc(c.from||'Agente')} | ${esc(c.date)}</p>
+              <div style="margin-top:2pt;font-size:10pt;color:#111827;line-height:1.5;">${c.body||'<em style="color:#9ca3af">(sem texto)</em>'}</div>
+            </div>`).join('');
+        }
+      }
+
+      return `<div style="margin-bottom:14pt;padding-bottom:10pt;border-bottom:1pt solid #e5e7eb;">
+        <p style="margin:0 0 2pt;font-size:13pt;font-weight:bold;color:#111827;">
+          ${lineEmoji} <span style="color:#1d4ed8;">${esc(d.ticketId)}</span>${newMarker}
+          ${d.subject ? `<span style="font-size:11pt;font-weight:normal;color:#374151;"> — ${esc(d.subject)}</span>` : ''}${globalPart}
+        </p>
+        <p style="margin:0 0 4pt;font-size:9pt;color:#4b5563;">${metaLine}</p>
+        ${changesHtml}
+        ${commentsHtml}
+      </div>`;
+    };
+
+    const sectionHtml = (heading, color, bg, border, ticketsInSection) => `
+      <div style="margin:16pt 0 8pt;">
+        <h2 style="color:${color};background:${bg};border-left:4pt solid ${border};padding:6pt 12pt;font-size:13pt;margin:0 0 10pt;">${heading} (${ticketsInSection.length})</h2>
+        ${ticketsInSection.map(id => ticketHtml(id, ids.indexOf(id))).join('')}
+      </div>`;
+
+    let body = '';
+    if (changes) {
+      const encerrado = ids.filter((id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; });
+      const semAtu    = ids.filter((id,i)=>{ const r=results[i]; return r?.ok && !changes[id]?.hasChanges; });
+      const comAtu    = ids.filter((id,i)=>{ const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; });
+      if (encerrado.length) body += sectionHtml('✅ ENCERRADO',       '#14532d','#f0fdf4','#4ade80', encerrado);
+      if (semAtu.length)    body += sectionHtml('⏸️ SEM ATUALIZAÇÃO', '#374151','#f9fafb','#d1d5db', semAtu);
+      if (comAtu.length)    body += sectionHtml('🆕 NOVA ATUALIZAÇÃO','#1e3a5f','#eff6ff','#93c5fd', comAtu);
+    } else {
+      ids.forEach((id,i) => { body += ticketHtml(id, i); });
+    }
+
+    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+    <head><meta charset="utf-8"><title>${esc(title)}</title>
+    <style>body{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#111827;margin:2cm;}p{margin:0 0 4pt;line-height:1.5;}img{max-width:100%;}table{border-collapse:collapse;}</style>
+    </head><body>
+    <h1 style="color:#1e3a5f;font-size:17pt;margin:0 0 4pt;">${esc(title)}</h1>
+    <p style="color:#6b7280;font-size:9pt;margin:0 0 14pt;">${ids.length} chamado${ids.length!==1?'s':''}</p>
+    <hr style="border:none;border-top:2pt solid #1d4ed8;margin:0 0 16pt;">
+    ${body}</body></html>`;
+  };
+
+  // ══════════════════════════════════════════════════════════════════
+  // EXPORTAÇÃO — WORD (simples, original)
   // ══════════════════════════════════════════════════════════════════
 
   const buildWordHtml = (results, ids, changes, listName) => {
@@ -361,7 +565,9 @@
       const globalInfo = d.isGlobal
         ? `<span style="color:#c00;font-weight:bold;"> — Global pai: #${d.globalId}</span>` : '';
 
-      // Mudanças
+      const linkedInfo = fields.has('linkedCount') && d.linkedCount > 0
+        ? ` <span style="color:#7c3aed;font-size:9pt;">(${d.linkedCount} vinculados)</span>` : '';
+
       let changesBlock = '';
       if (isComparison && chg?.hasChanges && !chg.isNew) {
         const textChanges = chg.changes.filter(c=>!c.newComments);
@@ -373,7 +579,6 @@
         }
       }
 
-      // Comentários a mostrar
       let commentsToShow = [];
       if (fields.has('comments')) {
         if (isComparison && chg?.hasChanges)
@@ -393,6 +598,7 @@
       const meta1 = [], meta2 = [];
       if (fields.has('status'))       meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Status</b><br>${esc(d.statusLabel)}</td>`);
       if (fields.has('statusSCCD'))   meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Status Operacional</b><br>${esc(d.statusSCCDLabel)}</td>`);
+      if (fields.has('linkedCount'))  meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Vinculados</b><br>${d.linkedCount||0}</td>`);
       if (fields.has('group'))        meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>GSE</b><br>${esc(d.group)}</td>`);
       if (fields.has('assignee'))     meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Especialista</b><br>${esc(d.assignee)}</td>`);
       if (fields.has('requestedFor')) meta2.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Solicitante</b><br>${esc(d.requestedFor)}</td>`);
@@ -415,7 +621,7 @@
       return `<div style="margin-bottom:16pt;page-break-inside:avoid;">
         <p style="margin:0 0 4pt;font-size:13pt;font-weight:bold;color:#1e3a5f;">
           ${d.statusEmoji} <span style="color:#1d4ed8;">#${d.ticketId}</span>
-          ${d.subject ? `<span style="color:#374151;font-size:11pt;font-weight:normal;"> — ${esc(d.subject)}</span>` : ''}${globalInfo}
+          ${d.subject ? `<span style="color:#374151;font-size:11pt;font-weight:normal;"> — ${esc(d.subject)}</span>` : ''}${globalInfo}${linkedInfo}
         </p>
         ${metaTable}${changesBlock}${descBlock}${solBlock}${comLabel}${commentsBlock}
         <hr style="border:none;border-top:1pt solid #e2e8f0;margin:10pt 0 0;">
@@ -426,11 +632,11 @@
     if (isComparison) {
       const sections = [
         { heading:'✅ ENCERRADO',        color:'#14532d', bg:'#f0fdf4', border:'#4ade80',
-          filter: (id,i) => { const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
+          filter:(id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
         { heading:'🔄 COM ATUALIZAÇÃO',  color:'#1e3a5f', bg:'#eff6ff', border:'#93c5fd',
-          filter: (id,i) => { const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
+          filter:(id,i)=>{ const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; } },
         { heading:'⏸️ SEM ATUALIZAÇÃO', color:'#374151', bg:'#f9fafb', border:'#d1d5db',
-          filter: (id,i) => { const r=results[i]; return r?.ok && !changes[id]?.hasChanges; } },
+          filter:(id,i)=>{ const r=results[i]; return r?.ok && !changes[id]?.hasChanges; } },
       ];
       sections.forEach(s => {
         const inSection = ids.filter((id,i)=>s.filter(id,i));
@@ -457,7 +663,7 @@
   // ══════════════════════════════════════════════════════════════════
 
   const buildCsv = (results, ids) => {
-    const cols = ['ID','Assunto','Status','Status Operacional','Abertura','Últ. Atualização',
+    const cols = ['ID','Assunto','Status','Status Operacional','Vinculados','Abertura','Últ. Atualização',
       'É Global','Global Pai','Solicitante','Grupo','Especialista',
       'Descrição','Solução','Comentário 1','Comentário 2','Comentário 3'];
     const e = (v) => `"${String(v||'').replace(/"/g,'""')}"`;
@@ -466,12 +672,25 @@
       const r = results[i];
       if (!r?.ok) return [id,'ERRO:'+(r?.error||''),...Array(cols.length-2).fill('')].map(e).join(',');
       const d = r.data;
-      return [d.ticketId,d.subject,d.statusLabel,d.statusSCCDLabel,d.createTime,d.lastUpdateTime,
+      return [d.ticketId,d.subject,d.statusLabel,d.statusSCCDLabel,d.linkedCount||0,d.createTime,d.lastUpdateTime,
         d.isGlobal?'Sim':'Não',d.globalId,d.requestedFor,d.group,d.assignee,
         htmlToText(d.descHtml),htmlToText(d.solutionHtml),
         ct(d.lastComments[2]),ct(d.lastComments[1]),ct(d.lastComments[0])].map(e).join(',');
     });
     return [cols.map(e).join(','),...rows].join('\r\n');
+  };
+
+  // ══════════════════════════════════════════════════════════════════
+  // EXPORTAÇÃO — PDF (print)
+  // ══════════════════════════════════════════════════════════════════
+
+  const printAsPdf = (results, ids, changes, listName) => {
+    const html = buildWordHtml(results, ids, changes, listName);
+    const win = window.open('','_blank','width=900,height=700');
+    if (!win) { alert('Popup bloqueado. Permita popups para este site.'); return; }
+    win.document.write(html.replace('</head>','<style>@media print{body{margin:1cm;}}</style></head>'));
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
   };
 
   // ══════════════════════════════════════════════════════════════════
@@ -513,12 +732,17 @@
     #sqc-main{display:flex;flex:1;overflow:hidden;}
 
     /* Sidebar */
-    #sqc-sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:0;border-right:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow-y:auto;}
+    #sqc-sidebar{width:260px;min-width:160px;max-width:520px;flex-shrink:0;display:flex;flex-direction:column;gap:0;border-right:none;background:rgba(255,255,255,.02);overflow-y:auto;}
     #sqc-sidebar::-webkit-scrollbar{width:7px;}
     #sqc-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:10px;}
     #sqc-sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.4);}
     .sqc-sb-section{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05);}
     .sqc-sb-label{font-size:9px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
+
+    /* Resize handle */
+    #sqc-resize-handle{width:5px;flex-shrink:0;cursor:ew-resize;background:rgba(255,255,255,.07);transition:background .15s;position:relative;}
+    #sqc-resize-handle:hover,#sqc-resize-handle.dragging{background:rgba(59,130,246,.5);}
+    #sqc-resize-handle::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:32px;width:3px;border-radius:2px;background:rgba(255,255,255,.2);}
 
     /* Modo */
     #sqc-mode-tabs{display:flex;border:1px solid rgba(255,255,255,.1);border-radius:8px;overflow:hidden;}
@@ -551,6 +775,12 @@
     .sqc-field-row.is-checked span{color:#93c5fd;font-weight:600;}
     #sqc-fields-count{font-size:10px;color:#4b5563;float:right;}
 
+    /* Auto-refresh */
+    #sqc-autorefresh-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+    #sqc-autorefresh-row label{font-size:11px;color:#6b7280;display:flex;align-items:center;gap:6px;cursor:pointer;}
+    #sqc-autorefresh-interval{background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:5px;color:#e2e8f0;font-size:11px;padding:3px 6px;outline:none;}
+    #sqc-autorefresh-countdown{font-size:10px;color:#a78bfa;min-height:13px;margin-top:2px;}
+
     /* Botões */
     .sqc-btn-primary{width:100%;padding:9px 0;border:none;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:4px;}
     .sqc-btn-primary:hover:not(:disabled){background:linear-gradient(135deg,#60a5fa,#3b82f6);}
@@ -558,6 +788,7 @@
     .sqc-btn-secondary{width:100%;padding:7px 0;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:transparent;color:#9ca3af;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:4px;}
     .sqc-btn-secondary:hover:not(:disabled){border-color:rgba(255,255,255,.3);color:#e2e8f0;}
     .sqc-btn-secondary:disabled{opacity:.4;cursor:default;}
+    .sqc-export-divider{font-size:9px;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;border-top:1px solid rgba(255,255,255,.05);padding-top:8px;}
 
     #sqc-progress{font-size:11px;color:#6b7280;min-height:14px;margin-top:4px;}
     #sqc-export-section{display:none;}
@@ -568,7 +799,17 @@
     #sqc-summary.visible{display:flex;}
     .sqc-sum-item{font-size:11px;font-weight:600;}
 
+    /* Filter/sort bar */
+    #sqc-toolbar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;background:rgba(0,0,0,.15);}
+    #sqc-filter-input{flex:1;background:#0a0f1e;border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#e2e8f0;font-size:11px;padding:5px 9px;outline:none;}
+    #sqc-filter-input:focus{border-color:#3b82f6;}
+    #sqc-filter-input::placeholder{color:#374151;}
+    #sqc-sort-select{background:#0a0f1e;border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#9ca3af;font-size:11px;padding:5px 8px;outline:none;cursor:pointer;}
+    #sqc-sort-select:focus{border-color:#3b82f6;}
+    #sqc-toolbar-count{font-size:10px;color:#4b5563;white-space:nowrap;}
+
     /* Results */
+    #sqc-results-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
     #sqc-results-area{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px;}
     #sqc-results-area::-webkit-scrollbar{width:6px;}
     #sqc-results-area::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:10px;}
@@ -588,10 +829,12 @@
     .sqc-badge{font-size:10px;padding:2px 8px;border-radius:12px;border:1px solid rgba(255,255,255,.2);color:#9ca3af;}
     .sqc-badge-sccd{color:#a78bfa;border-color:rgba(167,139,250,.35);}
     .sqc-badge-global{color:#f87171;border-color:rgba(248,113,113,.35);}
+    .sqc-badge-linked{color:#fb923c;border-color:rgba(251,146,60,.35);}
     .sqc-badge-local{color:#374151;border-color:rgba(75,85,99,.2);}
     .sqc-badge-changed{color:#93c5fd;border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.1);}
     .sqc-badge-new{color:#4ade80;border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.08);}
     .sqc-badge-nochange{color:#4b5563;border-color:rgba(75,85,99,.2);}
+    .sqc-badge-today{color:#f59e0b;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.08);}
     .sqc-changes-block{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:6px;padding:7px 10px;margin-bottom:8px;font-size:11px;}
     .sqc-changes-block p{margin:0 0 3px;color:#93c5fd;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;}
     .sqc-change-row{color:#d1d5db;}
@@ -601,6 +844,7 @@
     .sqc-meta-item{display:flex;flex-direction:column;gap:1px;}
     .sqc-meta-label{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;}
     .sqc-meta-val{font-size:12px;color:#d1d5db;}
+    .sqc-comment-preview{font-size:11px;color:#6b7280;font-style:italic;margin-bottom:8px;padding:5px 8px;border-left:2px solid rgba(255,255,255,.1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .sqc-section{border-top:1px solid rgba(255,255,255,.05);padding-top:7px;margin-top:7px;}
     .sqc-toggle{background:none;border:none;color:#6b7280;font-size:11px;cursor:pointer;padding:0;text-align:left;}
     .sqc-toggle:hover{color:#94a3b8;}
@@ -619,14 +863,74 @@
   // ESTADO
   // ══════════════════════════════════════════════════════════════════
 
-  let panel       = null;
-  let lists       = loadLists();
-  let mode        = 'simple';     // 'simple' | 'list'
+  let panel        = null;
+  let lists        = loadLists();
+  let mode         = 'simple';
   let activeListId = null;
-  let fields      = new Set(DEFAULT_FIELDS);
-  let lastResults = [];
-  let lastIds     = [];
-  let lastChanges = null;  // null = no comparison, {} = per-ticket change results
+  let fields       = new Set(DEFAULT_FIELDS);
+  let lastResults  = [];
+  let lastIds      = [];
+  let lastChanges  = null;
+  let sortMode     = 'default';
+  let filterText   = '';
+  let arTimer      = null;   // auto-refresh interval handle
+  let arCountdown  = 0;      // seconds remaining
+  let arTickHandle = null;   // setInterval for countdown tick
+
+  // ══════════════════════════════════════════════════════════════════
+  // SORT + FILTER HELPERS
+  // ══════════════════════════════════════════════════════════════════
+
+  const getSortedFilteredIndices = () => {
+    const ft = filterText.toLowerCase().trim();
+    let indices = lastIds.map((id,i) => i);
+
+    if (ft) {
+      indices = indices.filter(i => {
+        const id = lastIds[i];
+        const d  = lastResults[i]?.data;
+        if (id.includes(ft)) return true;
+        if (!d) return false;
+        return (d.subject||'').toLowerCase().includes(ft)
+          || (d.group||'').toLowerCase().includes(ft)
+          || (d.assignee||'').toLowerCase().includes(ft)
+          || (d.statusLabel||'').toLowerCase().includes(ft);
+      });
+    }
+
+    if (sortMode === 'default') return indices;
+
+    const score = (i) => {
+      const id  = lastIds[i];
+      const r   = lastResults[i];
+      const d   = r?.data;
+      const chg = lastChanges?.[id];
+      if (sortMode === 'changed_first') {
+        if (!r?.ok) return 99;
+        if (chg?.isNew) return 0;
+        if (chg?.hasChanges && CLOSED_STATUSES.has(d?.statusRaw)) return 1;
+        if (chg?.hasChanges) return 2;
+        return 3;
+      }
+      if (sortMode === 'closed_first') {
+        if (!r?.ok) return 99;
+        if (CLOSED_STATUSES.has(d?.statusRaw)) return 0;
+        return 1;
+      }
+      if (sortMode === 'by_status') {
+        const order = ['RequestStatusInProgress','RequestStatusPending','RequestStatusNew',
+          'RequestStatusReady','RequestStatusSuspended','RequestStatusComplete',
+          'RequestStatusRejected','RequestStatusCancelled'];
+        return order.indexOf(d?.statusRaw ?? '') === -1 ? 50 : order.indexOf(d?.statusRaw);
+      }
+      if (sortMode === 'recent_update') {
+        return -(d?.lastUpdateTs || 0);
+      }
+      return i;
+    };
+
+    return [...indices].sort((a,b) => score(a) - score(b));
+  };
 
   // ══════════════════════════════════════════════════════════════════
   // CONSTRUÇÃO DO PAINEL
@@ -678,15 +982,15 @@
             <select id="sqc-list-select"><option value="">— Selecionar lista —</option></select>
             <div class="sqc-list-actions">
               <button class="sqc-list-act-btn" id="sqc-btn-new-list">+ Nova</button>
-              <button class="sqc-list-act-btn" id="sqc-btn-rename-list">✏️ Renomear</button>
-              <button class="sqc-list-act-btn danger" id="sqc-btn-delete-list">🗑️ Excluir</button>
+              <button class="sqc-list-act-btn" id="sqc-btn-rename-list">✏️</button>
+              <button class="sqc-list-act-btn danger" id="sqc-btn-delete-list">🗑️</button>
             </div>
             <div id="sqc-list-snapshot-info"></div>
           </div>
 
           <div class="sqc-sb-section">
             <div class="sqc-sb-label">IDs dos chamados</div>
-            <textarea id="sqc-ids" placeholder="Cole os IDs aqui&#10;(um por linha, vírgula ou espaço)"></textarea>
+            <textarea id="sqc-ids" placeholder="Cole os IDs aqui&#10;(um por linha, vírgula ou espaço)&#10;Ctrl+Enter para consultar"></textarea>
             <div id="sqc-ids-count"></div>
           </div>
 
@@ -699,18 +1003,51 @@
             <button class="sqc-btn-primary" id="sqc-btn-fetch">🔍 Consultar</button>
             <button class="sqc-btn-secondary" id="sqc-btn-save-list" style="display:none;">💾 Salvar lista</button>
             <div id="sqc-progress"></div>
+
+            <div id="sqc-autorefresh-section" style="display:none;">
+              <div id="sqc-autorefresh-row">
+                <label><input type="checkbox" id="sqc-ar-cb"> Auto-refresh</label>
+                <select id="sqc-autorefresh-interval">
+                  <option value="60">1 min</option>
+                  <option value="300">5 min</option>
+                  <option value="600">10 min</option>
+                  <option value="1800">30 min</option>
+                </select>
+              </div>
+              <div id="sqc-autorefresh-countdown"></div>
+            </div>
+
             <div id="sqc-export-section">
-              <div class="sqc-sb-label" style="margin-top:10px;">Exportar</div>
+              <div class="sqc-export-divider">Exportar — Simples</div>
               <button class="sqc-btn-secondary" id="sqc-btn-word">📄 Word (.doc)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-md">📝 Markdown (.md)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-csv">📊 CSV (.csv)</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-pdf">🖨️ PDF</button>
+              <div class="sqc-export-divider">Exportar — Relatório</div>
+              <button class="sqc-btn-secondary" id="sqc-btn-rel-word">📋 Relatório Word (.doc)</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-rel-md">📋 Relatório Markdown (.md)</button>
             </div>
           </div>
 
         </div>
 
-        <div id="sqc-results-area">
-          <div id="sqc-placeholder">Cole os IDs dos chamados ao lado e clique em <b>Consultar</b>.</div>
+        <div id="sqc-resize-handle" title="Arrastar para redimensionar"></div>
+
+        <div id="sqc-results-wrap">
+          <div id="sqc-toolbar">
+            <input id="sqc-filter-input" type="text" placeholder="Filtrar por ID, assunto, grupo…">
+            <select id="sqc-sort-select">
+              <option value="default">Ordem padrão</option>
+              <option value="changed_first">Atualizado primeiro</option>
+              <option value="closed_first">Encerrado primeiro</option>
+              <option value="by_status">Por status</option>
+              <option value="recent_update">Últ. atualização</option>
+            </select>
+            <span id="sqc-toolbar-count"></span>
+          </div>
+          <div id="sqc-results-area">
+            <div id="sqc-placeholder">Cole os IDs dos chamados ao lado e clique em <b>Consultar</b>.<br><span style="font-size:11px;color:#4b5563;">Atalho: Ctrl+Shift+Q para abrir/fechar · Ctrl+Enter para consultar</span></div>
+          </div>
         </div>
       </div>`;
     return p;
@@ -723,10 +1060,8 @@
   const refreshListSelect = () => {
     if (!panel) return;
     const sel = panel.querySelector('#sqc-list-select');
-    const cur = sel.value;
     sel.innerHTML = '<option value="">— Selecionar lista —</option>' +
       lists.map(l=>`<option value="${esc(l.id)}" ${l.id===activeListId?'selected':''}>${esc(l.name)} (${l.ids.length} IDs)</option>`).join('');
-    if (cur) sel.value = cur;
   };
 
   const refreshSnapshotInfo = () => {
@@ -747,14 +1082,29 @@
 
     let cardClass = 'sqc-card';
     let changeBadge = '';
+    const newCommentCount = chg?.changes?.find(c=>c.newComments)?.newComments?.length || 0;
     if (chg) {
-      if (CLOSED_STATUSES.has(d.statusRaw) && chg.hasChanges) { cardClass += ' closed'; changeBadge = '<span class="sqc-badge sqc-badge-new">✅ Encerrado</span>'; }
-      else if (chg.isNew)         { cardClass += ' changed'; changeBadge = '<span class="sqc-badge sqc-badge-new">🆕 Novo</span>'; }
-      else if (chg.hasChanges)    { cardClass += ' changed'; changeBadge = '<span class="sqc-badge sqc-badge-changed">🔄 Atualizado</span>'; }
-      else                        { cardClass += ' no-change'; changeBadge = '<span class="sqc-badge sqc-badge-nochange">⏸️ Sem mudança</span>'; }
+      if (CLOSED_STATUSES.has(d.statusRaw) && chg.hasChanges) {
+        cardClass += ' closed';
+        changeBadge = '<span class="sqc-badge sqc-badge-new">✅ Encerrado</span>';
+      } else if (chg.isNew) {
+        cardClass += ' changed';
+        changeBadge = '<span class="sqc-badge sqc-badge-new">🆕 Novo</span>';
+      } else if (chg.hasChanges) {
+        cardClass += ' changed';
+        const commentPart = newCommentCount > 0 ? ` · ${newCommentCount} 💬` : '';
+        changeBadge = `<span class="sqc-badge sqc-badge-changed">🔄 Atualizado${commentPart}</span>`;
+      } else {
+        cardClass += ' no-change';
+        changeBadge = '<span class="sqc-badge sqc-badge-nochange">⏸️ Sem mudança</span>';
+      }
     }
 
-    // Bloco de mudanças
+    // Today badge
+    const todayBadge = isToday(d.lastUpdateTs)
+      ? '<span class="sqc-badge sqc-badge-today">🆕 Hoje</span>' : '';
+
+    // Changes block
     let changesBlock = '';
     if (chg?.hasChanges && !chg.isNew) {
       const textChanges = chg.changes.filter(c=>!c.newComments);
@@ -765,7 +1115,7 @@
       }
     }
 
-    // Comentários a exibir
+    // Comments
     const newComments = chg ? (chg.changes?.find(c=>c.newComments)?.newComments||[]) : [];
     const commentsToShow = (chg && chg.hasChanges) ? newComments : [...d.lastComments].sort((a,b)=>a.ts-b.ts);
     const commentsHtml = !commentsToShow.length
@@ -780,6 +1130,16 @@
             <div>${c.body}</div>
           </div>`).join('');
 
+    // Comment preview (most recent, shown inline)
+    let commentPreview = '';
+    if (fields.has('comments') && d.lastComments.length) {
+      const latest = d.lastComments[0];
+      const previewText = truncate(latest.bodyText||'', 120);
+      if (previewText) {
+        commentPreview = `<div class="sqc-comment-preview" title="${esc(latest.bodyText||'')}">💬 ${esc(latest.from||'')}${latest.from?': ':''}${esc(previewText)}</div>`;
+      }
+    }
+
     const metaItems = [];
     if (fields.has('requestedFor')) metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Solicitante</span><span class="sqc-meta-val">${esc(d.requestedFor)}</span></div>`);
     if (fields.has('group'))        metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Grupo</span><span class="sqc-meta-val">${esc(d.group)}</span></div>`);
@@ -787,10 +1147,21 @@
     if (fields.has('createTime'))   metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Abertura</span><span class="sqc-meta-val">${esc(d.createTime)}</span></div>`);
     if (fields.has('lastUpdate'))   metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Últ. atualização</span><span class="sqc-meta-val">${esc(d.lastUpdateTime)}</span></div>`);
 
-    const globalBadge = fields.has('global')
-      ? (d.isGlobal ? `<span class="sqc-badge sqc-badge-global" title="${esc(d.globalName)}">⬆ Global #${esc(d.globalId)}</span>`
-                    : `<span class="sqc-badge sqc-badge-local">Local</span>`)
-      : '';
+    // Global + linked badges
+    let globalBadge = '';
+    if (fields.has('global')) {
+      if (d.isGlobal) {
+        globalBadge = `<span class="sqc-badge sqc-badge-global" title="${esc(d.globalName)}">⬆ Global #${esc(d.globalId)}</span>`;
+      } else {
+        globalBadge = `<span class="sqc-badge sqc-badge-local">Local</span>`;
+      }
+    }
+    let linkedBadge = '';
+    if (fields.has('linkedCount') && d.linkedCount > 0) {
+      const linkedChange = chg?.changes?.find(c=>c.isLinkedChange);
+      const linkedLabel = linkedChange ? `${d.linkedCount} vinc. (era ${linkedChange.from})` : `${d.linkedCount} vinculados`;
+      linkedBadge = `<span class="sqc-badge sqc-badge-linked" title="Chamados vinculados">🔗 ${esc(linkedLabel)}</span>`;
+    }
 
     const sections = [];
     if (fields.has('description')) sections.push(`
@@ -817,11 +1188,12 @@
         <div class="sqc-badges">
           ${fields.has('status')?`<span class="sqc-badge" style="border-color:${d.statusColor};color:${d.statusColor};">${esc(d.statusLabel)}</span>`:''}
           ${fields.has('statusSCCD')?`<span class="sqc-badge sqc-badge-sccd">${esc(d.statusSCCDLabel)}</span>`:''}
-          ${globalBadge}${changeBadge}
+          ${globalBadge}${linkedBadge}${todayBadge}${changeBadge}
         </div>
       </div>
       ${changesBlock}
       ${metaItems.length?`<div class="sqc-meta-grid">${metaItems.join('')}</div>`:''}
+      ${commentPreview}
       ${sections.join('')}
     </div>`;
   };
@@ -838,7 +1210,13 @@
   const renderResults = () => {
     const area = panel?.querySelector('#sqc-results-area');
     if (!area) return;
-    area.innerHTML = lastIds.map((id,i)=>buildCard(id,i,lastChanges?.[id])).join('');
+    if (!lastIds.length) { area.innerHTML = '<div id="sqc-placeholder">Cole os IDs dos chamados ao lado e clique em <b>Consultar</b>.</div>'; return; }
+    const indices = getSortedFilteredIndices();
+    const countEl = panel.querySelector('#sqc-toolbar-count');
+    if (countEl) countEl.textContent = indices.length !== lastIds.length ? `${indices.length}/${lastIds.length}` : `${lastIds.length} chamado${lastIds.length!==1?'s':''}`;
+    area.innerHTML = indices.length
+      ? indices.map(i => buildCard(lastIds[i], i, lastChanges?.[lastIds[i]])).join('')
+      : '<div id="sqc-placeholder" style="margin-top:40px;">Nenhum resultado para o filtro atual.</div>';
   };
 
   const renderSummary = () => {
@@ -856,6 +1234,36 @@
   };
 
   // ══════════════════════════════════════════════════════════════════
+  // AUTO-REFRESH
+  // ══════════════════════════════════════════════════════════════════
+
+  const stopAutoRefresh = () => {
+    if (arTimer)      { clearTimeout(arTimer);   arTimer = null; }
+    if (arTickHandle) { clearInterval(arTickHandle); arTickHandle = null; }
+    const el = panel?.querySelector('#sqc-autorefresh-countdown');
+    if (el) el.textContent = '';
+  };
+
+  const startAutoRefresh = (secs) => {
+    stopAutoRefresh();
+    arCountdown = secs;
+    const tick = () => {
+      arCountdown--;
+      const el = panel?.querySelector('#sqc-autorefresh-countdown');
+      if (el) el.textContent = arCountdown > 0 ? `Próxima consulta em ${arCountdown}s` : 'Consultando…';
+      if (arCountdown <= 0) {
+        clearInterval(arTickHandle);
+        arTickHandle = null;
+        runQuery().then(() => {
+          const cb = panel?.querySelector('#sqc-ar-cb');
+          if (cb?.checked) startAutoRefresh(Number(panel.querySelector('#sqc-autorefresh-interval').value)||60);
+        });
+      }
+    };
+    arTickHandle = setInterval(tick, 1000);
+  };
+
+  // ══════════════════════════════════════════════════════════════════
   // CONSULTA
   // ══════════════════════════════════════════════════════════════════
 
@@ -863,10 +1271,10 @@
     const ids = parseIds(panel.querySelector('#sqc-ids').value.trim());
     if (!ids.length) { panel.querySelector('#sqc-progress').textContent = 'Nenhum ID válido.'; return; }
 
-    const fetchBtn  = panel.querySelector('#sqc-btn-fetch');
-    const exportSec = panel.querySelector('#sqc-export-section');
+    const fetchBtn   = panel.querySelector('#sqc-btn-fetch');
+    const exportSec  = panel.querySelector('#sqc-export-section');
     const progressEl = panel.querySelector('#sqc-progress');
-    const area      = panel.querySelector('#sqc-results-area');
+    const area       = panel.querySelector('#sqc-results-area');
 
     fetchBtn.disabled = true;
     exportSec.classList.remove('visible');
@@ -883,7 +1291,6 @@
     );
     lastResults = fetched;
 
-    // Detecção de mudanças (modo lista com snapshot)
     if (mode === 'list' && activeListId) {
       const list = lists.find(l=>l.id===activeListId);
       if (list?.lastQuery?.snapshot) {
@@ -894,14 +1301,13 @@
           if (r?.ok) lastChanges[id] = detectChanges(r.data, snap[id]||null, fields);
         });
       }
-      // Auto-salva snapshot
       const snapshot = {};
       ids.forEach((id,i) => { if (fetched[i]?.ok) snapshot[id] = makeSnapshot(fetched[i].data); });
       const now = nowStr();
       const idx = lists.findIndex(l=>l.id===activeListId);
       if (idx>=0) {
         lists[idx].lastQuery = { timestamp: now, snapshot };
-        lists[idx].ids = ids; // atualiza IDs da lista com os atuais
+        lists[idx].ids = ids;
         saveLists(lists);
         refreshSnapshotInfo();
       }
@@ -919,7 +1325,10 @@
     progressEl.textContent = `✓ ${ok} chamado${ok!==1?'s':''} carregado${ok!==1?'s':''}` +
       (err?` · ${err} erro${err!==1?'s':''}`:'')+` — ${now}`;
     fetchBtn.disabled = false;
-    if (ok>0) exportSec.classList.add('visible');
+    if (ok>0) {
+      exportSec.classList.add('visible');
+      panel.querySelector('#sqc-autorefresh-section').style.display = 'block';
+    }
   };
 
   // ══════════════════════════════════════════════════════════════════
@@ -931,15 +1340,51 @@
       panel = buildPanel();
       document.body.appendChild(panel);
 
-      // Última consulta
       const lq = GM_getValue(LAST_QUERY_KEY,'');
       if (lq) panel.querySelector('#sqc-last-query').textContent = `Última consulta: ${lq}`;
 
       // Fechar
-      panel.querySelector('#sqc-close').addEventListener('click', ()=>{ panel.style.display='none'; });
-      document.addEventListener('keydown', e=>{ if (e.key==='Escape' && panel.style.display!=='none') panel.style.display='none'; });
+      panel.querySelector('#sqc-close').addEventListener('click', () => { panel.style.display='none'; stopAutoRefresh(); });
+      document.addEventListener('keydown', e => {
+        if (e.key==='Escape' && panel.style.display!=='none') { panel.style.display='none'; stopAutoRefresh(); }
+      });
 
-      // Toggle de modo
+      // Atalho global Ctrl+Shift+Q
+      document.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='q') {
+          e.preventDefault();
+          panel.style.display = panel.style.display==='none' ? 'flex' : 'none';
+          if (panel.style.display==='none') stopAutoRefresh();
+        }
+      });
+
+      // Ctrl+Enter no textarea
+      panel.querySelector('#sqc-ids').addEventListener('keydown', e => {
+        if (e.ctrlKey && e.key==='Enter') { e.preventDefault(); runQuery(); }
+      });
+
+      // Resize handle
+      const handle  = panel.querySelector('#sqc-resize-handle');
+      const sidebar = panel.querySelector('#sqc-sidebar');
+      let dragging = false, startX = 0, startW = 0;
+      handle.addEventListener('mousedown', e => {
+        dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+        handle.classList.add('dragging');
+        document.body.style.userSelect = 'none';
+      });
+      document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const newW = Math.max(160, Math.min(520, startW + (e.clientX - startX)));
+        sidebar.style.width = newW + 'px';
+      });
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('dragging');
+        document.body.style.userSelect = '';
+      });
+
+      // Toggle modo
       panel.querySelectorAll('.sqc-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
           mode = btn.dataset.mode;
@@ -958,7 +1403,6 @@
         if (list) {
           panel.querySelector('#sqc-ids').value = list.ids.join('\n');
           updateIdsCount();
-          // Restaura campos da lista
           if (list.fields) {
             fields = new Set(list.fields);
             panel.querySelectorAll('.sqc-field-cb').forEach(cb => {
@@ -1034,12 +1478,10 @@
           cb.checked ? fields.add(cb.dataset.key) : fields.delete(cb.dataset.key);
           cb.closest('.sqc-field-row').classList.toggle('is-checked', cb.checked);
           updateFieldsCount();
-          // Salva campos na lista ativa
           if (activeListId) {
             const list = lists.find(l=>l.id===activeListId);
             if (list) { list.fields = [...fields]; saveLists(lists); }
           }
-          // Re-renderiza resultados existentes sem nova consulta
           if (lastResults.length) renderResults();
         });
       });
@@ -1058,23 +1500,64 @@
         btn.textContent = (open?'▾ ':'▸ ') + btn.textContent.replace(/^[▸▾] /,'');
       });
 
+      // Sort + filter
+      panel.querySelector('#sqc-sort-select').addEventListener('change', e => {
+        sortMode = e.target.value;
+        if (lastResults.length) renderResults();
+      });
+      panel.querySelector('#sqc-filter-input').addEventListener('input', e => {
+        filterText = e.target.value;
+        if (lastResults.length) renderResults();
+      });
+
+      // Auto-refresh toggle
+      panel.querySelector('#sqc-ar-cb').addEventListener('change', e => {
+        if (e.target.checked) {
+          const secs = Number(panel.querySelector('#sqc-autorefresh-interval').value) || 60;
+          startAutoRefresh(secs);
+        } else {
+          stopAutoRefresh();
+        }
+      });
+      panel.querySelector('#sqc-autorefresh-interval').addEventListener('change', () => {
+        const cb = panel.querySelector('#sqc-ar-cb');
+        if (cb.checked) {
+          const secs = Number(panel.querySelector('#sqc-autorefresh-interval').value) || 60;
+          startAutoRefresh(secs);
+        }
+      });
+
       // Consultar
       panel.querySelector('#sqc-btn-fetch').addEventListener('click', runQuery);
 
-      // Exports
+      // Exports — simples
+      const fname = () => `consulta_${todayStr().replace(/\//g,'-')}`;
+      const activeList = () => activeListId ? lists.find(l=>l.id===activeListId) : null;
       panel.querySelector('#sqc-btn-word').addEventListener('click', () => {
         if (!lastResults.length) return;
-        const list = activeListId ? lists.find(l=>l.id===activeListId) : null;
-        downloadFile(buildWordHtml(lastResults,lastIds,lastChanges,list?.name), `consulta_${todayStr().replace(/\//g,'-')}.doc`, 'application/msword');
+        downloadFile(buildWordHtml(lastResults,lastIds,lastChanges,activeList()?.name), `${fname()}.doc`, 'application/msword');
       });
       panel.querySelector('#sqc-btn-md').addEventListener('click', () => {
         if (!lastResults.length) return;
-        const list = activeListId ? lists.find(l=>l.id===activeListId) : null;
-        downloadFile(buildMarkdown(lastResults,lastIds,lastChanges,list?.name), `consulta_${todayStr().replace(/\//g,'-')}.md`, 'text/markdown');
+        downloadFile(buildMarkdown(lastResults,lastIds,lastChanges,activeList()?.name), `${fname()}.md`, 'text/markdown');
       });
       panel.querySelector('#sqc-btn-csv').addEventListener('click', () => {
         if (!lastResults.length) return;
-        downloadFile(buildCsv(lastResults,lastIds), `consulta_${todayStr().replace(/\//g,'-')}.csv`, 'text/csv');
+        downloadFile(buildCsv(lastResults,lastIds), `${fname()}.csv`, 'text/csv');
+      });
+      panel.querySelector('#sqc-btn-pdf').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        printAsPdf(lastResults,lastIds,lastChanges,activeList()?.name);
+      });
+
+      // Exports — relatório
+      panel.querySelector('#sqc-btn-rel-word').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        downloadFile(buildRelatorioWord(lastResults,lastIds,lastChanges,activeList()?.name), `relatorio_${fname()}.doc`, 'application/msword');
+      });
+      panel.querySelector('#sqc-btn-rel-md').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        downloadFile(buildRelatorioMd(lastResults,lastIds,lastChanges,activeList()?.name), `relatorio_${fname()}.md`, 'text/markdown');
       });
 
       refreshListSelect();
@@ -1089,7 +1572,7 @@
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // BOTÃO DE ACESSO
+  // BOTÃO DE ACESSO + ATALHO
   // ══════════════════════════════════════════════════════════════════
 
   const topBtn = document.createElement('button');
@@ -1097,5 +1580,14 @@
   topBtn.textContent = '🔍 Consulta de Chamados';
   topBtn.addEventListener('click', openPanel);
   document.body.appendChild(topBtn);
+
+  // Ctrl+Shift+Q abre sem precisar clicar no botão
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='q') {
+      e.preventDefault();
+      if (!panel || panel.style.display==='none') openPanel();
+      else { panel.style.display='none'; stopAutoRefresh(); }
+    }
+  });
 
 })();
