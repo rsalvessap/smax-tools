@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.05
+// @version      2.06
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.05';
+  const SMAX_TOOLKIT_VERSION = '2.06';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -2461,6 +2461,16 @@
         if (rawId && rawId !== id) globalChangeId = rawId;
       }
 
+      // Armazena LastUpdateTime e array bruto de comentários para uso em postDiscussion
+      const lastUpdateTime = props.LastUpdateTime || existing.lastUpdateTime || 0;
+      let rawComments = existing.rawComments || [];
+      if (props.Comments) {
+        try {
+          const parsed = typeof props.Comments === 'string' ? JSON.parse(props.Comments) : props.Comments;
+          if (Array.isArray(parsed?.Comment)) rawComments = parsed.Comment;
+        } catch (_) { /* mantém existing.rawComments */ }
+      }
+
       triageCache.set(id, Object.assign({}, existing, {
         idText: id,
         idNum: Number.isNaN(idNum) ? null : idNum,
@@ -2485,7 +2495,9 @@
         locationName,
         status,
         statusSCCD: props.StatusSCCDSMAX_c || existing.statusSCCD || '',
-        globalChangeId
+        globalChangeId,
+        lastUpdateTime,
+        rawComments
       }));
       trimMap(triageCache, TRIAGE_CACHE_MAX, TRIAGE_CACHE_TRIM);
     };
@@ -3123,26 +3135,17 @@
       if (!ticketId || !bodyHtml) return null;
 
       // SMAX exige: Comments como string JSON com TODOS os comentários existentes + o novo,
-      // e LastUpdateTime do ticket. Fazemos GET fresco para obter esses valores.
-      let lastUpdateTime = 0;
-      let existingComments = [];
+      // e LastUpdateTime do ticket. Buscamos fresco via ensureRequestPayload (usa FULL_LAYOUT
+      // que sabemos retornar Comments), depois lemos rawComments/lastUpdateTime do cache.
       try {
-        const fresh = await ApiClient.request(`ems/Request/${encodeURIComponent(String(ticketId))}`, {
-          method: 'GET',
-          searchParams: { layout: 'Id,Comments,LastUpdateTime' },
-          includeTenantParam: true
-        });
-        const ent = Array.isArray(fresh?.entities) ? (fresh.entities[0] || {}) : {};
-        const props = ent.properties || {};
-        lastUpdateTime = props.LastUpdateTime || 0;
-        if (props.Comments) {
-          const parsed = typeof props.Comments === 'string' ? JSON.parse(props.Comments) : props.Comments;
-          existingComments = Array.isArray(parsed?.Comment) ? parsed.Comment : [];
-        }
+        await DataRepository.ensureRequestPayload(String(ticketId), { force: true });
       } catch (err) {
-        console.warn('[SMAX] postDiscussion: falha ao buscar ticket para Comments:', err);
+        console.warn('[SMAX] postDiscussion: falha ao buscar ticket:', err);
         return null;
       }
+      const cached = DataRepository.triageCache.get(String(ticketId)) || {};
+      const lastUpdateTime = cached.lastUpdateTime || 0;
+      const existingComments = cached.rawComments || [];
 
       // Gera CommentId no mesmo formato hex de 36 chars usado pelo SMAX
       const commentId = Array.from({ length: 36 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
