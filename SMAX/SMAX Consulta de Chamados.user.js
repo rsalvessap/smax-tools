@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.11
+// @version      2.12
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -147,6 +147,38 @@
     return r.json();
   };
 
+  // Conta chamados filhos que apontam para este ticket via GlobalId_c
+  const fetchLinkedCount = async (id) => {
+    const t = getTenantId();
+    if (!t) return 0;
+    try {
+      const filter = encodeURIComponent(`GlobalId_c.Id = '${id.trim()}'`);
+      const url = `/rest/${t}/ems/Request?filter=${filter}&size=0&TENANTID=${t}`;
+      const r = await fetch(url, { credentials:'same-origin' });
+      if (!r.ok) return 0;
+      const data = await r.json();
+      return Number(data.total_count ?? data.totalCount ?? data.count ?? 0);
+    } catch { return 0; }
+  };
+
+  // Busca o cargo (Title) do solicitante pelo ID da pessoa
+  const fetchPersonTitle = async (personId) => {
+    if (!personId) return '';
+    const t = getTenantId();
+    if (!t) return '';
+    try {
+      const url = `/rest/${t}/ems/Person/${encodeURIComponent(personId)}?layout=FULL_LAYOUT&TENANTID=${t}`;
+      const r = await fetch(url, { credentials:'same-origin' });
+      if (!r.ok) return '';
+      const data = await r.json();
+      let ent = {};
+      if (Array.isArray(data?.entities) && data.entities.length) ent = data.entities[0];
+      else if (data?.entity_type) ent = data;
+      const props = ent.properties || {};
+      return props.Title || props.JobTitle || props.Ucn || props.Role || props.Position_c || '';
+    } catch { return ''; }
+  };
+
   // ══════════════════════════════════════════════════════════════════
   // EXTRAÇÃO DE DADOS
   // ══════════════════════════════════════════════════════════════════
@@ -164,7 +196,7 @@
     return 0;
   };
 
-  const extractTicketData = (payload, id) => {
+  const extractTicketData = (payload, id, overrideLinkedCount = -1) => {
     let ent = {};
     if (Array.isArray(payload?.entities) && payload.entities.length) ent = payload.entities[0];
     else if (payload?.entity_type) ent = payload;
@@ -190,12 +222,18 @@
     const globalName = globalRel.Name ? String(globalRel.Name) : '';
     const isGlobal   = !!globalId;
 
-    const linkedCount = extractLinkedCount(props, rel);
+    // linkedCount: usa valor secundário (busca de filhos) se disponível
+    const linkedCount = overrideLinkedCount >= 0 ? overrideLinkedCount : extractLinkedCount(props, rel);
+    // isGlobalParent: este chamado É um global (pai). Detectado por filhos ou flag booleana na API.
+    const isGlobalParent = linkedCount > 0
+      || !!(props.IsGlobal_c || props.GlobalRequest_c || props.IsGlobalRequest_c || props.Global_c);
 
     const requestedFor = rel.RequestedForPerson?.DisplayLabel || rel.RequestedForPerson?.Name
       || String(props.RequestedForPerson||props.RequestedForDisplayLabel||'') || '—';
+    // Cargo: tentativa direta no objeto da pessoa; se não vier, será preenchido por fetchPersonTitle
     const requestedForTitle = rel.RequestedForPerson?.Title || rel.RequestedForPerson?.JobTitle
-      || rel.RequestedForPerson?.Ucn || props.RequestedForTitle_c || '';
+      || rel.RequestedForPerson?.Ucn || rel.RequestedForPerson?.Role
+      || props.RequestedForTitle_c || props.RequestedForJobTitle_c || '';
     const group    = rel.ExpertGroup?.Name || rel.AssignedToGroup?.Name || rel.ExpertGroup?.DisplayLabel || '—';
     const assignee = rel.ExpertAssignee?.Name || rel.ExpertAssignee?.DisplayLabel
       || (props.ExpertAssignee ? `#${props.ExpertAssignee}` : '—');
@@ -226,7 +264,7 @@
       statusSCCDRaw, statusSCCDLabel,
       createTime, lastUpdateTs, lastUpdateTime,
       isGlobal, globalId, globalName,
-      linkedCount,
+      linkedCount, isGlobalParent,
       requestedFor, requestedForTitle, group, assignee,
       descHtml, solutionHtml, lastComments,
     };
@@ -392,7 +430,7 @@
       const isNew    = chg?.isNew;
       const lineEmoji = isNew ? '🆕' : (isClosed ? '🟢' : '🔴');
       const newMarker = isNew ? ' (NOVO)' : '';
-      const globalPart = d.isGlobal ? ` — Global pai: #${d.globalId}` : '';
+      const globalPart = d.isGlobal && !d.isGlobalParent ? ` — filho de #${d.globalId}` : '';
       out.push(`${lineEmoji} ${d.ticketId}${newMarker}${d.subject ? ' — ' + d.subject : ''}${globalPart}`);
 
       const todayMark = isToday(d.lastUpdateTs) ? ' 🆕 HOJE' : '';
@@ -469,8 +507,8 @@
       const isNew     = chg?.isNew;
       const lineEmoji = isNew ? '🆕' : (isClosed ? '🟢' : '🔴');
       const newMarker = isNew ? ' <span style="color:#059669;font-weight:bold;">(NOVO)</span>' : '';
-      const globalPart = d.isGlobal
-        ? ` <span style="color:#6b7280;font-weight:normal;font-size:10pt;">— Global pai: <b>#${esc(d.globalId)}</b></span>` : '';
+      const globalPart = d.isGlobal && !d.isGlobalParent
+        ? ` <span style="color:#6b7280;font-weight:normal;font-size:10pt;">— filho de #${esc(d.globalId)}</span>` : '';
 
       const todayMark = isToday(d.lastUpdateTs)
         ? ' <span style="color:#f59e0b;font-size:8pt;font-weight:bold;">🆕 HOJE</span>' : '';
@@ -567,8 +605,9 @@
       const d = r.data;
       const chg = changes?.[id];
 
-      const globalInfo = d.isGlobal
-        ? `<span style="color:#c00;font-weight:bold;"> — Global pai: #${d.globalId}</span>` : '';
+      const globalInfo = d.isGlobalParent
+        ? `<span style="color:#1d4ed8;font-weight:bold;"> — 🌐 Global</span>` : (d.isGlobal
+        ? `<span style="color:#9ca3af;font-size:10pt;"> — filho de #${d.globalId}</span>` : '');
 
       const linkedInfo = fields.has('linkedCount') && d.linkedCount > 0
         ? ` <span style="color:#7c3aed;font-size:9pt;">(${d.linkedCount} vinculados)</span>` : '';
@@ -687,14 +726,79 @@
   };
 
   // ══════════════════════════════════════════════════════════════════
+  // EXPORTAÇÃO — EXCEL (.xls — tabela HTML)
+  // ══════════════════════════════════════════════════════════════════
+
+  const buildExcelHtml = (results, ids) => {
+    const cols = ['ID','Título','Status','Status Operacional','É Global','Vinculados',
+      'Global Pai','GSE','Especialista','Solicitado por','Cargo',
+      'Abertura','Últ. Atualização'];
+    const th = cols.map(c=>`<th style="background:#1e3a5f;color:#fff;padding:5px 10px;white-space:nowrap;font-size:10pt;">${esc(c)}</th>`).join('');
+    const rows = ids.map((id,i) => {
+      const r = results[i];
+      if (!r?.ok) return `<tr><td>${esc(id)}</td><td colspan="${cols.length-1}" style="color:#c00;">ERRO: ${esc(r?.error||'')}</td></tr>`;
+      const d = r.data;
+      const bg = CLOSED_STATUSES.has(d.statusRaw) ? '#f0fdf4' : i%2===0 ? '#fff' : '#f8fafc';
+      const cells = [
+        d.ticketId, d.subject, d.statusLabel, d.statusSCCDLabel,
+        d.isGlobalParent ? 'Sim' : 'Não', d.linkedCount||0,
+        d.globalId||'', d.group, d.assignee,
+        d.requestedFor, d.requestedForTitle||'',
+        d.createTime, d.lastUpdateTime,
+      ].map(v => `<td style="padding:4px 8px;font-size:10pt;border:1px solid #e2e8f0;">${esc(String(v??''))}</td>`).join('');
+      return `<tr style="background:${bg};">${cells}</tr>`;
+    });
+    return `<html><head><meta charset="utf-8">
+    <style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;}
+    th{border:1px solid #1e3a5f;text-align:left;}
+    tr:hover td{background:#eff6ff!important;}</style>
+    </head><body>
+    <h2 style="font-family:Calibri,Arial,sans-serif;color:#1e3a5f;">Consulta de Chamados SMAX — ${todayStr()}</h2>
+    <table><thead><tr>${th}</tr></thead><tbody>${rows.join('')}</tbody></table>
+    </body></html>`;
+  };
+
+  const buildExcelRelatorioHtml = (results, ids, changes) => {
+    const cols = ['ID','Título','Status','Status Operacional','É Global','Vinculados',
+      'GSE','Últ. Atualização','Situação','Alterações'];
+    const th = cols.map(c=>`<th style="background:#1e3a5f;color:#fff;padding:5px 10px;white-space:nowrap;font-size:10pt;">${esc(c)}</th>`).join('');
+    const rows = ids.map((id,i) => {
+      const r = results[i];
+      if (!r?.ok) return `<tr><td>${esc(id)}</td><td colspan="${cols.length-1}" style="color:#c00;">ERRO: ${esc(r?.error||'')}</td></tr>`;
+      const d = r.data;
+      const chg = changes?.[id];
+      const isClosed = CLOSED_STATUSES.has(d.statusRaw);
+      const situacao = !chg ? '—' : chg.isNew ? 'Novo' : (isClosed && chg.hasChanges) ? 'Encerrado' : chg.hasChanges ? 'Atualizado' : 'Sem mudança';
+      const bgMap = { 'Encerrado':'#f0fdf4', 'Atualizado':'#eff6ff', 'Novo':'#fefce8', 'Sem mudança':'#f9fafb' };
+      const bg = bgMap[situacao] || (i%2===0 ? '#fff' : '#f8fafc');
+      const alteracoes = chg?.changes?.filter(c=>!c.newComments).map(c=>`${c.label}: ${c.from}→${c.to}`).join('; ') || '';
+      const linkedChange = chg?.changes?.find(c=>c.isLinkedChange);
+      const linkedStr = linkedChange ? `${d.linkedCount} (era ${linkedChange.from})` : String(d.linkedCount||0);
+      const cells = [
+        d.ticketId, d.subject, d.statusLabel, d.statusSCCDLabel,
+        d.isGlobalParent ? 'Sim' : 'Não', linkedStr,
+        d.group, d.lastUpdateTime, situacao, alteracoes,
+      ].map(v => `<td style="padding:4px 8px;font-size:10pt;border:1px solid #e2e8f0;">${esc(String(v??''))}</td>`).join('');
+      return `<tr style="background:${bg};">${cells}</tr>`;
+    });
+    return `<html><head><meta charset="utf-8">
+    <style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;}
+    th{border:1px solid #1e3a5f;text-align:left;}
+    tr:hover td{background:#eff6ff!important;}</style>
+    </head><body>
+    <h2 style="font-family:Calibri,Arial,sans-serif;color:#1e3a5f;">Relatório de Atualização — ${todayStr()}</h2>
+    <table><thead><tr>${th}</tr></thead><tbody>${rows.join('')}</tbody></table>
+    </body></html>`;
+  };
+
+  // ══════════════════════════════════════════════════════════════════
   // EXPORTAÇÃO — PDF (print)
   // ══════════════════════════════════════════════════════════════════
 
-  const printAsPdf = (results, ids, changes, listName) => {
-    const html = buildWordHtml(results, ids, changes, listName);
+  const printAsPdf = (htmlContent) => {
     const win = window.open('','_blank','width=900,height=700');
     if (!win) { alert('Popup bloqueado. Permita popups para este site.'); return; }
-    win.document.write(html.replace('</head>','<style>@media print{body{margin:1cm;}}</style></head>'));
+    win.document.write(htmlContent.replace('</head>','<style>@media print{body{margin:1cm;}*{-webkit-print-color-adjust:exact;}}</style></head>'));
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
   };
@@ -1026,12 +1130,15 @@
             <div id="sqc-export-section">
               <div class="sqc-export-divider">Exportar consulta</div>
               <button class="sqc-btn-secondary" id="sqc-btn-word">📄 Word (.doc)</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-excel">📊 Excel (.xls)</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-pdf-consulta">🖨️ PDF</button>
               <button class="sqc-btn-secondary" id="sqc-btn-md">📝 Markdown (.md)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-csv">📊 CSV (.csv)</button>
               <div class="sqc-export-divider">Exportar relatório</div>
               <button class="sqc-btn-secondary" id="sqc-btn-rel-word">📋 Word (.doc)</button>
-              <button class="sqc-btn-secondary" id="sqc-btn-rel-md">📋 Markdown (.md)</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-rel-excel">📊 Excel (.xls)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-pdf">🖨️ PDF</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-rel-md">📋 Markdown (.md)</button>
             </div>
           </div>
 
@@ -1150,14 +1257,16 @@
     if (fields.has('requestedFor'))      metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Solicitado por</span><span class="sqc-meta-val">${esc(d.requestedFor)}</span></div>`);
     if (fields.has('requestedForTitle') && d.requestedForTitle) metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Cargo</span><span class="sqc-meta-val">${esc(d.requestedForTitle)}</span></div>`);
     if (fields.has('group'))             metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Grupo</span><span class="sqc-meta-val">${esc(d.group)}</span></div>`);
-    if (fields.has('assignee'))     metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Especialista</span><span class="sqc-meta-val">${esc(d.assignee)}</span></div>`);
-    if (fields.has('createTime'))   metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Abertura</span><span class="sqc-meta-val">${esc(d.createTime)}</span></div>`);
-    if (fields.has('lastUpdate'))   metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Últ. atualização</span><span class="sqc-meta-val">${esc(d.lastUpdateTime)}</span></div>`);
+    if (fields.has('assignee'))          metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Especialista</span><span class="sqc-meta-val">${esc(d.assignee)}</span></div>`);
+    if (fields.has('createTime'))        metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Abertura</span><span class="sqc-meta-val">${esc(d.createTime)}</span></div>`);
+    if (fields.has('lastUpdate'))        metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Últ. atualização</span><span class="sqc-meta-val">${esc(d.lastUpdateTime)}</span></div>`);
+    // Global pai (se este chamado for filho de um global, mostra na metadata)
+    if (d.isGlobal) metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Global pai</span><span class="sqc-meta-val"><a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.globalId)}/general" target="_blank" style="color:#f87171;">#${esc(d.globalId)}</a></span></div>`);
 
-    // Global + linked badges
+    // Badge global: indica se ESTE chamado É um global (pai)
     let globalBadge = '';
-    if (fields.has('global') && d.isGlobal) {
-      globalBadge = `<span class="sqc-badge sqc-badge-global" title="${esc(d.globalName)}">⬆ Global #${esc(d.globalId)}</span>`;
+    if (fields.has('global') && d.isGlobalParent) {
+      globalBadge = `<span class="sqc-badge sqc-badge-global">🌐 Global</span>`;
     }
     let linkedBadge = '';
     if (fields.has('linkedCount') && d.linkedCount > 0) {
@@ -1288,7 +1397,20 @@
 
     const fetched = await runConcurrent(
       ids,
-      async (id) => extractTicketData(await fetchTicket(id), id),
+      async (id) => {
+        const [payload, linkedCount] = await Promise.all([
+          fetchTicket(id),
+          fetchLinkedCount(id),
+        ]);
+        const d = extractTicketData(payload, id, linkedCount);
+        // Cargo do solicitante: busca secundária se não veio inline
+        if (!d.requestedForTitle) {
+          const personId = payload?.entities?.[0]?.properties?.RequestedForPerson
+            || payload?.entity_type && payload?.properties?.RequestedForPerson;
+          if (personId) d.requestedForTitle = await fetchPersonTitle(String(personId));
+        }
+        return d;
+      },
       CONCURRENCY,
       (done,total) => { progressEl.textContent = `Consultando… ${done}/${total}`; }
     );
@@ -1533,12 +1655,20 @@
       // Consultar
       panel.querySelector('#sqc-btn-fetch').addEventListener('click', runQuery);
 
-      // Exports — simples
+      // Exports — consulta
       const fname = () => `consulta_${todayStr().replace(/\//g,'-')}`;
       const activeList = () => activeListId ? lists.find(l=>l.id===activeListId) : null;
       panel.querySelector('#sqc-btn-word').addEventListener('click', () => {
         if (!lastResults.length) return;
         downloadFile(buildWordHtml(lastResults,lastIds,lastChanges,activeList()?.name), `${fname()}.doc`, 'application/msword');
+      });
+      panel.querySelector('#sqc-btn-excel').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        downloadFile(buildExcelHtml(lastResults,lastIds), `${fname()}.xls`, 'application/vnd.ms-excel');
+      });
+      panel.querySelector('#sqc-btn-pdf-consulta').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        printAsPdf(buildWordHtml(lastResults,lastIds,lastChanges,activeList()?.name));
       });
       panel.querySelector('#sqc-btn-md').addEventListener('click', () => {
         if (!lastResults.length) return;
@@ -1548,15 +1678,19 @@
         if (!lastResults.length) return;
         downloadFile(buildCsv(lastResults,lastIds), `${fname()}.csv`, 'text/csv');
       });
-      panel.querySelector('#sqc-btn-pdf').addEventListener('click', () => {
-        if (!lastResults.length) return;
-        printAsPdf(lastResults,lastIds,lastChanges,activeList()?.name);
-      });
 
       // Exports — relatório
       panel.querySelector('#sqc-btn-rel-word').addEventListener('click', () => {
         if (!lastResults.length) return;
         downloadFile(buildRelatorioWord(lastResults,lastIds,lastChanges,activeList()?.name), `relatorio_${fname()}.doc`, 'application/msword');
+      });
+      panel.querySelector('#sqc-btn-rel-excel').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        downloadFile(buildExcelRelatorioHtml(lastResults,lastIds,lastChanges), `relatorio_${fname()}.xls`, 'application/vnd.ms-excel');
+      });
+      panel.querySelector('#sqc-btn-pdf').addEventListener('click', () => {
+        if (!lastResults.length) return;
+        printAsPdf(buildRelatorioWord(lastResults,lastIds,lastChanges,activeList()?.name));
       });
       panel.querySelector('#sqc-btn-rel-md').addEventListener('click', () => {
         if (!lastResults.length) return;
