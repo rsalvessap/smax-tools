@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.15
+// @version      2.16
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -147,20 +147,21 @@
     return r.json();
   };
 
-  // Conta chamados filhos via RequestCausesRequest (mesmo endpoint e estrutura do SMAX Toolkit).
-  // firstEndpoint = pai (global), secondEndpoint = filho.
-  // SMAX exige meta=totalCount para retornar a contagem em data.meta.total_count.
+  // Conta chamados filhos buscando Requests cujo GlobalId_c aponta para este ticket.
+  // Esta é a mesma abordagem do SMAX Toolkit (ResponseHUD fetchGlobalChildCounts).
+  // NÃO usa RequestCausesRequest — esse endpoint retorna 403 em consulta direta.
   const fetchLinkedCount = async (id) => {
     const t = getTenantId();
     if (!t) return 0;
     const key = String(id || '').trim();
+    if (!key) return 0;
     try {
-      const filter = encodeURIComponent(`(firstEndpoint='${key}')`);
-      const url = `/rest/${t}/ems/RequestCausesRequest?filter=${filter}&layout=firstEndpoint,secondEndpoint&meta=totalCount&size=1&TENANTID=${t}`;
+      const filter = encodeURIComponent(`GlobalId_c='${key}'`);
+      const url = `/rest/${t}/ems/Request?filter=${filter}&layout=Id,GlobalId_c&meta=totalCount&size=500&TENANTID=${t}`;
       const r = await fetch(url, { credentials:'same-origin' });
       if (!r.ok) return 0;
       const data = await r.json();
-      // total_count fica em data.meta.total_count (confirmado no código do SMAX Toolkit)
+      // Prefere total_count do meta; fallback = contar entities retornadas
       return Number(
         data.meta?.total_count
         ?? data.meta?.totalCount
