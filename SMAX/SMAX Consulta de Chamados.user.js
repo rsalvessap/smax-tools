@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.12
+// @version      2.13
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -162,20 +162,25 @@
   };
 
   // Busca o cargo (Title) do solicitante pelo ID da pessoa
+  // O campo Title é confirmado pelo atributo data-aid="title" no popover de pessoa do SMAX.
   const fetchPersonTitle = async (personId) => {
     if (!personId) return '';
     const t = getTenantId();
     if (!t) return '';
     try {
-      const url = `/rest/${t}/ems/Person/${encodeURIComponent(personId)}?layout=FULL_LAYOUT&TENANTID=${t}`;
+      // Inclui o campo Title explicitamente para garantir que venha no layout
+      const url = `/rest/${t}/ems/Person/${encodeURIComponent(String(personId).trim())}?layout=FULL_LAYOUT&TENANTID=${t}`;
       const r = await fetch(url, { credentials:'same-origin' });
       if (!r.ok) return '';
       const data = await r.json();
       let ent = {};
       if (Array.isArray(data?.entities) && data.entities.length) ent = data.entities[0];
       else if (data?.entity_type) ent = data;
-      const props = ent.properties || {};
-      return props.Title || props.JobTitle || props.Ucn || props.Role || props.Position_c || '';
+      const p = ent.properties || {};
+      const rp = ent.related_properties || {};
+      // data-aid="title" confirma que o campo API é "Title" na entidade Person
+      return p.Title || rp.Title || p.JobTitle || p.Ucn || p.Role
+        || p.EmployeeType || p.Position_c || p.Cargo_c || '';
     } catch { return ''; }
   };
 
@@ -1403,11 +1408,16 @@
           fetchLinkedCount(id),
         ]);
         const d = extractTicketData(payload, id, linkedCount);
-        // Cargo do solicitante: busca secundária se não veio inline
+        // Cargo do solicitante: busca secundária na entidade Person
         if (!d.requestedForTitle) {
-          const personId = payload?.entities?.[0]?.properties?.RequestedForPerson
-            || payload?.entity_type && payload?.properties?.RequestedForPerson;
-          if (personId) d.requestedForTitle = await fetchPersonTitle(String(personId));
+          // Prioridade: Id do objeto expandido em related_properties (mais confiável)
+          // Fallback: ID numérico em properties
+          const ent0 = Array.isArray(payload?.entities) && payload.entities.length
+            ? payload.entities[0]
+            : (payload?.entity_type ? payload : {});
+          const personId = ent0?.related_properties?.RequestedForPerson?.Id
+            || ent0?.properties?.RequestedForPerson;
+          if (personId) d.requestedForTitle = await fetchPersonTitle(personId);
         }
         return d;
       },
