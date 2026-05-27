@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.13
+// @version      2.14
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -147,17 +147,21 @@
     return r.json();
   };
 
-  // Conta chamados filhos que apontam para este ticket via GlobalId_c
+  // Conta chamados filhos via RequestCausesRequest (mesmo endpoint usado pelo SMAX Toolkit).
+  // firstEndpoint = pai (global), secondEndpoint = filho.
+  // Para contar filhos de um global: filter=(firstEndpoint='ID')
   const fetchLinkedCount = async (id) => {
     const t = getTenantId();
     if (!t) return 0;
+    const key = String(id || '').trim();
     try {
-      const filter = encodeURIComponent(`GlobalId_c.Id = '${id.trim()}'`);
-      const url = `/rest/${t}/ems/Request?filter=${filter}&size=0&TENANTID=${t}`;
+      const filter = encodeURIComponent(`(firstEndpoint='${key}')`);
+      const url = `/rest/${t}/ems/RequestCausesRequest?filter=${filter}&layout=firstEndpoint,secondEndpoint&size=0&TENANTID=${t}`;
       const r = await fetch(url, { credentials:'same-origin' });
       if (!r.ok) return 0;
       const data = await r.json();
-      return Number(data.total_count ?? data.totalCount ?? data.count ?? 0);
+      return Number(data.total_count ?? data.totalCount ?? data.count
+        ?? (Array.isArray(data.entities) ? data.entities.length : 0));
     } catch { return 0; }
   };
 
