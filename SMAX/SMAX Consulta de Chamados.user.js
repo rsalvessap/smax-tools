@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      1.01
+// @version      1.02
 // @description  Consulta detalhada de chamados SMAX por lista de IDs: status, operacional, datas, solicitante, grupo, descrição, solução e comentários. Exporta em Markdown e CSV.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -16,7 +16,8 @@
 
   // ─── Constantes ──────────────────────────────────────────────────────────────
 
-  const STORAGE_KEY = 'smax_consulta_pos';
+  const STORAGE_KEY      = 'smax_consulta_pos';
+  const LAST_QUERY_KEY   = 'smax_consulta_last_query';
   const CONCURRENCY  = 4;
 
   const STATUS_LABELS = {
@@ -442,6 +443,7 @@
     panel.innerHTML = `
       <div id="sqc-header">
         <span id="sqc-title">🔍 Consulta de Chamados SMAX</span>
+        <span id="sqc-last-query" style="font-size:10px;color:#4b5563;"></span>
         <button id="sqc-close" title="Fechar">✕</button>
       </div>
       <div id="sqc-body">
@@ -551,6 +553,11 @@
 
     document.body.appendChild(panel);
 
+    // Última consulta
+    const lastQuery = GM_getValue(LAST_QUERY_KEY, '');
+    const lastEl = panel.querySelector('#sqc-last-query');
+    if (lastEl && lastQuery) lastEl.textContent = `Última consulta: ${lastQuery}`;
+
     // Fechar
     panel.querySelector('#sqc-close').addEventListener('click', () => {
       panel.style.display = 'none';
@@ -634,9 +641,13 @@
 
       const ok  = fetched.filter(r => r?.ok).length;
       const err = fetched.length - ok;
+      const now = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+      GM_setValue(LAST_QUERY_KEY, now);
+      const lastLabel = panel.querySelector('#sqc-last-query');
+      if (lastLabel) lastLabel.textContent = `Última consulta: ${now}`;
       panel.querySelector('#sqc-progress').textContent =
         `Concluído: ${ok} chamado${ok !== 1 ? 's' : ''} carregado${ok !== 1 ? 's' : ''}` +
-        (err ? `, ${err} erro${err !== 1 ? 's' : ''}` : '') + '.';
+        (err ? `, ${err} erro${err !== 1 ? 's' : ''}` : '') + ` — ${now}`;
 
       fetchBtn.disabled = false;
       if (ok > 0) {
