@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.00
+// @version      2.01
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças e exportação em Word/Markdown/CSV.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -514,8 +514,9 @@
 
     /* Sidebar */
     #sqc-sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:0;border-right:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow-y:auto;}
-    #sqc-sidebar::-webkit-scrollbar{width:4px;}
-    #sqc-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:10px;}
+    #sqc-sidebar::-webkit-scrollbar{width:7px;}
+    #sqc-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:10px;}
+    #sqc-sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.4);}
     .sqc-sb-section{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05);}
     .sqc-sb-label{font-size:9px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
 
@@ -540,12 +541,15 @@
     #sqc-ids-count{font-size:10px;color:#4b5563;margin-top:4px;}
 
     /* Campos */
-    .sqc-field-group{margin-bottom:8px;}
+    .sqc-field-group{margin-bottom:10px;}
     .sqc-field-group-label{font-size:9px;color:#6b7280;font-weight:600;margin-bottom:4px;}
-    .sqc-field-row{display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;}
-    .sqc-field-row input{cursor:pointer;accent-color:#3b82f6;}
-    .sqc-field-row span{font-size:11px;color:#d1d5db;}
-    .sqc-field-row.disabled span{color:#374151;}
+    .sqc-field-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent;transition:background .1s,border-color .1s;}
+    .sqc-field-row:hover{background:rgba(255,255,255,.05);}
+    .sqc-field-row.is-checked{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);}
+    .sqc-field-row input{cursor:pointer;accent-color:#3b82f6;width:14px;height:14px;flex-shrink:0;}
+    .sqc-field-row span{font-size:11px;color:#6b7280;transition:color .1s;}
+    .sqc-field-row.is-checked span{color:#93c5fd;font-weight:600;}
+    #sqc-fields-count{font-size:10px;color:#4b5563;float:right;}
 
     /* Botões */
     .sqc-btn-primary{width:100%;padding:9px 0;border:none;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:4px;}
@@ -638,7 +642,7 @@
       <div class="sqc-field-group">
         <div class="sqc-field-group-label">${grp}</div>
         ${defs.map(f=>`
-          <label class="sqc-field-row">
+          <label class="sqc-field-row${DEFAULT_FIELDS.includes(f.key)?' is-checked':''}">
             <input type="checkbox" class="sqc-field-cb" data-key="${f.key}" ${DEFAULT_FIELDS.includes(f.key)?'checked':''}>
             <span>${f.label}</span>
           </label>`).join('')}
@@ -687,7 +691,7 @@
           </div>
 
           <div class="sqc-sb-section">
-            <div class="sqc-sb-label">Campos</div>
+            <div class="sqc-sb-label">Campos <span id="sqc-fields-count"></span></div>
             ${fieldGroupsHtml}
           </div>
 
@@ -959,7 +963,9 @@
             fields = new Set(list.fields);
             panel.querySelectorAll('.sqc-field-cb').forEach(cb => {
               cb.checked = fields.has(cb.dataset.key);
+              cb.closest('.sqc-field-row').classList.toggle('is-checked', cb.checked);
             });
+            updateFieldsCount();
           }
         }
         refreshSnapshotInfo();
@@ -1017,14 +1023,24 @@
       });
 
       // Checkboxes de campos
+      const updateFieldsCount = () => {
+        const el = panel.querySelector('#sqc-fields-count');
+        if (el) el.textContent = `${fields.size}/${FIELD_DEFS.length} ativos`;
+      };
+      updateFieldsCount();
+
       panel.querySelectorAll('.sqc-field-cb').forEach(cb => {
         cb.addEventListener('change', () => {
           cb.checked ? fields.add(cb.dataset.key) : fields.delete(cb.dataset.key);
+          cb.closest('.sqc-field-row').classList.toggle('is-checked', cb.checked);
+          updateFieldsCount();
           // Salva campos na lista ativa
           if (activeListId) {
             const list = lists.find(l=>l.id===activeListId);
             if (list) { list.fields = [...fields]; saveLists(lists); }
           }
+          // Re-renderiza resultados existentes sem nova consulta
+          if (lastResults.length) renderResults();
         });
       });
 
