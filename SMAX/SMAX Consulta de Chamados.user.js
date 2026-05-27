@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.10
+// @version      2.11
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -61,14 +61,15 @@
     { key:'lastUpdate',   label:'Últ. atualização',   group:'Básico',   tracked:true  },
     { key:'global',       label:'Global pai',         group:'Relações', tracked:true  },
     { key:'linkedCount',  label:'Vinculados',         group:'Relações', tracked:true  },
-    { key:'requestedFor', label:'Solicitante',        group:'Relações', tracked:false },
-    { key:'group',        label:'Grupo (GSE)',        group:'Relações', tracked:true  },
+    { key:'requestedFor',      label:'Solicitado por',       group:'Relações', tracked:false },
+    { key:'requestedForTitle', label:'Cargo do solicitante', group:'Relações', tracked:false },
+    { key:'group',             label:'Grupo (GSE)',          group:'Relações', tracked:true  },
     { key:'assignee',     label:'Especialista',       group:'Relações', tracked:true  },
     { key:'description',  label:'Descrição',          group:'Conteúdo', tracked:false },
     { key:'solution',     label:'Solução',            group:'Conteúdo', tracked:false },
     { key:'comments',     label:'Comentários',        group:'Conteúdo', tracked:true  },
   ];
-  const DEFAULT_FIELDS = ['status','statusSCCD','lastUpdate','global','linkedCount','group','comments'];
+  const DEFAULT_FIELDS = ['status','statusSCCD','lastUpdate','global','linkedCount','requestedFor','group','comments'];
 
   // ══════════════════════════════════════════════════════════════════
   // STORAGE
@@ -193,6 +194,8 @@
 
     const requestedFor = rel.RequestedForPerson?.DisplayLabel || rel.RequestedForPerson?.Name
       || String(props.RequestedForPerson||props.RequestedForDisplayLabel||'') || '—';
+    const requestedForTitle = rel.RequestedForPerson?.Title || rel.RequestedForPerson?.JobTitle
+      || rel.RequestedForPerson?.Ucn || props.RequestedForTitle_c || '';
     const group    = rel.ExpertGroup?.Name || rel.AssignedToGroup?.Name || rel.ExpertGroup?.DisplayLabel || '—';
     const assignee = rel.ExpertAssignee?.Name || rel.ExpertAssignee?.DisplayLabel
       || (props.ExpertAssignee ? `#${props.ExpertAssignee}` : '—');
@@ -224,7 +227,7 @@
       createTime, lastUpdateTs, lastUpdateTime,
       isGlobal, globalId, globalName,
       linkedCount,
-      requestedFor, group, assignee,
+      requestedFor, requestedForTitle, group, assignee,
       descHtml, solutionHtml, lastComments,
     };
   };
@@ -314,13 +317,14 @@
       const linkedPart = fields.has('linkedCount') && d.linkedCount ? ` · ${d.linkedCount} vinculados` : '';
       out.push(`${d.statusEmoji} **${d.ticketId}**${d.subject ? ' — ' + d.subject : ''}${globalPart}${linkedPart}`);
       const metaParts = [];
-      if (fields.has('status'))       metaParts.push(`**Status:** ${d.statusLabel}`);
-      if (fields.has('statusSCCD'))   metaParts.push(`**Status Operacional:** ${d.statusSCCDLabel}`);
-      if (fields.has('group'))        metaParts.push(`**GSE:** ${d.group}`);
-      if (fields.has('assignee'))     metaParts.push(`**Especialista:** ${d.assignee}`);
-      if (fields.has('requestedFor')) metaParts.push(`**Solicitante:** ${d.requestedFor}`);
-      if (fields.has('createTime'))   metaParts.push(`**Abertura:** ${d.createTime}`);
-      if (fields.has('lastUpdate'))   metaParts.push(`**Última atualização:** ${d.lastUpdateTime}`);
+      if (fields.has('status'))             metaParts.push(`**Status:** ${d.statusLabel}`);
+      if (fields.has('statusSCCD'))         metaParts.push(`**Status Operacional:** ${d.statusSCCDLabel}`);
+      if (fields.has('group'))              metaParts.push(`**GSE:** ${d.group}`);
+      if (fields.has('assignee'))           metaParts.push(`**Especialista:** ${d.assignee}`);
+      if (fields.has('requestedFor'))       metaParts.push(`**Solicitado por:** ${d.requestedFor}`);
+      if (fields.has('requestedForTitle') && d.requestedForTitle) metaParts.push(`**Cargo:** ${d.requestedForTitle}`);
+      if (fields.has('createTime'))         metaParts.push(`**Abertura:** ${d.createTime}`);
+      if (fields.has('lastUpdate'))         metaParts.push(`**Última atualização:** ${d.lastUpdateTime}`);
       out.push(metaParts.join(' | '), '');
       if (isComparison && chg?.hasChanges && !chg.isNew) {
         const textChanges = chg.changes.filter(c=>!c.newComments);
@@ -393,7 +397,8 @@
 
       const todayMark = isToday(d.lastUpdateTs) ? ' 🆕 HOJE' : '';
       const metaParts = [];
-      if (fields.has('linkedCount')) metaParts.push(`Vinculados: ${fmtLinked(d, chg)}`);
+      const linkedChanged = chg?.changes?.find(c=>c.isLinkedChange);
+      if (fields.has('linkedCount') && (d.linkedCount > 0 || linkedChanged)) metaParts.push(`Vinculados: ${fmtLinked(d, chg)}`);
       if (fields.has('statusSCCD'))  metaParts.push(`Status Operacional: ${d.statusSCCDLabel}`);
       if (fields.has('group'))       metaParts.push(`GSE: ${d.group}`);
       if (fields.has('lastUpdate'))  metaParts.push(`Última atualização: ${d.lastUpdateTime}${todayMark}`);
@@ -601,7 +606,8 @@
       if (fields.has('linkedCount'))  meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Vinculados</b><br>${d.linkedCount||0}</td>`);
       if (fields.has('group'))        meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>GSE</b><br>${esc(d.group)}</td>`);
       if (fields.has('assignee'))     meta1.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Especialista</b><br>${esc(d.assignee)}</td>`);
-      if (fields.has('requestedFor')) meta2.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Solicitante</b><br>${esc(d.requestedFor)}</td>`);
+      if (fields.has('requestedFor'))       meta2.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Solicitado por</b><br>${esc(d.requestedFor)}</td>`);
+      if (fields.has('requestedForTitle') && d.requestedForTitle) meta2.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Cargo</b><br>${esc(d.requestedForTitle)}</td>`);
       if (fields.has('createTime'))   meta2.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Abertura</b><br>${esc(d.createTime)}</td>`);
       if (fields.has('lastUpdate'))   meta2.push(`<td style="border:1pt solid #e2e8f0;padding:4pt 8pt;"><b>Última atualização</b><br>${esc(d.lastUpdateTime)}</td>`);
       if (meta1.length) metaRows.push(`<tr style="background:#f1f5f9;">${meta1.join('')}</tr>`);
@@ -1018,14 +1024,14 @@
             </div>
 
             <div id="sqc-export-section">
-              <div class="sqc-export-divider">Exportar — Simples</div>
+              <div class="sqc-export-divider">Exportar consulta</div>
               <button class="sqc-btn-secondary" id="sqc-btn-word">📄 Word (.doc)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-md">📝 Markdown (.md)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-csv">📊 CSV (.csv)</button>
+              <div class="sqc-export-divider">Exportar relatório</div>
+              <button class="sqc-btn-secondary" id="sqc-btn-rel-word">📋 Word (.doc)</button>
+              <button class="sqc-btn-secondary" id="sqc-btn-rel-md">📋 Markdown (.md)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-pdf">🖨️ PDF</button>
-              <div class="sqc-export-divider">Exportar — Relatório</div>
-              <button class="sqc-btn-secondary" id="sqc-btn-rel-word">📋 Relatório Word (.doc)</button>
-              <button class="sqc-btn-secondary" id="sqc-btn-rel-md">📋 Relatório Markdown (.md)</button>
             </div>
           </div>
 
@@ -1141,20 +1147,17 @@
     }
 
     const metaItems = [];
-    if (fields.has('requestedFor')) metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Solicitante</span><span class="sqc-meta-val">${esc(d.requestedFor)}</span></div>`);
-    if (fields.has('group'))        metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Grupo</span><span class="sqc-meta-val">${esc(d.group)}</span></div>`);
+    if (fields.has('requestedFor'))      metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Solicitado por</span><span class="sqc-meta-val">${esc(d.requestedFor)}</span></div>`);
+    if (fields.has('requestedForTitle') && d.requestedForTitle) metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Cargo</span><span class="sqc-meta-val">${esc(d.requestedForTitle)}</span></div>`);
+    if (fields.has('group'))             metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Grupo</span><span class="sqc-meta-val">${esc(d.group)}</span></div>`);
     if (fields.has('assignee'))     metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Especialista</span><span class="sqc-meta-val">${esc(d.assignee)}</span></div>`);
     if (fields.has('createTime'))   metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Abertura</span><span class="sqc-meta-val">${esc(d.createTime)}</span></div>`);
     if (fields.has('lastUpdate'))   metaItems.push(`<div class="sqc-meta-item"><span class="sqc-meta-label">Últ. atualização</span><span class="sqc-meta-val">${esc(d.lastUpdateTime)}</span></div>`);
 
     // Global + linked badges
     let globalBadge = '';
-    if (fields.has('global')) {
-      if (d.isGlobal) {
-        globalBadge = `<span class="sqc-badge sqc-badge-global" title="${esc(d.globalName)}">⬆ Global #${esc(d.globalId)}</span>`;
-      } else {
-        globalBadge = `<span class="sqc-badge sqc-badge-local">Local</span>`;
-      }
+    if (fields.has('global') && d.isGlobal) {
+      globalBadge = `<span class="sqc-badge sqc-badge-global" title="${esc(d.globalName)}">⬆ Global #${esc(d.globalId)}</span>`;
     }
     let linkedBadge = '';
     if (fields.has('linkedCount') && d.linkedCount > 0) {
