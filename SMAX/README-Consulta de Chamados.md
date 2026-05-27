@@ -1,6 +1,6 @@
 # SMAX Consulta de Chamados - TJSP
 
-Script auxiliar para consulta detalhada de chamados SMAX por lista de IDs. Gera relatórios em Markdown e CSV com status, datas, responsáveis, descrição, solução e últimos comentários.
+Script auxiliar para consulta detalhada de chamados SMAX por lista de IDs. Suporta **listas salvas com detecção automática de mudanças** entre consultas, seleção de campos configurável e exportação em Markdown e Word.
 
 ---
 
@@ -27,46 +27,70 @@ Clique no link abaixo para instalar diretamente pelo Tampermonkey:
 
 ---
 
-## 3. Como usar
+## 3. Modos de uso
 
-1. Acesse qualquer tela do SMAX
-2. Clique no botão **🔍 Consulta de Chamados** que aparece fixo no topo da página
-3. Cole os IDs dos chamados desejados na área de texto (aceita um por linha, separados por vírgula, espaço ou ponto-e-vírgula)
-4. Clique em **🔍 Consultar**
-5. Aguarde o carregamento — até 4 chamados são buscados em paralelo com barra de progresso
-6. Use os botões de exportação para baixar o resultado
+O script opera em dois modos, selecionáveis no painel lateral esquerdo:
 
----
+### 3.1 Consulta simples
 
-## 4. Informações extraídas por chamado
+- Cole os IDs na área de texto (um por linha, separados por vírgula, espaço ou ponto-e-vírgula)
+- Clique em **Consultar**
+- Os resultados são exibidos e descartados ao fechar o painel
+- Ideal para consultas pontuais sem necessidade de histórico
 
-| Campo | Descrição |
-|-------|-----------|
-| **ID** | Número do chamado (com link direto) |
-| **Assunto** | Título do chamado |
-| **Status** | Status SMAX (Novo, Em Andamento, Suspenso, Concluído…) |
-| **Status Operacional** | Campo customizado `StatusSCCDSMAX_c` |
-| **É Global / Global pai** | Indica se o chamado está vinculado a um global e qual |
-| **Solicitante** | Pessoa que abriu o chamado |
-| **Grupo (GSE)** | Grupo de suporte responsável |
-| **Especialista** | Atendente vinculado |
-| **Data de abertura** | `CreateTime` formatado |
-| **Última atualização** | `LastUpdateTime` formatado |
-| **Descrição** | Texto completo (seção colapsável) |
-| **Solução** | Texto de resolução registrado (seção colapsável) |
-| **Últimos 3 comentários** | Comentários de usuário/agente, excluindo mensagens do sistema, em ordem cronológica (seção colapsável) |
+### 3.2 Lista salva
+
+- Crie uma lista nomeada com **+ Nova lista**
+- Cole os IDs e clique em **Salvar IDs**
+- Ao consultar, o script compara com o snapshot da consulta anterior e destaca automaticamente o que mudou
+- A lista fica disponível para nova consulta a qualquer momento via dropdown
 
 ---
 
-## 5. Exportação
+## 4. Seleção de campos
 
-### 5.1 Markdown
+Cada lista salva tem sua própria configuração de campos. Marque apenas os campos desejados para que o script consulte somente o necessário:
 
-Gera um arquivo `.md` no mesmo estilo dos relatórios de acompanhamento de chamados:
+| Grupo | Campo | Rastreado para mudanças |
+|-------|-------|:-----------------------:|
+| Básico | Status | Sim |
+| Básico | Status Operacional | Sim |
+| Básico | Data de abertura | — |
+| Básico | Última atualização | Sim |
+| Relações | Global pai | Sim |
+| Relações | Solicitante | — |
+| Relações | Grupo (GSE) | Sim |
+| Relações | Especialista | Sim |
+| Conteúdo | Descrição | — |
+| Conteúdo | Solução | — |
+| Conteúdo | Comentários | Sim |
+
+---
+
+## 5. Detecção de mudanças (listas salvas)
+
+Após cada consulta de lista salva, o sistema salva um snapshot com os valores atuais dos campos rastreados. Na próxima consulta, cada chamado é comparado com o snapshot anterior:
+
+- **COM ATUALIZAÇÃO** — exibido em destaque com as mudanças identificadas (ex: status anterior → novo, novos comentários)
+- **SEM ATUALIZAÇÃO** — sem alterações nos campos rastreados
+- **ENCERRADO** — chamados com status Concluído, Rejeitado ou Cancelado
+
+Uma barra de resumo no topo dos resultados exibe os contadores de cada categoria.
+
+---
+
+## 6. Exportação
+
+### 6.1 Markdown
+
+Gera um arquivo `.md` no estilo dos relatórios de acompanhamento, com agrupamento por status de atualização quando aplicável:
 
 ```
+## COM ATUALIZAÇÃO (2)
+
 🔵 **84408773** — Título do chamado
 **Status:** Em Andamento | **Status Operacional:** Aguardando Atendimento | **GSE:** SGS221 | **Especialista:** Nome | **Última atualização:** 25/05/2026 14:20
+**Mudanças:** Status: Novo → Em Andamento
 
 > **Agent | 25/05/2026**
 > Texto do comentário registrado no chamado.
@@ -85,23 +109,34 @@ Emojis de status:
 | ❌ | Rejeitado |
 | ⛔ | Cancelado |
 
-### 5.2 CSV
+### 6.2 Word (.doc)
 
-Gera um arquivo `.csv` com todos os campos em colunas, incluindo descrição e solução em texto plano (sem HTML). Compatível com Excel (encoding UTF-8 com BOM).
-
----
-
-## 6. Outras funcionalidades
-
-- **Painel arrastável** — posição salva entre sessões
-- **Última consulta** — data e hora da última consulta realizada exibida no cabeçalho do painel e persistida entre sessões
-- **Seções colapsáveis** — descrição, solução e comentários ficam recolhidos por padrão para facilitar a visualização de muitos chamados
-- **Tratamento de erros** — chamados não encontrados ou com erro de acesso são sinalizados individualmente sem interromper os demais
+Gera um arquivo `.doc` formatado com título, cabeçalho de campos, comentários e seções de mudança destacadas. Abre diretamente no Microsoft Word.
 
 ---
 
-## 7. Dicas
+## 7. Gerenciamento de listas
+
+- **+ Nova lista** — cria uma lista com nome personalizado
+- **Renomear** — altera o nome da lista selecionada
+- **Excluir** — remove a lista e seu histórico de snapshots
+- **Dropdown** — seleciona a lista ativa; o painel carrega automaticamente seus IDs e campos configurados
+- O snapshot da última consulta é salvo automaticamente e exibido como "Última consulta: DD/MM/AAAA HH:MM"
+
+---
+
+## 8. Outras funcionalidades
+
+- **Tela cheia** — o painel ocupa a tela inteira para melhor visualização de muitos chamados
+- **Seções colapsáveis** — descrição, solução e comentários ficam recolhidos por padrão
+- **Barra de progresso** — até 4 chamados são buscados em paralelo com indicador visual
+- **Tratamento de erros** — chamados não encontrados ou com erro são sinalizados individualmente sem interromper os demais
+- **Compatível com SMAX Toolkit** — pode ser instalado junto sem conflito; o botão aparece fixo no topo da página
+
+---
+
+## 9. Dicas
 
 - Cole qualquer quantidade de IDs — o script processa em lotes de 4 simultâneos
 - O script atualiza automaticamente pelo Tampermonkey quando há nova versão no repositório
-- Pode ser instalado junto com o **SMAX Toolkit** sem conflito — os botões ficam em posições distintas
+- Para monitorar um conjunto fixo de chamados ao longo do tempo, use lista salva e consulte periodicamente — o sistema registra todas as mudanças entre consultas
