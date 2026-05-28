@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.07
+// @version      2.08
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.07';
+  const SMAX_TOOLKIT_VERSION = '2.08';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -11285,6 +11285,7 @@
    * =======================================================*/
   const AuditQueryPanel = (() => {
     const CONCURRENCY = 8;
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
     const ACTIONS = [
       { key: 'ANY',    label: 'Qualquer alteração',         fields: null },
@@ -11321,12 +11322,13 @@
 
     const toDateInput = (d) => d.toISOString().slice(0, 10);
 
+    const PILL_ON  = 'background:#6c8ebf;color:#fff;border:1px solid #6c8ebf;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap;';
+    const PILL_OFF = 'background:transparent;color:#94a3b8;border:1px solid #45475a;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap;';
+
     const buildHtml = () => {
       const [wStart, wEnd] = weekRange();
-      const actionCbs = ACTIONS.map(a =>
-        `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">` +
-        `<input type="checkbox" class="aqp-cb" data-key="${a.key}"${a.key === 'ANY' ? ' checked' : ''}> ${a.label}` +
-        `</label>`
+      const actionPills = ACTIONS.map(a =>
+        `<button class="aqp-pill" data-key="${a.key}" data-on="${a.key === 'ANY' ? '1' : '0'}" style="${a.key === 'ANY' ? PILL_ON : PILL_OFF}">${a.label}</button>`
       ).join('');
 
       return (
@@ -11353,7 +11355,7 @@
           `</div>` +
           `<div>` +
             `<div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:6px;">TIPO DE AÇÃO</div>` +
-            `<div style="display:flex;flex-wrap:wrap;gap:6px 14px;">${actionCbs}</div>` +
+            `<div style="display:flex;flex-wrap:wrap;gap:6px;">${actionPills}</div>` +
           `</div>` +
           `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">` +
             `<div><div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">DE</div>` +
@@ -11382,24 +11384,35 @@
       );
     };
 
-    // Busca todos os IDs de chamados atualizados no período, paginando
-    const fetchIds = async (startTs, endTs) => {
+    // Busca IDs de chamados dia-a-dia para evitar o limite de 10k da API
+    const fetchIds = async (startTs, endTs, onProgress) => {
       const base = ApiClient.restUrl('ems/Request');
-      const ids = [];
-      let skip = 0;
-      const size = 500;
-      for (;;) {
+      const seen = new Set();
+      let dayStart = startTs;
+      let dayIdx = 0;
+      const totalDays = Math.max(1, Math.ceil((endTs - startTs) / ONE_DAY_MS));
+
+      while (dayStart <= endTs) {
         if (abortFlag) break;
-        const url = `${base}?layout=Id&filter=LastUpdateTime%20btw%20(${startTs}%2C${endTs})&order=LastUpdateTime%20desc&size=${size}&skip=${skip}`;
-        const resp = await pageWindow.fetch(url);
-        if (!resp.ok) break;
-        const data = await resp.json();
-        const ents = data.entities || [];
-        ents.forEach(e => ids.push(String(e.properties.Id)));
-        if (ents.length < size) break;
-        skip += size;
+        const dayEnd = Math.min(dayStart + ONE_DAY_MS - 1, endTs);
+        if (onProgress) onProgress(dayIdx, totalDays);
+        let skip = 0;
+        const size = 500;
+        for (;;) {
+          if (abortFlag) break;
+          const url = `${base}?layout=Id&filter=LastUpdateTime%20btw%20(${dayStart}%2C${dayEnd})&order=LastUpdateTime%20desc&size=${size}&skip=${skip}`;
+          const resp = await pageWindow.fetch(url);
+          if (!resp.ok) break;
+          const data = await resp.json();
+          const ents = data.entities || [];
+          ents.forEach(e => seen.add(String(e.properties.Id)));
+          if (ents.length < size) break;
+          skip += size;
+        }
+        dayStart += ONE_DAY_MS;
+        dayIdx++;
       }
-      return ids;
+      return [...seen];
     };
 
     // Busca o histórico de auditoria de um chamado
@@ -11460,34 +11473,58 @@
         ).join('');
     };
 
-    // Autocomplete de pessoa
+    // Busca pessoas pela API como fallback quando não estão no cache local
+    const searchPersonApi = async (q) => {
+      const tid = ApiClient.getTenantId() || '213963628';
+      try {
+        const resp = await pageWindow.fetch(
+          `/rest/${tid}/ems/Person?filter=Name%20like%20'${encodeURIComponent(q)}%25'&layout=Id,Name,Upn&size=8`
+        );
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return (data.entities || []).map(e => ({
+          id: String(e.properties.Id),
+          name: e.properties.Name || '',
+          upn:  e.properties.Upn  || '',
+        }));
+      } catch { return []; }
+    };
+
+    // Autocomplete de pessoa (cache local → fallback API)
     const wirePersonSearch = () => {
       const input = panelEl.querySelector('#aqp-person');
       const dd = panelEl.querySelector('#aqp-dd');
       const ok = panelEl.querySelector('#aqp-ok');
       let t;
 
+      const showDropdown = (results) => {
+        if (!results.length) { dd.style.display = 'none'; return; }
+        dd.innerHTML = results.map(p =>
+          `<div class="aqp-po" data-id="${p.id}" data-name="${p.name}" data-upn="${p.upn}"` +
+          ` style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #313244;">` +
+          `${p.name}${p.upn ? ` <span style="color:#94a3b8;">(${p.upn})</span>` : ''}</div>`
+        ).join('');
+        dd.style.display = 'block';
+      };
+
       input.addEventListener('input', () => {
         ok.style.display = 'none';
-        delete ok.dataset.id;
+        ok.dataset.id = '';
         clearTimeout(t);
         const q = input.value.trim();
         if (q.length < 2) { dd.style.display = 'none'; return; }
         t = setTimeout(async () => {
+          // Tenta cache local primeiro
           await DataRepository.ensurePeopleLoaded();
           const target = Utils.normalizeText(q);
-          const results = [];
+          const fromCache = [];
           DataRepository.peopleCache.forEach((p, id) => {
-            if (results.length >= 8) return;
-            if (Utils.normalizeText(p.name || '').includes(target)) results.push({ id, name: p.name, upn: p.upn || '' });
+            if (fromCache.length >= 8) return;
+            if (Utils.normalizeText(p.name || '').includes(target)) fromCache.push({ id, name: p.name, upn: p.upn || '' });
           });
-          if (!results.length) { dd.style.display = 'none'; return; }
-          dd.innerHTML = results.map(p =>
-            `<div class="aqp-po" data-id="${p.id}" data-name="${p.name}" data-upn="${p.upn}"` +
-            ` style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #313244;">` +
-            `${p.name}${p.upn ? ` <span style="color:#94a3b8;">(${p.upn})</span>` : ''}</div>`
-          ).join('');
-          dd.style.display = 'block';
+          if (fromCache.length) { showDropdown(fromCache); return; }
+          // Fallback: busca direta na API
+          showDropdown(await searchPersonApi(q));
         }, 250);
       });
 
@@ -11497,8 +11534,8 @@
         input.value = opt.dataset.name;
         dd.style.display = 'none';
         ok.textContent = `✓ ${opt.dataset.name}${opt.dataset.upn ? ' · ' + opt.dataset.upn : ''} (ID: ${opt.dataset.id})`;
-        ok.style.display = 'block';
         ok.dataset.id = opt.dataset.id;
+        ok.style.display = 'block';
       });
 
       document.addEventListener('click', e => {
@@ -11506,17 +11543,20 @@
       });
     };
 
-    // Checkboxes de tipo de ação: ANY é exclusivo
-    const wireActionCbs = () => {
-      const cbs = [...panelEl.querySelectorAll('.aqp-cb')];
-      const anyCb = cbs.find(c => c.dataset.key === 'ANY');
-      cbs.forEach(cb => cb.addEventListener('change', () => {
-        if (cb === anyCb && cb.checked) {
-          cbs.forEach(c => { if (c !== anyCb) c.checked = false; });
-        } else if (cb !== anyCb && cb.checked) {
-          anyCb.checked = false;
-        } else if (!cbs.some(c => c.checked)) {
-          anyCb.checked = true;
+    // Pills de tipo de ação: ANY é exclusivo com os demais
+    const wireActionPills = () => {
+      const pills = [...panelEl.querySelectorAll('.aqp-pill')];
+      const anyPill = pills.find(p => p.dataset.key === 'ANY');
+      const applyStyle = (p) => { p.style.cssText = p.dataset.on === '1' ? PILL_ON : PILL_OFF; };
+      pills.forEach(pill => pill.addEventListener('click', () => {
+        if (pill === anyPill) {
+          pills.forEach(p => { p.dataset.on = p === anyPill ? '1' : '0'; applyStyle(p); });
+        } else {
+          pill.dataset.on = pill.dataset.on === '1' ? '0' : '1';
+          anyPill.dataset.on = '0';
+          applyStyle(pill);
+          applyStyle(anyPill);
+          if (!pills.some(p => p.dataset.on === '1')) { anyPill.dataset.on = '1'; applyStyle(anyPill); }
         }
       }));
     };
@@ -11568,7 +11608,7 @@
       const startTs = new Date(fromVal + 'T00:00:00').getTime();
       const endTs   = new Date(toVal   + 'T23:59:59').getTime();
       const keys = new Set();
-      panelEl.querySelectorAll('.aqp-cb:checked').forEach(cb => keys.add(cb.dataset.key));
+      panelEl.querySelectorAll('.aqp-pill[data-on="1"]').forEach(p => keys.add(p.dataset.key));
 
       runBtn.disabled = true;
       runBtn.textContent = 'Buscando...';
@@ -11578,7 +11618,11 @@
       resultsEl.innerHTML = '';
 
       try {
-        const ids = await fetchIds(startTs, endTs);
+        const totalDays = Math.max(1, Math.ceil((endTs - startTs) / ONE_DAY_MS));
+        const ids = await fetchIds(startTs, endTs, (dayIdx, total) => {
+          progTxt.textContent = `Coletando chamados: dia ${dayIdx + 1} / ${total}...`;
+          progBar.style.width = Math.round(dayIdx / total * 30) + '%'; // primeiros 30% = coleta
+        });
         if (abortFlag) { finishSearch(runBtn); return; }
         if (!ids.length) {
           resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;">Nenhum chamado no período.</div>';
@@ -11603,8 +11647,8 @@
             }
           }));
           doneCount = Math.min(i + CONCURRENCY, ids.length);
-          progBar.style.width = Math.round(doneCount / ids.length * 100) + '%';
-          progTxt.textContent = `${doneCount} / ${ids.length} verificados`;
+          progBar.style.width = Math.round(30 + doneCount / ids.length * 70) + '%';
+          progTxt.textContent = `Auditando: ${doneCount} / ${ids.length} chamados`;
         }
 
         if (!matches.length) resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;">Nenhum chamado encontrado com essa ação.</div>';
@@ -11629,7 +11673,7 @@
         panelEl = wrap.firstElementChild;
         document.body.appendChild(panelEl);
         wirePersonSearch();
-        wireActionCbs();
+        wireActionPills();
         makeDraggable();
         panelEl.querySelector('#aqp-x').addEventListener('click', close);
         panelEl.querySelector('#aqp-run').addEventListener('click', runSearch);
