@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.06
+// @version      2.07
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.06';
+  const SMAX_TOOLKIT_VERSION = '2.07';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -11281,6 +11281,384 @@
   })();
 
   /* =========================================================
+   * AuditQueryPanel — consulta de chamados por ação/especialista
+   * =======================================================*/
+  const AuditQueryPanel = (() => {
+    const CONCURRENCY = 8;
+
+    const ACTIONS = [
+      { key: 'ANY',    label: 'Qualquer alteração',         fields: null },
+      { key: 'COMMENT',label: 'Incluiu comentário',         fields: ['Comments'] },
+      { key: 'EXPERT', label: 'Alterou especialista',       fields: ['ExpertAssignee'] },
+      { key: 'GROUP',  label: 'Alterou grupo (GSE)',        fields: ['AssignedToGroup'] },
+      { key: 'STSCCD', label: 'Alterou status operacional', fields: ['StatusSCCDSMAX_c'] },
+      { key: 'STATUS', label: 'Alterou status',             fields: ['Status'] },
+      { key: 'PHASE',  label: 'Alterou fase',               fields: ['PhaseId'] },
+      { key: 'GLOBAL', label: 'Alterou GSE Global',         fields: ['GlobalId_c'] },
+    ];
+
+    let panelEl  = null;
+    let isOpen   = false;
+    let abortFlag = false;
+    let running  = false;
+
+    const fmtTs = (ts) => {
+      if (!ts) return '';
+      return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    };
+
+    const weekRange = () => {
+      const now = new Date();
+      const dow = now.getDay();
+      const mon = new Date(now);
+      mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+      mon.setHours(0, 0, 0, 0);
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      sun.setHours(23, 59, 59, 999);
+      return [mon, sun];
+    };
+
+    const toDateInput = (d) => d.toISOString().slice(0, 10);
+
+    const buildHtml = () => {
+      const [wStart, wEnd] = weekRange();
+      const actionCbs = ACTIONS.map(a =>
+        `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">` +
+        `<input type="checkbox" class="aqp-cb" data-key="${a.key}"${a.key === 'ANY' ? ' checked' : ''}> ${a.label}` +
+        `</label>`
+      ).join('');
+
+      return (
+        `<div id="smax-aqp" style="position:fixed;top:70px;right:16px;z-index:99999;width:460px;max-height:82vh;` +
+        `display:flex;flex-direction:column;background:#1e1e2e;color:#cdd6f4;` +
+        `border:1px solid #45475a;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.55);font:13px/1.4 sans-serif;">` +
+        `<div id="aqp-hdr" style="display:flex;justify-content:space-between;align-items:center;` +
+          `padding:10px 14px;border-bottom:1px solid #45475a;background:#181825;` +
+          `border-radius:10px 10px 0 0;cursor:move;user-select:none;">` +
+          `<b>🔍 Consulta por Ação</b>` +
+          `<button id="aqp-x" style="background:none;border:none;color:#cdd6f4;font-size:18px;cursor:pointer;padding:0 2px;line-height:1;">×</button>` +
+        `</div>` +
+        `<div style="padding:12px 14px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;">` +
+          `<div>` +
+            `<div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">ESPECIALISTA</div>` +
+            `<div style="position:relative;">` +
+              `<input id="aqp-person" type="text" placeholder="Digite o nome..." autocomplete="off"` +
+              ` style="width:100%;box-sizing:border-box;padding:7px 10px;background:#313244;` +
+              `color:inherit;border:1px solid #45475a;border-radius:6px;font-size:13px;outline:none;">` +
+              `<div id="aqp-dd" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:10;` +
+              `background:#181825;border:1px solid #45475a;border-radius:6px;max-height:130px;overflow-y:auto;"></div>` +
+            `</div>` +
+            `<div id="aqp-ok" style="display:none;margin-top:4px;font-size:11px;color:#a6e3a1;"></div>` +
+          `</div>` +
+          `<div>` +
+            `<div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:6px;">TIPO DE AÇÃO</div>` +
+            `<div style="display:flex;flex-wrap:wrap;gap:6px 14px;">${actionCbs}</div>` +
+          `</div>` +
+          `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">` +
+            `<div><div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">DE</div>` +
+            `<input id="aqp-from" type="date" value="${toDateInput(wStart)}"` +
+            ` style="width:100%;box-sizing:border-box;padding:7px 8px;background:#313244;` +
+            `color:inherit;border:1px solid #45475a;border-radius:6px;font-size:13px;outline:none;"></div>` +
+            `<div><div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">ATÉ</div>` +
+            `<input id="aqp-to" type="date" value="${toDateInput(wEnd)}"` +
+            ` style="width:100%;box-sizing:border-box;padding:7px 8px;background:#313244;` +
+            `color:inherit;border:1px solid #45475a;border-radius:6px;font-size:13px;outline:none;"></div>` +
+          `</div>` +
+          `<button id="aqp-run" style="padding:9px;background:#6c8ebf;color:#fff;border:none;border-radius:7px;` +
+          `cursor:pointer;font-size:13px;font-weight:600;">Buscar</button>` +
+          `<div id="aqp-prog" style="display:none;">` +
+            `<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:4px;">` +
+              `<span id="aqp-prog-txt">Aguardando...</span>` +
+              `<button id="aqp-cancel" style="background:none;border:none;color:#f38ba8;cursor:pointer;font-size:11px;padding:0;">Cancelar</button>` +
+            `</div>` +
+            `<div style="background:#313244;border-radius:3px;height:5px;overflow:hidden;">` +
+              `<div id="aqp-prog-bar" style="background:#6c8ebf;height:100%;width:0%;transition:width .15s;"></div>` +
+            `</div>` +
+          `</div>` +
+          `<div id="aqp-results"></div>` +
+        `</div>` +
+        `</div>`
+      );
+    };
+
+    // Busca todos os IDs de chamados atualizados no período, paginando
+    const fetchIds = async (startTs, endTs) => {
+      const base = ApiClient.restUrl('ems/Request');
+      const ids = [];
+      let skip = 0;
+      const size = 500;
+      for (;;) {
+        if (abortFlag) break;
+        const url = `${base}?layout=Id&filter=LastUpdateTime%20btw%20(${startTs}%2C${endTs})&order=LastUpdateTime%20desc&size=${size}&skip=${skip}`;
+        const resp = await pageWindow.fetch(url);
+        if (!resp.ok) break;
+        const data = await resp.json();
+        const ents = data.entities || [];
+        ents.forEach(e => ids.push(String(e.properties.Id)));
+        if (ents.length < size) break;
+        skip += size;
+      }
+      return ids;
+    };
+
+    // Busca o histórico de auditoria de um chamado
+    const fetchAudit = async (id) => {
+      const tid = ApiClient.getTenantId() || '213963628';
+      const url = `/rest/${tid}/audit/ems-history-service/Request?changeType=ALL&entityId=${id}&order=time%20desc&size=250&skip=0`;
+      try {
+        const resp = await pageWindow.fetch(url);
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return data.results || [];
+      } catch { return []; }
+    };
+
+    const matchActions = (entry, keys) => {
+      if (keys.has('ANY')) return true;
+      const props = entry.changeProperties || {};
+      return ACTIONS.some(a => a.fields && keys.has(a.key) && a.fields.some(f => f in props));
+    };
+
+    const resolveStatus = (raw) => STATUS_SCCD_LABELS[raw] || humanReadableStatus(raw) || raw || '—';
+
+    // Descreve as alterações de uma entrada de auditoria
+    const describe = (entry) => {
+      const props = entry.changeProperties || {};
+      const grpMap = new Map(DataRepository.getSupportGroupsSnapshot().map(g => [String(g.id), g.name || g.id]));
+      const resolvePerson = (id) => (id ? DataRepository.resolveName(id) || String(id) : '—');
+      const resolveGrp = (id) => (id ? grpMap.get(String(id)) || String(id) : '—');
+      const lines = [];
+
+      if ('Comments' in props)        lines.push('Incluiu comentário');
+      if ('ExpertAssignee' in props)  lines.push(`Especialista: ${resolvePerson(props.ExpertAssignee.oldValue)} → ${resolvePerson(props.ExpertAssignee.newValue)}`);
+      if ('AssignedToGroup' in props) lines.push(`Grupo: ${resolveGrp(props.AssignedToGroup.oldValue)} → ${resolveGrp(props.AssignedToGroup.newValue)}`);
+      if ('StatusSCCDSMAX_c' in props) lines.push(`Status op.: ${resolveStatus(props.StatusSCCDSMAX_c.oldValue)} → ${resolveStatus(props.StatusSCCDSMAX_c.newValue)}`);
+      if ('Status' in props)          lines.push(`Status: ${humanReadableStatus(props.Status.oldValue) || props.Status.oldValue || '—'} → ${humanReadableStatus(props.Status.newValue) || props.Status.newValue || '—'}`);
+      if ('PhaseId' in props)         lines.push(`Fase: ${props.PhaseId.oldValue || '—'} → ${props.PhaseId.newValue || '—'}`);
+      if ('GlobalId_c' in props)      lines.push('Alterou GSE Global');
+
+      if (!lines.length) {
+        const changed = Object.keys(props).filter(k => k !== 'LastUpdateTime');
+        if (changed.length) lines.push(`Alterou: ${changed.join(', ')}`);
+      }
+      return lines;
+    };
+
+    const renderResults = (el, matches) => {
+      el.innerHTML =
+        `<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">` +
+        `${matches.length} chamado${matches.length !== 1 ? 's' : ''} encontrado${matches.length !== 1 ? 's' : ''}</div>` +
+        matches.map(m =>
+          `<div style="background:#181825;border:1px solid #45475a;border-radius:7px;padding:9px 11px;margin-bottom:7px;">` +
+          `<a href="/saw/Request/${m.id}" target="_blank" style="color:#89b4fa;font-weight:700;text-decoration:none;">#${m.id}</a>` +
+          m.actions.map(a =>
+            `<div style="margin-top:5px;font-size:11px;color:#94a3b8;">${fmtTs(a.time)}</div>` +
+            a.lines.map(l => `<div style="font-size:12px;color:#cdd6f4;padding-left:8px;">· ${l}</div>`).join('')
+          ).join('') +
+          `</div>`
+        ).join('');
+    };
+
+    // Autocomplete de pessoa
+    const wirePersonSearch = () => {
+      const input = panelEl.querySelector('#aqp-person');
+      const dd = panelEl.querySelector('#aqp-dd');
+      const ok = panelEl.querySelector('#aqp-ok');
+      let t;
+
+      input.addEventListener('input', () => {
+        ok.style.display = 'none';
+        delete ok.dataset.id;
+        clearTimeout(t);
+        const q = input.value.trim();
+        if (q.length < 2) { dd.style.display = 'none'; return; }
+        t = setTimeout(async () => {
+          await DataRepository.ensurePeopleLoaded();
+          const target = Utils.normalizeText(q);
+          const results = [];
+          DataRepository.peopleCache.forEach((p, id) => {
+            if (results.length >= 8) return;
+            if (Utils.normalizeText(p.name || '').includes(target)) results.push({ id, name: p.name, upn: p.upn || '' });
+          });
+          if (!results.length) { dd.style.display = 'none'; return; }
+          dd.innerHTML = results.map(p =>
+            `<div class="aqp-po" data-id="${p.id}" data-name="${p.name}" data-upn="${p.upn}"` +
+            ` style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #313244;">` +
+            `${p.name}${p.upn ? ` <span style="color:#94a3b8;">(${p.upn})</span>` : ''}</div>`
+          ).join('');
+          dd.style.display = 'block';
+        }, 250);
+      });
+
+      dd.addEventListener('click', e => {
+        const opt = e.target.closest('.aqp-po');
+        if (!opt) return;
+        input.value = opt.dataset.name;
+        dd.style.display = 'none';
+        ok.textContent = `✓ ${opt.dataset.name}${opt.dataset.upn ? ' · ' + opt.dataset.upn : ''} (ID: ${opt.dataset.id})`;
+        ok.style.display = 'block';
+        ok.dataset.id = opt.dataset.id;
+      });
+
+      document.addEventListener('click', e => {
+        if (panelEl && !panelEl.contains(e.target)) dd.style.display = 'none';
+      });
+    };
+
+    // Checkboxes de tipo de ação: ANY é exclusivo
+    const wireActionCbs = () => {
+      const cbs = [...panelEl.querySelectorAll('.aqp-cb')];
+      const anyCb = cbs.find(c => c.dataset.key === 'ANY');
+      cbs.forEach(cb => cb.addEventListener('change', () => {
+        if (cb === anyCb && cb.checked) {
+          cbs.forEach(c => { if (c !== anyCb) c.checked = false; });
+        } else if (cb !== anyCb && cb.checked) {
+          anyCb.checked = false;
+        } else if (!cbs.some(c => c.checked)) {
+          anyCb.checked = true;
+        }
+      }));
+    };
+
+    const makeDraggable = () => {
+      const hdr = panelEl.querySelector('#aqp-hdr');
+      hdr.addEventListener('mousedown', (e) => {
+        const r = panelEl.getBoundingClientRect();
+        const sx = e.clientX, sy = e.clientY, sl = r.left, st = r.top;
+        const mv = (ev) => {
+          panelEl.style.left = (sl + ev.clientX - sx) + 'px';
+          panelEl.style.top  = (st + ev.clientY - sy) + 'px';
+          panelEl.style.right = 'auto';
+        };
+        const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
+      });
+    };
+
+    // Executa a busca principal
+    const runSearch = async () => {
+      if (running) return;
+      running = true;
+      abortFlag = false;
+
+      const okEl = panelEl.querySelector('#aqp-ok');
+      const personId = okEl.dataset.id || '';
+      const resultsEl = panelEl.querySelector('#aqp-results');
+      const runBtn = panelEl.querySelector('#aqp-run');
+      const prog = panelEl.querySelector('#aqp-prog');
+      const progBar = panelEl.querySelector('#aqp-prog-bar');
+      const progTxt = panelEl.querySelector('#aqp-prog-txt');
+
+      if (!personId) {
+        resultsEl.innerHTML = '<div style="color:#f38ba8;font-size:12px;">Selecione um especialista.</div>';
+        running = false;
+        return;
+      }
+
+      const fromVal = panelEl.querySelector('#aqp-from').value;
+      const toVal   = panelEl.querySelector('#aqp-to').value;
+      if (!fromVal || !toVal) {
+        resultsEl.innerHTML = '<div style="color:#f38ba8;font-size:12px;">Defina o período.</div>';
+        running = false;
+        return;
+      }
+
+      const startTs = new Date(fromVal + 'T00:00:00').getTime();
+      const endTs   = new Date(toVal   + 'T23:59:59').getTime();
+      const keys = new Set();
+      panelEl.querySelectorAll('.aqp-cb:checked').forEach(cb => keys.add(cb.dataset.key));
+
+      runBtn.disabled = true;
+      runBtn.textContent = 'Buscando...';
+      prog.style.display = 'block';
+      progTxt.textContent = 'Obtendo lista de chamados...';
+      progBar.style.width = '0%';
+      resultsEl.innerHTML = '';
+
+      try {
+        const ids = await fetchIds(startTs, endTs);
+        if (abortFlag) { finishSearch(runBtn); return; }
+        if (!ids.length) {
+          resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;">Nenhum chamado no período.</div>';
+          finishSearch(runBtn);
+          return;
+        }
+
+        const matches = [];
+        let doneCount = 0;
+
+        for (let i = 0; i < ids.length; i += CONCURRENCY) {
+          if (abortFlag) break;
+          const batch = ids.slice(i, i + CONCURRENCY);
+          await Promise.all(batch.map(async (id) => {
+            if (abortFlag) return;
+            const entries = await fetchAudit(id);
+            const userEntries = entries.filter(e => String(e.userId) === String(personId));
+            const matched = userEntries.filter(e => matchActions(e, keys));
+            if (matched.length) {
+              matches.push({ id, actions: matched.map(e => ({ time: e.time, lines: describe(e) })) });
+              renderResults(resultsEl, matches);
+            }
+          }));
+          doneCount = Math.min(i + CONCURRENCY, ids.length);
+          progBar.style.width = Math.round(doneCount / ids.length * 100) + '%';
+          progTxt.textContent = `${doneCount} / ${ids.length} verificados`;
+        }
+
+        if (!matches.length) resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;">Nenhum chamado encontrado com essa ação.</div>';
+        progTxt.textContent = `Concluído — ${doneCount}/${ids.length} verificados, ${matches.length} encontrado${matches.length !== 1 ? 's' : ''}.`;
+      } catch (err) {
+        resultsEl.innerHTML = `<div style="color:#f38ba8;font-size:12px;">Erro: ${err.message}</div>`;
+      }
+
+      finishSearch(runBtn);
+    };
+
+    const finishSearch = (btn) => {
+      running = false;
+      btn.disabled = false;
+      btn.textContent = 'Buscar';
+    };
+
+    const open = () => {
+      if (!panelEl) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = buildHtml();
+        panelEl = wrap.firstElementChild;
+        document.body.appendChild(panelEl);
+        wirePersonSearch();
+        wireActionCbs();
+        makeDraggable();
+        panelEl.querySelector('#aqp-x').addEventListener('click', close);
+        panelEl.querySelector('#aqp-run').addEventListener('click', runSearch);
+        panelEl.querySelector('#aqp-cancel').addEventListener('click', () => { abortFlag = true; });
+      } else {
+        panelEl.style.display = 'flex';
+      }
+      isOpen = true;
+    };
+
+    const close = () => {
+      if (panelEl) panelEl.style.display = 'none';
+      isOpen = false;
+    };
+
+    const init = () => {
+      const btn = document.createElement('button');
+      btn.id = 'smax-aqp-btn';
+      btn.title = 'Consulta por Ação';
+      btn.textContent = '🔍';
+      btn.style.cssText = 'position:fixed;bottom:110px;right:16px;z-index:99998;width:36px;height:36px;border-radius:50%;border:none;background:#6c8ebf;color:#fff;cursor:pointer;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;';
+      btn.addEventListener('click', () => (isOpen ? close() : open()));
+      document.body.appendChild(btn);
+    };
+
+    return { init, open, close };
+  })();
+
+  /* =========================================================
    * Boot
    * =======================================================*/
   const boot = () => {
@@ -11303,6 +11681,7 @@
     BlackHeader.init();
     TicketInfoBar.init();
     SharedConfig.init();
+    AuditQueryPanel.init();
     DataRepository.refreshQueueFromApi().catch(() => { });
     DataRepository.ensureSupportGroups().catch(() => { });
   };
