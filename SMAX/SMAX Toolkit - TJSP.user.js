@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.09
+// @version      2.10
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.09';
+  const SMAX_TOOLKIT_VERSION = '2.10';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -11295,7 +11295,8 @@
       { key: 'STSCCD', label: 'Alterou status operacional', fields: ['StatusSCCDSMAX_c'] },
       { key: 'STATUS', label: 'Alterou status',             fields: ['Status'] },
       { key: 'PHASE',  label: 'Alterou fase',               fields: ['PhaseId'] },
-      { key: 'GLOBAL', label: 'Alterou GSE Global',         fields: ['GlobalId_c'] },
+      { key: 'GLOBAL',     label: 'Alterou GSE Global',  fields: ['GlobalId_c'] },
+      { key: 'GLOBALLINK', label: 'Vinculou global',      fields: ['GlobalId_c'], linkOnly: true },
     ];
 
     let backdropEl   = null;
@@ -11448,10 +11449,21 @@
       } catch { return []; }
     };
 
+    const isGlobalLink = (props) => {
+      if (!('GlobalId_c' in props)) return false;
+      const old = props.GlobalId_c.oldValue;
+      return !old || old === '' || old === 'null' || old === null;
+    };
+
     const matchActions = (entry, keys) => {
       if (keys.has('ANY')) return true;
       const props = entry.changeProperties || {};
-      return ACTIONS.some(a => a.fields && keys.has(a.key) && a.fields.some(f => f in props));
+      return ACTIONS.some(a => {
+        if (!a.fields || !keys.has(a.key)) return false;
+        if (!a.fields.some(f => f in props)) return false;
+        if (a.linkOnly) return isGlobalLink(props);
+        return true;
+      });
     };
 
     const resolveStatus = (raw) => STATUS_SCCD_LABELS[raw] || humanReadableStatus(raw) || raw || '—';
@@ -11486,10 +11498,15 @@
         rows.push({ field: 'PhaseId', label: 'Fase',
           oldVal: props.PhaseId.oldValue || '—',
           newVal: props.PhaseId.newValue || '—' });
-      if ('GlobalId_c' in props)
-        rows.push({ field: 'GlobalId_c', label: 'GSE Global',
-          oldVal: props.GlobalId_c.oldValue ? String(props.GlobalId_c.oldValue) : '—',
-          newVal: props.GlobalId_c.newValue ? String(props.GlobalId_c.newValue) : '—' });
+      if ('GlobalId_c' in props) {
+        const gOld = props.GlobalId_c.oldValue;
+        const gNew = props.GlobalId_c.newValue;
+        const isLink = !gOld || gOld === '' || gOld === 'null';
+        rows.push({ field: 'GlobalId_c',
+          label: isLink ? 'Vinculou Global' : 'GSE Global',
+          oldVal: isLink ? null : (gOld ? String(gOld) : '—'),
+          newVal: gNew ? String(gNew) : '—' });
+      }
 
       if (!rows.length) {
         const changed = Object.keys(props).filter(k => k !== 'LastUpdateTime');
@@ -11542,21 +11559,31 @@
     };
 
     const exportCsv = () => {
-      const rows = [['ID Chamado', 'Data/Hora', 'Campo', 'Valor Anterior', 'Valor Novo', 'Especialista']];
-      currentMatches.forEach(m => {
+      // Cabeçalho
+      const rows = [['Chamado', 'Especialista', 'Data/Hora', 'Ação', 'Valor Anterior', 'Valor Novo']];
+
+      currentMatches.forEach((m, mi) => {
+        // Linha em branco entre chamados (exceto antes do primeiro)
+        if (mi > 0) rows.push(['', '', '', '', '', '']);
+
+        // Linha de cabeçalho do chamado
+        rows.push([`#${m.id}`, currentPersonName, '', '', '', '']);
+
+        // Linhas de detalhe: ID e especialista só na primeira linha de detalhe
         m.actions.forEach(a => {
-          a.rows.forEach(r => {
+          a.rows.forEach((r, ri) => {
             rows.push([
-              m.id,
-              fmtTs(a.time),
+              '',                               // ID já apareceu na linha de cabeçalho
+              '',
+              ri === 0 ? fmtTs(a.time) : '',   // data só na primeira linha do evento
               r.label,
               r.oldVal !== null ? r.oldVal : '',
               r.newVal,
-              currentPersonName,
             ]);
           });
         });
       });
+
       const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
       const csv = '\uFEFF' + rows.map(r => r.map(esc).join(';')).join('\r\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
