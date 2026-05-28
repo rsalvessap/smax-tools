@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.08
+// @version      2.09
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.08';
+  const SMAX_TOOLKIT_VERSION = '2.09';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -11298,14 +11298,16 @@
       { key: 'GLOBAL', label: 'Alterou GSE Global',         fields: ['GlobalId_c'] },
     ];
 
-    let panelEl  = null;
-    let isOpen   = false;
-    let abortFlag = false;
-    let running  = false;
+    let backdropEl   = null;
+    let isOpen       = false;
+    let abortFlag    = false;
+    let running      = false;
+    let currentMatches = [];
+    let currentPersonName = '';
 
     const fmtTs = (ts) => {
       if (!ts) return '';
-      return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
     };
 
     const weekRange = () => {
@@ -11322,8 +11324,8 @@
 
     const toDateInput = (d) => d.toISOString().slice(0, 10);
 
-    const PILL_ON  = 'background:#6c8ebf;color:#fff;border:1px solid #6c8ebf;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap;';
-    const PILL_OFF = 'background:transparent;color:#94a3b8;border:1px solid #45475a;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap;';
+    const PILL_ON  = 'background:#3b82f6;color:#fff;border:1px solid #3b82f6;border-radius:5px;padding:5px 11px;cursor:pointer;font-size:11px;white-space:nowrap;font-weight:500;';
+    const PILL_OFF = 'background:transparent;color:#64748b;border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:5px 11px;cursor:pointer;font-size:11px;white-space:nowrap;';
 
     const buildHtml = () => {
       const [wStart, wEnd] = weekRange();
@@ -11331,57 +11333,76 @@
         `<button class="aqp-pill" data-key="${a.key}" data-on="${a.key === 'ANY' ? '1' : '0'}" style="${a.key === 'ANY' ? PILL_ON : PILL_OFF}">${a.label}</button>`
       ).join('');
 
-      return (
-        `<div id="smax-aqp" style="position:fixed;top:70px;right:16px;z-index:99999;width:460px;max-height:82vh;` +
-        `display:flex;flex-direction:column;background:#1e1e2e;color:#cdd6f4;` +
-        `border:1px solid #45475a;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.55);font:13px/1.4 sans-serif;">` +
-        `<div id="aqp-hdr" style="display:flex;justify-content:space-between;align-items:center;` +
-          `padding:10px 14px;border-bottom:1px solid #45475a;background:#181825;` +
-          `border-radius:10px 10px 0 0;cursor:move;user-select:none;">` +
-          `<b>🔍 Consulta por Ação</b>` +
-          `<button id="aqp-x" style="background:none;border:none;color:#cdd6f4;font-size:18px;cursor:pointer;padding:0 2px;line-height:1;">×</button>` +
-        `</div>` +
-        `<div style="padding:12px 14px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;">` +
-          `<div>` +
-            `<div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">ESPECIALISTA</div>` +
-            `<div style="position:relative;">` +
-              `<input id="aqp-person" type="text" placeholder="Digite o nome..." autocomplete="off"` +
-              ` style="width:100%;box-sizing:border-box;padding:7px 10px;background:#313244;` +
-              `color:inherit;border:1px solid #45475a;border-radius:6px;font-size:13px;outline:none;">` +
-              `<div id="aqp-dd" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:10;` +
-              `background:#181825;border:1px solid #45475a;border-radius:6px;max-height:130px;overflow-y:auto;"></div>` +
-            `</div>` +
-            `<div id="aqp-ok" style="display:none;margin-top:4px;font-size:11px;color:#a6e3a1;"></div>` +
-          `</div>` +
-          `<div>` +
-            `<div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:6px;">TIPO DE AÇÃO</div>` +
-            `<div style="display:flex;flex-wrap:wrap;gap:6px;">${actionPills}</div>` +
-          `</div>` +
-          `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">` +
-            `<div><div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">DE</div>` +
-            `<input id="aqp-from" type="date" value="${toDateInput(wStart)}"` +
-            ` style="width:100%;box-sizing:border-box;padding:7px 8px;background:#313244;` +
-            `color:inherit;border:1px solid #45475a;border-radius:6px;font-size:13px;outline:none;"></div>` +
-            `<div><div style="font-size:10px;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">ATÉ</div>` +
-            `<input id="aqp-to" type="date" value="${toDateInput(wEnd)}"` +
-            ` style="width:100%;box-sizing:border-box;padding:7px 8px;background:#313244;` +
-            `color:inherit;border:1px solid #45475a;border-radius:6px;font-size:13px;outline:none;"></div>` +
-          `</div>` +
-          `<button id="aqp-run" style="padding:9px;background:#6c8ebf;color:#fff;border:none;border-radius:7px;` +
-          `cursor:pointer;font-size:13px;font-weight:600;">Buscar</button>` +
-          `<div id="aqp-prog" style="display:none;">` +
-            `<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:4px;">` +
-              `<span id="aqp-prog-txt">Aguardando...</span>` +
-              `<button id="aqp-cancel" style="background:none;border:none;color:#f38ba8;cursor:pointer;font-size:11px;padding:0;">Cancelar</button>` +
-            `</div>` +
-            `<div style="background:#313244;border-radius:3px;height:5px;overflow:hidden;">` +
-              `<div id="aqp-prog-bar" style="background:#6c8ebf;height:100%;width:0%;transition:width .15s;"></div>` +
-            `</div>` +
-          `</div>` +
-          `<div id="aqp-results"></div>` +
-        `</div>` +
-        `</div>`
-      );
+      return `
+<div id="aqp-backdrop" style="position:fixed;inset:0;z-index:999998;display:none;align-items:center;justify-content:center;padding:8px;background:linear-gradient(180deg,rgba(0,0,0,.72) 0%,rgba(0,0,0,.6) 100%);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
+  <div id="aqp-card" style="position:relative;background:#0f172a;color:#e2e8f0;border-radius:12px;width:100%;max-width:1400px;height:calc(100vh - 16px);display:flex;overflow:hidden;font:13px/1.5 sans-serif;box-shadow:0 24px 64px rgba(0,0,0,.7);">
+
+    <!-- COLUNA ESQUERDA — filtros -->
+    <div id="aqp-left" style="width:280px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.07);background:#0d1424;">
+      <div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:14px;font-weight:700;letter-spacing:.2px;">🔍 Consulta por Ação</span>
+        <button id="aqp-x" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0 2px;" title="Fechar">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px;">
+
+        <div>
+          <div style="font-size:10px;color:#64748b;letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;">Especialista</div>
+          <div style="position:relative;">
+            <input id="aqp-person" type="text" placeholder="Digite o nome..." autocomplete="off"
+              style="width:100%;box-sizing:border-box;padding:8px 10px;background:#1e293b;color:inherit;border:1px solid rgba(255,255,255,.1);border-radius:7px;font-size:13px;outline:none;">
+            <div id="aqp-dd" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:10;background:#1e293b;border:1px solid rgba(255,255,255,.12);border-radius:7px;max-height:150px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);"></div>
+          </div>
+          <div id="aqp-ok" style="display:none;margin-top:5px;font-size:11px;color:#4ade80;"></div>
+        </div>
+
+        <div>
+          <div style="font-size:10px;color:#64748b;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px;">Tipo de Ação</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">${actionPills}</div>
+        </div>
+
+        <div>
+          <div style="font-size:10px;color:#64748b;letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;">Período</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div>
+              <div style="font-size:10px;color:#475569;margin-bottom:3px;">De</div>
+              <input id="aqp-from" type="date" value="${toDateInput(wStart)}"
+                style="width:100%;box-sizing:border-box;padding:7px 8px;background:#1e293b;color:inherit;border:1px solid rgba(255,255,255,.1);border-radius:7px;font-size:13px;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:10px;color:#475569;margin-bottom:3px;">Até</div>
+              <input id="aqp-to" type="date" value="${toDateInput(wEnd)}"
+                style="width:100%;box-sizing:border-box;padding:7px 8px;background:#1e293b;color:inherit;border:1px solid rgba(255,255,255,.1);border-radius:7px;font-size:13px;outline:none;">
+            </div>
+          </div>
+        </div>
+
+        <button id="aqp-run" style="padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-top:4px;">Buscar</button>
+
+        <div id="aqp-prog" style="display:none;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:5px;">
+            <span id="aqp-prog-txt">Aguardando...</span>
+            <button id="aqp-cancel" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:11px;padding:0;">Cancelar</button>
+          </div>
+          <div style="background:#1e293b;border-radius:4px;height:5px;overflow:hidden;">
+            <div id="aqp-prog-bar" style="background:#3b82f6;height:100%;width:0%;transition:width .2s;"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- COLUNA DIREITA — resultados -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+      <div id="aqp-res-hdr" style="padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:12px;flex-shrink:0;">
+        <span id="aqp-res-count" style="font-size:12px;color:#64748b;">—</span>
+        <div style="flex:1;"></div>
+        <button id="aqp-export" style="display:none;padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#94a3b8;cursor:pointer;font-size:12px;" title="Exportar para Excel (CSV)">⬇ Exportar CSV</button>
+      </div>
+      <div id="aqp-results" style="flex:1;overflow-y:auto;padding:14px 18px;"></div>
+    </div>
+
+  </div>
+</div>`;
     };
 
     // Busca IDs de chamados dia-a-dia para evitar o limite de 10k da API
@@ -11435,42 +11456,118 @@
 
     const resolveStatus = (raw) => STATUS_SCCD_LABELS[raw] || humanReadableStatus(raw) || raw || '—';
 
-    // Descreve as alterações de uma entrada de auditoria
-    const describe = (entry) => {
+    // Retorna array de {field, label, oldVal, newVal} para exibição rica
+    const describeRich = (entry) => {
       const props = entry.changeProperties || {};
       const grpMap = new Map(DataRepository.getSupportGroupsSnapshot().map(g => [String(g.id), g.name || g.id]));
       const resolvePerson = (id) => (id ? DataRepository.resolveName(id) || String(id) : '—');
       const resolveGrp = (id) => (id ? grpMap.get(String(id)) || String(id) : '—');
-      const lines = [];
+      const rows = [];
 
-      if ('Comments' in props)        lines.push('Incluiu comentário');
-      if ('ExpertAssignee' in props)  lines.push(`Especialista: ${resolvePerson(props.ExpertAssignee.oldValue)} → ${resolvePerson(props.ExpertAssignee.newValue)}`);
-      if ('AssignedToGroup' in props) lines.push(`Grupo: ${resolveGrp(props.AssignedToGroup.oldValue)} → ${resolveGrp(props.AssignedToGroup.newValue)}`);
-      if ('StatusSCCDSMAX_c' in props) lines.push(`Status op.: ${resolveStatus(props.StatusSCCDSMAX_c.oldValue)} → ${resolveStatus(props.StatusSCCDSMAX_c.newValue)}`);
-      if ('Status' in props)          lines.push(`Status: ${humanReadableStatus(props.Status.oldValue) || props.Status.oldValue || '—'} → ${humanReadableStatus(props.Status.newValue) || props.Status.newValue || '—'}`);
-      if ('PhaseId' in props)         lines.push(`Fase: ${props.PhaseId.oldValue || '—'} → ${props.PhaseId.newValue || '—'}`);
-      if ('GlobalId_c' in props)      lines.push('Alterou GSE Global');
+      if ('Comments' in props)
+        rows.push({ field: 'Comments', label: 'Comentário', oldVal: null, newVal: 'Incluiu comentário' });
+      if ('ExpertAssignee' in props)
+        rows.push({ field: 'ExpertAssignee', label: 'Especialista',
+          oldVal: resolvePerson(props.ExpertAssignee.oldValue),
+          newVal: resolvePerson(props.ExpertAssignee.newValue) });
+      if ('AssignedToGroup' in props)
+        rows.push({ field: 'AssignedToGroup', label: 'Grupo (GSE)',
+          oldVal: resolveGrp(props.AssignedToGroup.oldValue),
+          newVal: resolveGrp(props.AssignedToGroup.newValue) });
+      if ('StatusSCCDSMAX_c' in props)
+        rows.push({ field: 'StatusSCCDSMAX_c', label: 'Status Operacional',
+          oldVal: resolveStatus(props.StatusSCCDSMAX_c.oldValue),
+          newVal: resolveStatus(props.StatusSCCDSMAX_c.newValue) });
+      if ('Status' in props)
+        rows.push({ field: 'Status', label: 'Status',
+          oldVal: humanReadableStatus(props.Status.oldValue) || props.Status.oldValue || '—',
+          newVal: humanReadableStatus(props.Status.newValue) || props.Status.newValue || '—' });
+      if ('PhaseId' in props)
+        rows.push({ field: 'PhaseId', label: 'Fase',
+          oldVal: props.PhaseId.oldValue || '—',
+          newVal: props.PhaseId.newValue || '—' });
+      if ('GlobalId_c' in props)
+        rows.push({ field: 'GlobalId_c', label: 'GSE Global',
+          oldVal: props.GlobalId_c.oldValue ? String(props.GlobalId_c.oldValue) : '—',
+          newVal: props.GlobalId_c.newValue ? String(props.GlobalId_c.newValue) : '—' });
 
-      if (!lines.length) {
+      if (!rows.length) {
         const changed = Object.keys(props).filter(k => k !== 'LastUpdateTime');
-        if (changed.length) lines.push(`Alterou: ${changed.join(', ')}`);
+        if (changed.length)
+          rows.push({ field: '_other', label: 'Alterou', oldVal: null, newVal: changed.join(', ') });
       }
-      return lines;
+      return rows;
     };
 
-    const renderResults = (el, matches) => {
-      el.innerHTML =
-        `<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">` +
-        `${matches.length} chamado${matches.length !== 1 ? 's' : ''} encontrado${matches.length !== 1 ? 's' : ''}</div>` +
-        matches.map(m =>
-          `<div style="background:#181825;border:1px solid #45475a;border-radius:7px;padding:9px 11px;margin-bottom:7px;">` +
-          `<a href="/saw/Request/${m.id}" target="_blank" style="color:#89b4fa;font-weight:700;text-decoration:none;">#${m.id}</a>` +
-          m.actions.map(a =>
-            `<div style="margin-top:5px;font-size:11px;color:#94a3b8;">${fmtTs(a.time)}</div>` +
-            a.lines.map(l => `<div style="font-size:12px;color:#cdd6f4;padding-left:8px;">· ${l}</div>`).join('')
-          ).join('') +
-          `</div>`
-        ).join('');
+    const renderTicketCard = (m) => {
+      const eventsHtml = m.actions.map(a => {
+        const rowsHtml = a.rows.map(r => {
+          if (r.oldVal === null) {
+            return `<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
+              <span style="font-size:11px;color:#64748b;min-width:120px;flex-shrink:0;">${r.label}</span>
+              <span style="font-size:12px;color:#4ade80;">${r.newVal}</span>
+            </div>`;
+          }
+          return `<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
+            <span style="font-size:11px;color:#64748b;min-width:120px;flex-shrink:0;">${r.label}</span>
+            <span style="font-size:12px;color:#f87171;text-decoration:line-through;opacity:.8;">${r.oldVal}</span>
+            <span style="font-size:11px;color:#475569;">→</span>
+            <span style="font-size:12px;color:#4ade80;">${r.newVal}</span>
+          </div>`;
+        }).join('');
+        return `<div style="padding:8px 10px;border-left:2px solid rgba(255,255,255,.07);margin-bottom:6px;">
+          <div style="font-size:11px;color:#475569;margin-bottom:5px;">${fmtTs(a.time)}</div>
+          ${rowsHtml}
+        </div>`;
+      }).join('');
+
+      return `<div style="background:#1e293b;border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <a href="/saw/Request/${m.id}" target="_blank"
+            style="color:#60a5fa;font-weight:700;font-size:14px;text-decoration:none;">#${m.id}</a>
+          <span style="font-size:11px;color:#475569;">${m.actions.length} alteraç${m.actions.length === 1 ? 'ão' : 'ões'}</span>
+        </div>
+        ${eventsHtml}
+      </div>`;
+    };
+
+    const renderResults = () => {
+      const resultsEl = backdropEl.querySelector('#aqp-results');
+      const countEl   = backdropEl.querySelector('#aqp-res-count');
+      const exportBtn = backdropEl.querySelector('#aqp-export');
+      const n = currentMatches.length;
+      countEl.textContent = n ? `${n} chamado${n !== 1 ? 's' : ''} encontrado${n !== 1 ? 's' : ''}` : '—';
+      exportBtn.style.display = n ? 'block' : 'none';
+      resultsEl.innerHTML = currentMatches.map(renderTicketCard).join('');
+    };
+
+    const exportCsv = () => {
+      const rows = [['ID Chamado', 'Data/Hora', 'Campo', 'Valor Anterior', 'Valor Novo', 'Especialista']];
+      currentMatches.forEach(m => {
+        m.actions.forEach(a => {
+          a.rows.forEach(r => {
+            rows.push([
+              m.id,
+              fmtTs(a.time),
+              r.label,
+              r.oldVal !== null ? r.oldVal : '',
+              r.newVal,
+              currentPersonName,
+            ]);
+          });
+        });
+      });
+      const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+      const csv = '\uFEFF' + rows.map(r => r.map(esc).join(';')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `auditoria_${currentPersonName.replace(/\s+/g, '_')}_${toDateInput(new Date())}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
     };
 
     // Busca pessoas pela API como fallback quando não estão no cache local
@@ -11492,17 +11589,17 @@
 
     // Autocomplete de pessoa (cache local → fallback API)
     const wirePersonSearch = () => {
-      const input = panelEl.querySelector('#aqp-person');
-      const dd = panelEl.querySelector('#aqp-dd');
-      const ok = panelEl.querySelector('#aqp-ok');
+      const input = backdropEl.querySelector('#aqp-person');
+      const dd    = backdropEl.querySelector('#aqp-dd');
+      const ok    = backdropEl.querySelector('#aqp-ok');
       let t;
 
       const showDropdown = (results) => {
         if (!results.length) { dd.style.display = 'none'; return; }
         dd.innerHTML = results.map(p =>
           `<div class="aqp-po" data-id="${p.id}" data-name="${p.name}" data-upn="${p.upn}"` +
-          ` style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #313244;">` +
-          `${p.name}${p.upn ? ` <span style="color:#94a3b8;">(${p.upn})</span>` : ''}</div>`
+          ` style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid rgba(255,255,255,.05);">` +
+          `${p.name}${p.upn ? ` <span style="color:#475569;">(${p.upn})</span>` : ''}</div>`
         ).join('');
         dd.style.display = 'block';
       };
@@ -11514,7 +11611,6 @@
         const q = input.value.trim();
         if (q.length < 2) { dd.style.display = 'none'; return; }
         t = setTimeout(async () => {
-          // Tenta cache local primeiro
           await DataRepository.ensurePeopleLoaded();
           const target = Utils.normalizeText(q);
           const fromCache = [];
@@ -11523,7 +11619,6 @@
             if (Utils.normalizeText(p.name || '').includes(target)) fromCache.push({ id, name: p.name, upn: p.upn || '' });
           });
           if (fromCache.length) { showDropdown(fromCache); return; }
-          // Fallback: busca direta na API
           showDropdown(await searchPersonApi(q));
         }, 250);
       });
@@ -11536,16 +11631,17 @@
         ok.textContent = `✓ ${opt.dataset.name}${opt.dataset.upn ? ' · ' + opt.dataset.upn : ''} (ID: ${opt.dataset.id})`;
         ok.dataset.id = opt.dataset.id;
         ok.style.display = 'block';
+        currentPersonName = opt.dataset.name;
       });
 
       document.addEventListener('click', e => {
-        if (panelEl && !panelEl.contains(e.target)) dd.style.display = 'none';
+        if (backdropEl && !dd.contains(e.target) && e.target !== input) dd.style.display = 'none';
       });
     };
 
     // Pills de tipo de ação: ANY é exclusivo com os demais
     const wireActionPills = () => {
-      const pills = [...panelEl.querySelectorAll('.aqp-pill')];
+      const pills = [...backdropEl.querySelectorAll('.aqp-pill')];
       const anyPill = pills.find(p => p.dataset.key === 'ANY');
       const applyStyle = (p) => { p.style.cssText = p.dataset.on === '1' ? PILL_ON : PILL_OFF; };
       pills.forEach(pill => pill.addEventListener('click', () => {
@@ -11561,46 +11657,33 @@
       }));
     };
 
-    const makeDraggable = () => {
-      const hdr = panelEl.querySelector('#aqp-hdr');
-      hdr.addEventListener('mousedown', (e) => {
-        const r = panelEl.getBoundingClientRect();
-        const sx = e.clientX, sy = e.clientY, sl = r.left, st = r.top;
-        const mv = (ev) => {
-          panelEl.style.left = (sl + ev.clientX - sx) + 'px';
-          panelEl.style.top  = (st + ev.clientY - sy) + 'px';
-          panelEl.style.right = 'auto';
-        };
-        const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
-        document.addEventListener('mousemove', mv);
-        document.addEventListener('mouseup', up);
-      });
-    };
-
     // Executa a busca principal
     const runSearch = async () => {
       if (running) return;
       running = true;
       abortFlag = false;
+      currentMatches = [];
 
-      const okEl = panelEl.querySelector('#aqp-ok');
+      const okEl    = backdropEl.querySelector('#aqp-ok');
       const personId = okEl.dataset.id || '';
-      const resultsEl = panelEl.querySelector('#aqp-results');
-      const runBtn = panelEl.querySelector('#aqp-run');
-      const prog = panelEl.querySelector('#aqp-prog');
-      const progBar = panelEl.querySelector('#aqp-prog-bar');
-      const progTxt = panelEl.querySelector('#aqp-prog-txt');
+      const runBtn  = backdropEl.querySelector('#aqp-run');
+      const prog    = backdropEl.querySelector('#aqp-prog');
+      const progBar = backdropEl.querySelector('#aqp-prog-bar');
+      const progTxt = backdropEl.querySelector('#aqp-prog-txt');
+      const countEl = backdropEl.querySelector('#aqp-res-count');
+      const resultsEl = backdropEl.querySelector('#aqp-results');
+      const exportBtn = backdropEl.querySelector('#aqp-export');
 
       if (!personId) {
-        resultsEl.innerHTML = '<div style="color:#f38ba8;font-size:12px;">Selecione um especialista.</div>';
+        resultsEl.innerHTML = '<div style="color:#f87171;font-size:13px;margin-top:20px;">Selecione um especialista.</div>';
         running = false;
         return;
       }
 
-      const fromVal = panelEl.querySelector('#aqp-from').value;
-      const toVal   = panelEl.querySelector('#aqp-to').value;
+      const fromVal = backdropEl.querySelector('#aqp-from').value;
+      const toVal   = backdropEl.querySelector('#aqp-to').value;
       if (!fromVal || !toVal) {
-        resultsEl.innerHTML = '<div style="color:#f38ba8;font-size:12px;">Defina o período.</div>';
+        resultsEl.innerHTML = '<div style="color:#f87171;font-size:13px;margin-top:20px;">Defina o período.</div>';
         running = false;
         return;
       }
@@ -11608,7 +11691,7 @@
       const startTs = new Date(fromVal + 'T00:00:00').getTime();
       const endTs   = new Date(toVal   + 'T23:59:59').getTime();
       const keys = new Set();
-      panelEl.querySelectorAll('.aqp-pill[data-on="1"]').forEach(p => keys.add(p.dataset.key));
+      backdropEl.querySelectorAll('.aqp-pill[data-on="1"]').forEach(p => keys.add(p.dataset.key));
 
       runBtn.disabled = true;
       runBtn.textContent = 'Buscando...';
@@ -11616,21 +11699,24 @@
       progTxt.textContent = 'Obtendo lista de chamados...';
       progBar.style.width = '0%';
       resultsEl.innerHTML = '';
+      countEl.textContent = '—';
+      exportBtn.style.display = 'none';
 
       try {
         const totalDays = Math.max(1, Math.ceil((endTs - startTs) / ONE_DAY_MS));
         const ids = await fetchIds(startTs, endTs, (dayIdx, total) => {
           progTxt.textContent = `Coletando chamados: dia ${dayIdx + 1} / ${total}...`;
-          progBar.style.width = Math.round(dayIdx / total * 30) + '%'; // primeiros 30% = coleta
+          progBar.style.width = Math.round(dayIdx / total * 30) + '%';
         });
+
         if (abortFlag) { finishSearch(runBtn); return; }
+
         if (!ids.length) {
-          resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;">Nenhum chamado no período.</div>';
+          resultsEl.innerHTML = '<div style="color:#64748b;font-size:13px;margin-top:20px;">Nenhum chamado no período.</div>';
           finishSearch(runBtn);
           return;
         }
 
-        const matches = [];
         let doneCount = 0;
 
         for (let i = 0; i < ids.length; i += CONCURRENCY) {
@@ -11642,8 +11728,8 @@
             const userEntries = entries.filter(e => String(e.userId) === String(personId));
             const matched = userEntries.filter(e => matchActions(e, keys));
             if (matched.length) {
-              matches.push({ id, actions: matched.map(e => ({ time: e.time, lines: describe(e) })) });
-              renderResults(resultsEl, matches);
+              currentMatches.push({ id, actions: matched.map(e => ({ time: e.time, rows: describeRich(e) })) });
+              renderResults();
             }
           }));
           doneCount = Math.min(i + CONCURRENCY, ids.length);
@@ -11651,10 +11737,11 @@
           progTxt.textContent = `Auditando: ${doneCount} / ${ids.length} chamados`;
         }
 
-        if (!matches.length) resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;">Nenhum chamado encontrado com essa ação.</div>';
-        progTxt.textContent = `Concluído — ${doneCount}/${ids.length} verificados, ${matches.length} encontrado${matches.length !== 1 ? 's' : ''}.`;
+        if (!currentMatches.length)
+          resultsEl.innerHTML = '<div style="color:#64748b;font-size:13px;margin-top:20px;">Nenhum chamado encontrado com essa ação.</div>';
+        progTxt.textContent = `Concluído — ${doneCount}/${ids.length} verificados, ${currentMatches.length} encontrado${currentMatches.length !== 1 ? 's' : ''}.`;
       } catch (err) {
-        resultsEl.innerHTML = `<div style="color:#f38ba8;font-size:12px;">Erro: ${err.message}</div>`;
+        resultsEl.innerHTML = `<div style="color:#f87171;font-size:13px;margin-top:20px;">Erro: ${err.message}</div>`;
       }
 
       finishSearch(runBtn);
@@ -11667,25 +11754,26 @@
     };
 
     const open = () => {
-      if (!panelEl) {
+      if (!backdropEl) {
         const wrap = document.createElement('div');
-        wrap.innerHTML = buildHtml();
-        panelEl = wrap.firstElementChild;
-        document.body.appendChild(panelEl);
+        wrap.innerHTML = buildHtml().trim();
+        backdropEl = wrap.firstElementChild;
+        document.body.appendChild(backdropEl);
         wirePersonSearch();
         wireActionPills();
-        makeDraggable();
-        panelEl.querySelector('#aqp-x').addEventListener('click', close);
-        panelEl.querySelector('#aqp-run').addEventListener('click', runSearch);
-        panelEl.querySelector('#aqp-cancel').addEventListener('click', () => { abortFlag = true; });
-      } else {
-        panelEl.style.display = 'flex';
+        backdropEl.querySelector('#aqp-x').addEventListener('click', close);
+        backdropEl.querySelector('#aqp-run').addEventListener('click', runSearch);
+        backdropEl.querySelector('#aqp-cancel').addEventListener('click', () => { abortFlag = true; });
+        backdropEl.querySelector('#aqp-export').addEventListener('click', exportCsv);
+        // Fechar ao clicar no fundo do backdrop
+        backdropEl.addEventListener('click', (e) => { if (e.target === backdropEl) close(); });
       }
+      backdropEl.style.display = 'flex';
       isOpen = true;
     };
 
     const close = () => {
-      if (panelEl) panelEl.style.display = 'none';
+      if (backdropEl) backdropEl.style.display = 'none';
       isOpen = false;
     };
 
@@ -11694,7 +11782,7 @@
       btn.id = 'smax-aqp-btn';
       btn.title = 'Consulta por Ação';
       btn.textContent = '🔍';
-      btn.style.cssText = 'position:fixed;bottom:110px;right:16px;z-index:99998;width:36px;height:36px;border-radius:50%;border:none;background:#6c8ebf;color:#fff;cursor:pointer;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;';
+      btn.style.cssText = 'position:fixed;bottom:110px;right:16px;z-index:99998;width:36px;height:36px;border-radius:50%;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;';
       btn.addEventListener('click', () => (isOpen ? close() : open()));
       document.body.appendChild(btn);
     };
