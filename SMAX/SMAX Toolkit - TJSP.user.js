@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.11
+// @version      2.12
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.11';
+  const SMAX_TOOLKIT_VERSION = '2.12';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -761,6 +761,20 @@
     .smax-resp-disc-body p { margin:0 0 4px; }
     .smax-resp-disc-expand-btn { font-size:10px; padding:2px 7px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#6b7280; cursor:pointer; transition:all .12s; }
     .smax-resp-disc-expand-btn:hover { border-color:rgba(148,163,184,.4); color:#94a3b8; background:rgba(148,163,184,.08); }
+    #smax-resp-new-disc-panel { flex-shrink:0; border-top:1px solid rgba(255,255,255,.07); padding:8px; display:flex; flex-direction:column; gap:5px; }
+    #smax-resp-new-disc-label { font-size:9px; font-weight:600; color:#4b5563; text-transform:uppercase; letter-spacing:.06em; }
+    #smax-resp-new-disc-editor { min-height:56px; max-height:110px; overflow-y:auto; background:rgba(15,23,42,.6); border:1px solid rgba(255,255,255,.1); border-radius:6px; color:#e2e8f0; font-size:11px; padding:5px 8px; outline:none; line-height:1.5; font-family:inherit; }
+    #smax-resp-new-disc-editor:empty:before { content:attr(data-placeholder); color:#4b5563; pointer-events:none; display:block; }
+    #smax-resp-new-disc-editor:focus { border-color:rgba(99,102,241,.4); }
+    .smax-resp-new-disc-footer { display:flex; align-items:center; gap:6px; }
+    #smax-resp-new-disc-status { font-size:10px; color:#6b7280; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #smax-resp-new-disc-privacy { background:rgba(15,23,42,.6); border:1px solid rgba(255,255,255,.1); border-radius:5px; color:#9ca3af; font-size:10px; padding:3px 5px; outline:none; cursor:pointer; flex-shrink:0; }
+    #smax-resp-new-disc-send { flex-shrink:0; padding:4px 11px; border:none; border-radius:5px; background:linear-gradient(135deg,#4f46e5,#4338ca); color:#fff; font-size:11px; font-weight:600; cursor:pointer; transition:opacity .12s; }
+    #smax-resp-new-disc-send:disabled { opacity:.45; cursor:default; }
+    body[data-smax-theme="light"] #smax-resp-new-disc-panel { border-top-color:rgba(0,0,0,.08); }
+    body[data-smax-theme="light"] #smax-resp-new-disc-editor { background:rgba(255,255,255,.85); border-color:rgba(0,0,0,.13); color:#1e293b; }
+    body[data-smax-theme="light"] #smax-resp-new-disc-editor:empty:before { color:#94a3b8; }
+    body[data-smax-theme="light"] #smax-resp-new-disc-privacy { background:#fff; border-color:rgba(0,0,0,.15); color:#475569; }
     #smax-disc-modal { display:none; position:absolute; inset:0; z-index:20; background:rgba(2,6,23,.97); border-radius:inherit; flex-direction:column; overflow:hidden; }
     #smax-disc-modal-header { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,.08); flex-shrink:0; }
     #smax-disc-modal-meta { flex:1; min-width:0; }
@@ -7822,7 +7836,12 @@
       if (!backdrop) return;
       backdrop.querySelectorAll('.smax-resp-ticket-item').forEach(el => {
         const entry = ticketList.find(t => t.id === el.dataset.id);
-        if (entry && HighlightUser.isHighlighted(entry.requestedForName || '')) {
+        if (!entry) return;
+        // Fallback para triageCache — populated após upsertTriageEntryFromProps ou loadTicket
+        const nameToCheck = entry.requestedForName
+          || DataRepository.triageCache.get(entry.id)?.requestedForName
+          || '';
+        if (HighlightUser.isHighlighted(nameToCheck)) {
           el.style.setProperty('background', 'linear-gradient(90deg,rgba(251,191,36,.18) 0%,rgba(245,158,11,.07) 100%)', 'important');
           el.style.setProperty('box-shadow', 'inset 3px 0 0 #f59e0b', 'important');
         }
@@ -8492,7 +8511,7 @@
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
-      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
+      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,RequestedForDisplayLabel,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
 
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
@@ -9560,6 +9579,19 @@
               <aside id="smax-resp-hud-discussions">
                 <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;padding:10px 12px 8px;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;">💬 Discussões</div>
                 <div id="smax-resp-discussions-list"></div>
+                <div id="smax-resp-new-disc-panel">
+                  <div id="smax-resp-new-disc-label">Nova discussão</div>
+                  <div id="smax-resp-new-disc-editor" contenteditable="true" spellcheck="false" data-placeholder="Escreva a nova discussão..."></div>
+                  <div class="smax-resp-new-disc-footer">
+                    <span id="smax-resp-new-disc-status"></span>
+                    <select id="smax-resp-new-disc-privacy">
+                      <option value="INTERNAL">🔒 Interno</option>
+                      <option value="PUBLIC">🌐 Público</option>
+                      <option value="AGENT">👤 Agente</option>
+                    </select>
+                    <button id="smax-resp-new-disc-send" type="button">💬 Enviar</button>
+                  </div>
+                </div>
               </aside>
             </div>
 
@@ -10075,6 +10107,76 @@
 
       // Send button
       backdrop.querySelector('#smax-resp-send-btn')?.addEventListener('click', commitAll);
+
+      // Nova Discussão — editor independente, suporta chamado único e lote
+      const newDiscEditor  = backdrop.querySelector('#smax-resp-new-disc-editor');
+      const newDiscSendBtn = backdrop.querySelector('#smax-resp-new-disc-send');
+      const newDiscStatus  = backdrop.querySelector('#smax-resp-new-disc-status');
+
+      if (newDiscSendBtn && newDiscEditor) {
+        const setDiscStatus = (msg, color) => {
+          if (newDiscStatus) { newDiscStatus.textContent = msg; newDiscStatus.style.color = color || '#6b7280'; }
+        };
+
+        newDiscSendBtn.addEventListener('click', async () => {
+          const bodyHtml = newDiscEditor.innerHTML.trim();
+          if (!bodyHtml || bodyHtml === '<br>') { setDiscStatus('Escreva algo antes de enviar.', '#fca5a5'); return; }
+
+          const privacyRaw = backdrop.querySelector('#smax-resp-new-disc-privacy')?.value || 'INTERNAL';
+          const targets = selectedTicketIds.size > 0 ? [...selectedTicketIds] : (activeTicketId ? [activeTicketId] : []);
+          if (!targets.length) { setDiscStatus('Nenhum chamado selecionado.', '#fca5a5'); return; }
+          if (!prefs.enableRealWrites) { setDiscStatus('⚠️ Escritas reais desativadas.', '#facc15'); return; }
+
+          newDiscSendBtn.disabled = true;
+          let ok = 0, fail = 0;
+
+          for (let i = 0; i < targets.length; i++) {
+            setDiscStatus(`Enviando ${i + 1}/${targets.length}...`, '#93c5fd');
+            try {
+              const result = await Api.postDiscussion(targets[i], { bodyHtml, purposeCode: 'StatusUpdate', privacyRaw });
+              const outcome = Api.summarizeBulkOutcome(result);
+              if (result?.skipped || outcome?.ok !== false) {
+                ok++;
+                // Inserção otimista no ticket ativo para feedback imediato
+                if (targets[i] === activeTicketId) {
+                  const entry = DataRepository.triageCache.get(activeTicketId);
+                  if (entry) {
+                    const newDisc = {
+                      id: 'opt-' + Date.now(),
+                      bodyRaw: bodyHtml,
+                      bodyHtml: Utils.sanitizeRichText ? (Utils.sanitizeRichText(bodyHtml) || bodyHtml) : bodyHtml,
+                      bodyText: '',
+                      purposeCode: 'StatusUpdate',
+                      privacyRaw,
+                      createdTs: Date.now(),
+                      submitterDisplay: prefs.myPersonName || '',
+                      systemGenerated: false,
+                    };
+                    const updated = [...(entry.discussions || []), newDisc];
+                    DataRepository.triageCache.set(activeTicketId, Object.assign({}, entry, { discussions: updated }));
+                    renderDiscussions(updated);
+                  }
+                }
+              } else {
+                fail++;
+              }
+            } catch (e) {
+              fail++;
+              console.warn('[SMAX] nova discussão failed:', e);
+            }
+          }
+
+          newDiscSendBtn.disabled = false;
+          if (fail === 0) {
+            newDiscEditor.innerHTML = '';
+            setDiscStatus(`✓ ${ok} discussão(ões) enviada(s).`, '#4ade80');
+            // Reload em background para sincronizar
+            if (activeTicketId) loadTicket(activeTicketId);
+          } else {
+            setDiscStatus(`${ok} ok, ${fail} com erro.`, '#fca5a5');
+          }
+        });
+      }
     };
 
     return { init, open };
