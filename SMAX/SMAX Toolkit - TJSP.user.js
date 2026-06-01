@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.10
+// @version      2.11
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.10';
+  const SMAX_TOOLKIT_VERSION = '2.11';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1234,7 +1234,10 @@
 
     const parseSmaxDateTime = (str) => {
       if (!str) return null;
-      const match = str.trim().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      const raw = String(str).trim();
+      // Trata timestamps numéricos enviados como string (ex: FULL_LAYOUT pode retornar "1748794800000")
+      if (/^\d{10,13}$/.test(raw)) return parseInt(raw, 10);
+      const match = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
       if (!match) return null;
       let [, d, mo, y, h, mi, s] = match;
       d = parseInt(d, 10);
@@ -2452,7 +2455,12 @@
       if (!status && existing.status) status = existing.status;
 
       const { assignmentGroupId, assignmentGroupName } = pickAssignmentGroupMeta(props, rel);
-      const expertAssigneeId = props.ExpertAssignee ? String(props.ExpertAssignee) : (existing.expertAssigneeId || '');
+      // ExpertAssignee pode vir como flat string em props (lista) ou como objeto em rel (FULL_LAYOUT)
+      const expertAssigneeId = props.ExpertAssignee
+        ? String(props.ExpertAssignee)
+        : (rel.ExpertAssignee?.Id || rel.ExpertAssignee?.id)
+          ? String(rel.ExpertAssignee.Id || rel.ExpertAssignee.id)
+          : (existing.expertAssigneeId || '');
 
       // Extrai chamado global (pai) via rel.GlobalId_c — campo customizado TJSP
       let globalChangeId = existing.globalChangeId || '';
@@ -8504,6 +8512,10 @@
           const rel = e.related_properties || {};
           const rawId = (p.Id || '').replace(/^IMRfc:/, '');
           if (!rawId) return null;
+
+          // Popula triageCache agora para evitar fetch individual ao clicar no ticket
+          DataRepository.upsertTriageEntryFromProps(p, rel);
+
           // Extrai globalChangeId — tenta rel (objeto com Id) e props (string plana)
           const globalId = rel.GlobalId_c
             ? String(rel.GlobalId_c.Id || rel.GlobalId_c.id || rel.GlobalId_c || '').replace(/^IMRfc:/i, '').trim()
@@ -8525,16 +8537,17 @@
             const txt = (tmp.textContent || tmp.innerText || '').trim();
             descSnippet = txt.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
           }
-          // RequestedForPerson: VIP e nome do solicitante (API de lista retorna só {Id}; fallback para peopleCache)
+          // requestedForName e locationName: lê do triageCache (pré-populado por upsertTriageEntryFromProps)
+          // que tenta mais campos que a extração inline. Fallback para extração direta.
+          const cached = DataRepository.triageCache.get(rawId);
           const rfp = rel.RequestedForPerson || {};
           const rfpId = rfp.Id || rfp.id || '';
           const cachedPerson = rfpId ? DataRepository.peopleCache.get(rfpId) : null;
-          const isVip = !!(rfp.IsVIP ?? cachedPerson?.IsVIP ?? cachedPerson?.isVIP);
-          const requestedForName = (rfp.DisplayLabel || rfp.Name || rfp.PrimaryDisplayValue || rfp.FullName
-            || cachedPerson?.name || cachedPerson?.DisplayLabel || cachedPerson?.Name || '').trim();
-          // RegisteredForLocation: local de divulgação
-          const rloc = rel.RegisteredForLocation || {};
-          const locationName = (rloc.DisplayLabel || rloc.Name || rloc.DisplayName || rloc.FullName || '').trim();
+          const isVip = !!(rfp.IsVIP ?? cachedPerson?.IsVIP ?? cachedPerson?.isVIP ?? cached?.isVip);
+          const requestedForName = cached?.requestedForName
+            || (rfp.DisplayLabel || rfp.Name || rfp.PrimaryDisplayValue || rfp.FullName
+               || cachedPerson?.name || '').trim();
+          const locationName = cached?.locationName || '';
           return {
             id: rawId,
             subject: rawId,
