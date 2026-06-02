@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.18
+// @version      2.19
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -367,7 +367,8 @@
       const out = [];
       const globalPart = d.isGlobal ? ` — Global pai: #${d.globalId}` : '';
       const linkedPart = fields.has('linkedCount') && d.linkedCount ? ` · ${d.linkedCount} vinculados` : '';
-      out.push(`${d.statusEmoji} **${d.ticketId}**${d.subject ? ' — ' + d.subject : ''}${globalPart}${linkedPart}`);
+      const ticketUrl = `https://suporte.tjsp.jus.br/saw/Request/${d.ticketId}/general`;
+      out.push(`${d.statusEmoji} **[${d.ticketId}](${ticketUrl})**${d.subject ? ' — ' + d.subject : ''}${globalPart}${linkedPart}`);
       const metaParts = [];
       if (fields.has('status'))             metaParts.push(`**Status:** ${d.statusLabel}`);
       if (fields.has('statusSCCD'))         metaParts.push(`**Status Operacional:** ${d.statusSCCDLabel}`);
@@ -445,7 +446,8 @@
       const lineEmoji = isNew ? '🆕' : (isClosed ? '🟢' : '🔴');
       const newMarker = isNew ? ' (NOVO)' : '';
       const globalPart = d.isGlobal && !d.isGlobalParent ? ` — filho de #${d.globalId}` : '';
-      out.push(`${lineEmoji} ${d.ticketId}${newMarker}${d.subject ? ' — ' + d.subject : ''}${globalPart}`);
+      const ticketUrl = `https://suporte.tjsp.jus.br/saw/Request/${d.ticketId}/general`;
+      out.push(`${lineEmoji} [${d.ticketId}](${ticketUrl})${newMarker}${d.subject ? ' — ' + d.subject : ''}${globalPart}`);
 
       const todayMark = isToday(d.lastUpdateTs) ? ' 🆕 HOJE' : '';
       const metaParts = [];
@@ -566,7 +568,7 @@
 
       return `<div style="margin-bottom:14pt;padding-bottom:10pt;border-bottom:1pt solid #e5e7eb;">
         <p style="margin:0 0 2pt;font-size:13pt;font-weight:bold;color:#111827;">
-          ${lineEmoji} <span style="color:#1d4ed8;">${esc(d.ticketId)}</span>${newMarker}
+          ${lineEmoji} <a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" style="color:#1d4ed8;text-decoration:none;">${esc(d.ticketId)}</a>${newMarker}
           ${d.subject ? `<span style="font-size:11pt;font-weight:normal;color:#374151;"> — ${esc(d.subject)}</span>` : ''}${globalPart}
         </p>
         <p style="margin:0 0 4pt;font-size:9pt;color:#4b5563;">${metaLine}</p>
@@ -679,7 +681,7 @@
 
       return `<div style="margin-bottom:16pt;page-break-inside:avoid;">
         <p style="margin:0 0 4pt;font-size:13pt;font-weight:bold;color:#1e3a5f;">
-          ${d.statusEmoji} <span style="color:#1d4ed8;">#${d.ticketId}</span>
+          ${d.statusEmoji} <a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" style="color:#1d4ed8;text-decoration:none;">#${d.ticketId}</a>
           ${d.subject ? `<span style="color:#374151;font-size:11pt;font-weight:normal;"> — ${esc(d.subject)}</span>` : ''}${globalInfo}${linkedInfo}
         </p>
         ${metaTable}${changesBlock}${descBlock}${solBlock}${comLabel}${commentsBlock}
@@ -883,6 +885,12 @@
     .sqc-list-item.active{background:rgba(59,130,246,.18);color:#93c5fd;border-left:2px solid #3b82f6;padding-left:6px;}
     .sqc-list-item-count{color:#4b5563;font-size:10px;}
     .sqc-list-item-empty{padding:10px 8px;font-size:11px;color:#4b5563;text-align:center;font-style:italic;cursor:default;}
+    #sqc-list-filter{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e2e8f0;font-size:11px;padding:4px 8px;outline:none;margin-bottom:4px;}
+    #sqc-list-filter:focus{border-color:#3b82f6;}
+    #sqc-list-filter::placeholder{color:#374151;}
+    .sqc-list-item-date{font-size:9px;color:#374151;display:block;margin-top:1px;}
+    @keyframes sqc-pulse{0%,100%{box-shadow:0 2px 12px rgba(59,130,246,.5);}50%{box-shadow:0 4px 20px rgba(239,68,68,.75);}}
+    #sqc-topbar-btn.alert{background:linear-gradient(135deg,#ef4444,#b91c1c) !important;animation:sqc-pulse 1.5s ease-in-out infinite;}
     .sqc-list-actions{display:flex;gap:4px;}
     .sqc-list-act-btn{flex:1;padding:5px 0;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:transparent;color:#9ca3af;font-size:10px;cursor:pointer;transition:all .12s;}
     .sqc-list-act-btn:hover{border-color:rgba(255,255,255,.3);color:#e2e8f0;}
@@ -1007,6 +1015,7 @@
   let arTimer      = null;   // auto-refresh interval handle
   let arCountdown  = 0;      // seconds remaining
   let arTickHandle = null;   // setInterval for countdown tick
+  let originalDocTitle = document.title;
 
   // ══════════════════════════════════════════════════════════════════
   // SORT + FILTER HELPERS
@@ -1110,6 +1119,7 @@
 
           <div class="sqc-sb-section" id="sqc-list-section" style="display:none;">
             <div class="sqc-sb-label">Lista</div>
+            <input id="sqc-list-filter" type="text" placeholder="Filtrar listas…">
             <div id="sqc-list-box"><div class="sqc-list-item-empty">Nenhuma lista salva</div></div>
             <div class="sqc-list-actions">
               <button class="sqc-list-act-btn" id="sqc-btn-new-list">+ Nova</button>
@@ -1132,7 +1142,8 @@
 
           <div class="sqc-sb-section">
             <button class="sqc-btn-primary" id="sqc-btn-fetch">🔍 Consultar</button>
-            <button class="sqc-btn-secondary" id="sqc-btn-save-list" style="display:none;">💾 Salvar lista</button>
+            <button class="sqc-btn-secondary" id="sqc-btn-save-list" style="display:none;">💾 Salvar como nova lista</button>
+            <button class="sqc-btn-secondary" id="sqc-btn-update-list" style="display:none;">✏️ Atualizar lista selecionada</button>
             <div id="sqc-progress"></div>
 
             <div id="sqc-autorefresh-section" style="display:none;">
@@ -1195,13 +1206,17 @@
     if (!panel) return;
     const box = panel.querySelector('#sqc-list-box');
     if (!box) return;
-    if (!lists.length) {
-      box.innerHTML = '<div class="sqc-list-item-empty">Nenhuma lista salva</div>';
+    const ft = (panel.querySelector('#sqc-list-filter')?.value || '').toLowerCase().trim();
+    const filtered = lists.filter(l => !ft || l.name.toLowerCase().includes(ft));
+    if (!filtered.length) {
+      box.innerHTML = `<div class="sqc-list-item-empty">${lists.length ? 'Nenhuma lista encontrada' : 'Nenhuma lista salva'}</div>`;
       return;
     }
-    box.innerHTML = lists.map(l =>
-      `<div class="sqc-list-item${l.id===activeListId?' active':''}" data-id="${esc(l.id)}">${esc(l.name)} <span class="sqc-list-item-count">(${l.ids.length})</span></div>`
-    ).join('');
+    box.innerHTML = filtered.map(l => {
+      const lastEntry = l.history?.[0] || l.lastQuery;
+      const dateHtml = lastEntry ? `<span class="sqc-list-item-date">📸 ${esc(lastEntry.timestamp)}</span>` : '';
+      return `<div class="sqc-list-item${l.id===activeListId?' active':''}" data-id="${esc(l.id)}">${esc(l.name)} <span class="sqc-list-item-count">(${l.ids.length})</span>${dateHtml}</div>`;
+    }).join('');
   };
 
   const refreshSnapshotInfo = () => {
@@ -1209,9 +1224,15 @@
     const el = panel.querySelector('#sqc-list-snapshot-info');
     if (!el) return;
     const list = lists.find(l=>l.id===activeListId);
-    el.textContent = list?.lastQuery
-      ? `Último snapshot: ${list.lastQuery.timestamp}`
-      : activeListId ? 'Sem snapshot — primeira consulta criará o baseline.' : '';
+    if (!list) { el.innerHTML = ''; return; }
+    const history = list.history || (list.lastQuery ? [list.lastQuery] : []);
+    if (!history.length) {
+      el.textContent = 'Sem snapshot — primeira consulta criará o baseline.';
+      return;
+    }
+    el.innerHTML = history.map((h, i) =>
+      `<div style="font-size:10px;color:${i===0?'#6b7280':'#374151'};">📸 ${esc(h.timestamp)}</div>`
+    ).join('');
   };
 
   const buildCard = (id, i, chg) => {
@@ -1394,6 +1415,17 @@
         clearInterval(arTickHandle);
         arTickHandle = null;
         runQuery().then(() => {
+          if (lastChanges) {
+            const nChanged = lastIds.filter(id => lastChanges[id]?.hasChanges).length;
+            const btn = document.querySelector('#sqc-topbar-btn');
+            if (nChanged > 0) {
+              document.title = `🔴 ${nChanged} atualiz. — ${originalDocTitle.replace(/^🔴.*?— /,'')}`;
+              if (btn) btn.classList.add('alert');
+            } else {
+              document.title = originalDocTitle;
+              if (btn) btn.classList.remove('alert');
+            }
+          }
           const cb = panel?.querySelector('#sqc-ar-cb');
           if (cb?.checked) startAutoRefresh(Number(panel.querySelector('#sqc-autorefresh-interval').value)||60);
         });
@@ -1450,8 +1482,9 @@
 
     if (mode === 'list' && activeListId) {
       const list = lists.find(l=>l.id===activeListId);
-      if (list?.lastQuery?.snapshot) {
-        const snap = list.lastQuery.snapshot;
+      const lastEntry = list?.history?.[0] || list?.lastQuery;
+      if (lastEntry?.snapshot) {
+        const snap = lastEntry.snapshot;
         lastChanges = {};
         ids.forEach((id,i) => {
           const r = fetched[i];
@@ -1463,10 +1496,15 @@
       const now = nowStr();
       const idx = lists.findIndex(l=>l.id===activeListId);
       if (idx>=0) {
-        lists[idx].lastQuery = { timestamp: now, snapshot };
+        const newEntry = { timestamp: now, snapshot };
+        if (!lists[idx].history) lists[idx].history = [];
+        lists[idx].history.unshift(newEntry);
+        if (lists[idx].history.length > 3) lists[idx].history.length = 3;
+        lists[idx].lastQuery = newEntry;
         lists[idx].ids = ids;
         saveLists(lists);
         refreshSnapshotInfo();
+        refreshListSelect();
       }
     }
 
@@ -1548,6 +1586,7 @@
           panel.querySelectorAll('.sqc-mode-tab').forEach(b=>b.classList.toggle('active',b===btn));
           panel.querySelector('#sqc-list-section').style.display = mode==='list' ? 'block' : 'none';
           panel.querySelector('#sqc-btn-save-list').style.display = mode==='simple' ? 'block' : 'none';
+          panel.querySelector('#sqc-btn-update-list').style.display = mode==='list' ? 'block' : 'none';
           if (mode==='list') { refreshListSelect(); refreshSnapshotInfo(); }
           if (mode==='simple') { activeListId=null; }
         });
@@ -1574,6 +1613,23 @@
         refreshSnapshotInfo();
         lastChanges = null;
         panel.querySelector('#sqc-summary').classList.remove('visible');
+      });
+
+      // Filtro de listas
+      panel.querySelector('#sqc-list-filter').addEventListener('input', () => refreshListSelect());
+
+      // Atualizar lista existente
+      panel.querySelector('#sqc-btn-update-list').addEventListener('click', () => {
+        if (!activeListId) { alert('Selecione uma lista primeiro.'); return; }
+        const ids = parseIds(panel.querySelector('#sqc-ids').value);
+        if (!ids.length) { alert('Nenhum ID válido.'); return; }
+        const list = lists.find(l=>l.id===activeListId);
+        if (!list) return;
+        if (!confirm(`Atualizar a lista "${list.name}" com ${ids.length} IDs?`)) return;
+        list.ids = ids;
+        list.fields = [...fields];
+        saveLists(lists);
+        refreshListSelect();
       });
 
       // Nova lista
@@ -1733,6 +1789,9 @@
       refreshListSelect();
     }
     panel.style.display = 'flex';
+    // Limpar notificação de auto-refresh ao abrir o painel
+    document.title = originalDocTitle;
+    document.querySelector('#sqc-topbar-btn')?.classList.remove('alert');
   };
 
   const updateIdsCount = () => {
