@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.17
+// @version      2.18
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -874,9 +874,15 @@
     .sqc-mode-tab.active{background:rgba(59,130,246,.25);color:#93c5fd;}
 
     /* Listas */
-    #sqc-list-select{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:12px;padding:6px 8px;outline:none;margin-bottom:4px;}
-    #sqc-list-select:focus{border-color:#3b82f6;}
-    #sqc-list-name-display{font-size:10px;color:#6b7280;word-break:break-word;line-height:1.3;min-height:14px;margin-bottom:4px;padding:0 2px;}
+    #sqc-list-box{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px;}
+    #sqc-list-box::-webkit-scrollbar{width:5px;}
+    #sqc-list-box::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:4px;}
+    .sqc-list-item{padding:6px 8px;font-size:11px;color:#9ca3af;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);word-break:break-word;line-height:1.3;transition:background .1s;}
+    .sqc-list-item:last-child{border-bottom:none;}
+    .sqc-list-item:hover{background:rgba(255,255,255,.06);color:#e2e8f0;}
+    .sqc-list-item.active{background:rgba(59,130,246,.18);color:#93c5fd;border-left:2px solid #3b82f6;padding-left:6px;}
+    .sqc-list-item-count{color:#4b5563;font-size:10px;}
+    .sqc-list-item-empty{padding:10px 8px;font-size:11px;color:#4b5563;text-align:center;font-style:italic;cursor:default;}
     .sqc-list-actions{display:flex;gap:4px;}
     .sqc-list-act-btn{flex:1;padding:5px 0;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:transparent;color:#9ca3af;font-size:10px;cursor:pointer;transition:all .12s;}
     .sqc-list-act-btn:hover{border-color:rgba(255,255,255,.3);color:#e2e8f0;}
@@ -1104,8 +1110,7 @@
 
           <div class="sqc-sb-section" id="sqc-list-section" style="display:none;">
             <div class="sqc-sb-label">Lista</div>
-            <select id="sqc-list-select"><option value="">— Selecionar lista —</option></select>
-            <div id="sqc-list-name-display"></div>
+            <div id="sqc-list-box"><div class="sqc-list-item-empty">Nenhuma lista salva</div></div>
             <div class="sqc-list-actions">
               <button class="sqc-list-act-btn" id="sqc-btn-new-list">+ Nova</button>
               <button class="sqc-list-act-btn" id="sqc-btn-rename-list">✏️</button>
@@ -1188,14 +1193,15 @@
 
   const refreshListSelect = () => {
     if (!panel) return;
-    const sel = panel.querySelector('#sqc-list-select');
-    sel.innerHTML = '<option value="">— Selecionar lista —</option>' +
-      lists.map(l=>`<option value="${esc(l.id)}" title="${esc(l.name)} (${l.ids.length} IDs)" ${l.id===activeListId?'selected':''}>${esc(l.name)} (${l.ids.length} IDs)</option>`).join('');
-    const nameEl = panel.querySelector('#sqc-list-name-display');
-    if (nameEl) {
-      const active = lists.find(l=>l.id===activeListId);
-      nameEl.textContent = active ? active.name : '';
+    const box = panel.querySelector('#sqc-list-box');
+    if (!box) return;
+    if (!lists.length) {
+      box.innerHTML = '<div class="sqc-list-item-empty">Nenhuma lista salva</div>';
+      return;
     }
+    box.innerHTML = lists.map(l =>
+      `<div class="sqc-list-item${l.id===activeListId?' active':''}" data-id="${esc(l.id)}">${esc(l.name)} <span class="sqc-list-item-count">(${l.ids.length})</span></div>`
+    ).join('');
   };
 
   const refreshSnapshotInfo = () => {
@@ -1548,11 +1554,11 @@
       });
 
       // Seleção de lista
-      panel.querySelector('#sqc-list-select').addEventListener('change', e => {
-        activeListId = e.target.value || null;
+      panel.querySelector('#sqc-list-box').addEventListener('click', e => {
+        const item = e.target.closest('.sqc-list-item[data-id]');
+        if (!item) return;
+        activeListId = item.dataset.id || null;
         const list = lists.find(l=>l.id===activeListId);
-        const nameEl = panel.querySelector('#sqc-list-name-display');
-        if (nameEl) nameEl.textContent = list ? list.name : '';
         if (list) {
           panel.querySelector('#sqc-ids').value = list.ids.join('\n');
           updateIdsCount();
@@ -1581,7 +1587,6 @@
         activeListId = list.id;
         refreshListSelect();
         refreshSnapshotInfo();
-        panel.querySelector('#sqc-list-select').value = list.id;
       });
 
       // Renomear lista
