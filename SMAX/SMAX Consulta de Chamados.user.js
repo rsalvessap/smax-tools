@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.16
+// @version      2.17
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -874,8 +874,9 @@
     .sqc-mode-tab.active{background:rgba(59,130,246,.25);color:#93c5fd;}
 
     /* Listas */
-    #sqc-list-select{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:12px;padding:6px 8px;outline:none;margin-bottom:6px;}
+    #sqc-list-select{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:12px;padding:6px 8px;outline:none;margin-bottom:4px;}
     #sqc-list-select:focus{border-color:#3b82f6;}
+    #sqc-list-name-display{font-size:10px;color:#6b7280;word-break:break-word;line-height:1.3;min-height:14px;margin-bottom:4px;padding:0 2px;}
     .sqc-list-actions{display:flex;gap:4px;}
     .sqc-list-act-btn{flex:1;padding:5px 0;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:transparent;color:#9ca3af;font-size:10px;cursor:pointer;transition:all .12s;}
     .sqc-list-act-btn:hover{border-color:rgba(255,255,255,.3);color:#e2e8f0;}
@@ -1104,6 +1105,7 @@
           <div class="sqc-sb-section" id="sqc-list-section" style="display:none;">
             <div class="sqc-sb-label">Lista</div>
             <select id="sqc-list-select"><option value="">— Selecionar lista —</option></select>
+            <div id="sqc-list-name-display"></div>
             <div class="sqc-list-actions">
               <button class="sqc-list-act-btn" id="sqc-btn-new-list">+ Nova</button>
               <button class="sqc-list-act-btn" id="sqc-btn-rename-list">✏️</button>
@@ -1188,7 +1190,12 @@
     if (!panel) return;
     const sel = panel.querySelector('#sqc-list-select');
     sel.innerHTML = '<option value="">— Selecionar lista —</option>' +
-      lists.map(l=>`<option value="${esc(l.id)}" ${l.id===activeListId?'selected':''}>${esc(l.name)} (${l.ids.length} IDs)</option>`).join('');
+      lists.map(l=>`<option value="${esc(l.id)}" title="${esc(l.name)} (${l.ids.length} IDs)" ${l.id===activeListId?'selected':''}>${esc(l.name)} (${l.ids.length} IDs)</option>`).join('');
+    const nameEl = panel.querySelector('#sqc-list-name-display');
+    if (nameEl) {
+      const active = lists.find(l=>l.id===activeListId);
+      nameEl.textContent = active ? active.name : '';
+    }
   };
 
   const refreshSnapshotInfo = () => {
@@ -1544,6 +1551,8 @@
       panel.querySelector('#sqc-list-select').addEventListener('change', e => {
         activeListId = e.target.value || null;
         const list = lists.find(l=>l.id===activeListId);
+        const nameEl = panel.querySelector('#sqc-list-name-display');
+        if (nameEl) nameEl.textContent = list ? list.name : '';
         if (list) {
           panel.querySelector('#sqc-ids').value = list.ids.join('\n');
           updateIdsCount();
