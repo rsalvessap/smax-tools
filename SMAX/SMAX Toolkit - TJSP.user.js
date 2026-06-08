@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.16
+// @version      2.17
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8580,15 +8580,14 @@
       setStatusMsg('Buscando chamados...', '#93c5fd');
 
       // Campo correto para filtrar por grupo é AssignedToGroup (ExpertGroup só funciona em updates)
+      // Nota: o parser do SMAX exige espaços ao redor dos operadores (= != and or) — sem espaços
+      // a API retorna 0 resultados silenciosamente desde a atualização da plataforma.
       const gseFilter = gseIds.length === 1
-        ? `AssignedToGroup='${gseIds[0]}'`
-        : `(${gseIds.map(id => `AssignedToGroup='${id}'`).join(' or ')})`;
+        ? `AssignedToGroup = '${gseIds[0]}'`
+        : `(${gseIds.map(id => `AssignedToGroup = '${id}'`).join(' or ')})`;
 
-      // Excluir fechados pelo PhaseId (como o SMAX faz internamente) e pelo Status Operacional
-      // "or StatusSCCDSMAX_c=null" inclui chamados sem valor no campo (maioria dos abertos)
-      // Nota: Active='true' (com aspas) quebrou silenciosamente após atualização da plataforma —
-      // PhaseId já cobre a distinção aberto/fechado, então a condição foi removida.
-      const filter = `((PhaseId!='Close' and PhaseId!='Accept' or PhaseId=null) and ${gseFilter} and (StatusSCCDSMAX_c!='Fechado_c' or StatusSCCDSMAX_c=null))`;
+      // Formato idêntico ao filtro nativo capturado do SMAX (com espaços nos operadores)
+      const filter = `(Active = 'true' and (PhaseId != 'Close' and PhaseId != 'Accept' or PhaseId = null) and ${gseFilter} and (StatusSCCDSMAX_c != 'Fechado_c' or StatusSCCDSMAX_c = null))`;
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
