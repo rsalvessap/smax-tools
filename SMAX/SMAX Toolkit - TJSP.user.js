@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.22
+// @version      2.23
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -9809,7 +9809,12 @@
         }
       } catch {}
 
-      // Team pills são renderizadas no open() para garantir que SharedConfig já carregou
+      // Team pills são renderizadas no open(). Registra callback para re-renderizar
+      // quando SharedConfig terminar de carregar (pode ser posterior ao init())
+      SharedConfig.onTeamsLoaded(() => {
+        selectedTeamIds.clear(); // reseta seleção para refletir novas equipes
+        renderTeamPills();
+      });
 
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
@@ -11440,9 +11445,15 @@
       try { GM_setValue(CACHE_KEY, JSON.stringify({ data: d, fetchedAt: Date.now() })); } catch {}
     };
 
+    const _listeners = [];
+    const onTeamsLoaded = (fn) => { if (typeof fn === 'function') _listeners.push(fn); };
+
     const applyToModules = () => {
       if (!data) return;
-      if (Array.isArray(data.teams)) TeamsConfig.setSharedTeams(data.teams);
+      if (Array.isArray(data.teams)) {
+        TeamsConfig.setSharedTeams(data.teams);
+        _listeners.forEach(fn => { try { fn(data.teams); } catch {} });
+      }
       if (data.scripts) {
         Templates.setSharedScripts(
           Array.isArray(data.scripts.sol)  ? data.scripts.sol  : [],
@@ -11523,7 +11534,7 @@
     const getStatus = () => ({ text: statusText, loading: isLoading, fetchedAt });
     const get = () => data;
 
-    return { init, refresh, get, getStatus, getScripts };
+    return { init, refresh, get, getStatus, getScripts, onTeamsLoaded };
   })();
 
   /* =========================================================
