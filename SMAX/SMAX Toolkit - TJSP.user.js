@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.17
+// @version      2.18
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8587,7 +8587,8 @@
         : `(${gseIds.map(id => `AssignedToGroup = '${id}'`).join(' or ')})`;
 
       // Formato idêntico ao filtro nativo capturado do SMAX (com espaços nos operadores)
-      const filter = `(Active = 'true' and (PhaseId != 'Close' and PhaseId != 'Accept' or PhaseId = null) and ${gseFilter} and (StatusSCCDSMAX_c != 'Fechado_c' or StatusSCCDSMAX_c = null))`;
+      // StatusSCCDSMAX_c removido do filtro API — filtrado client-side abaixo para evitar 0 resultados
+      const filter = `(Active = 'true' and (PhaseId != 'Close' and PhaseId != 'Accept' or PhaseId = null) and ${gseFilter})`;
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
@@ -8628,6 +8629,8 @@
             }
           }
           const statusSCCD = (p.StatusSCCDSMAX_c || '').replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
+          // Exclui tickets com status operacional "Fechado" client-side (não incluso no filtro API)
+          if (statusSCCD.toLowerCase() === 'fechado') return null;
           // Extrai primeira linha de texto da descrição HTML
           let descSnippet = '';
           if (p.Description) {
