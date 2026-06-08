@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.12
+// @version      2.14
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -7222,6 +7222,7 @@
             : (props.ExpertAssignee ? (currentOwnerName || prefs.myPersonName || '') : '');
           ActivityLog.log({
             ticketId: props.Id,
+            ticketSubject: DataRepository.triageCache.get(props.Id)?.subjectText || props.DisplayLabel || '',
             assigned: !!props.ExpertAssignee,
             assignedTo: logAssignedToFailed,
             globalAssigned: !!doGlobal,
@@ -7251,6 +7252,7 @@
             : (props.ExpertAssignee ? (currentOwnerName || prefs.myPersonName || '') : '');
           ActivityLog.log({
             ticketId: props.Id,
+            ticketSubject: DataRepository.triageCache.get(props.Id)?.subjectText || props.DisplayLabel || '',
             assigned: !!props.ExpertAssignee,
             assignedTo: logAssignedTo,
             globalAssigned: !!doGlobal,
@@ -8413,6 +8415,83 @@
       });
     };
 
+    // ── Presets de filtros ──────────────────────────────────────────
+    const PRESETS_KEY = 'smax_resp_filter_presets_v1';
+    const loadPresets  = () => { try { return JSON.parse(GM_getValue(PRESETS_KEY, '[]')); } catch { return []; } };
+    const savePresets  = (ps) => GM_setValue(PRESETS_KEY, JSON.stringify(ps));
+
+    const applyPreset = (preset) => {
+      // Equipes
+      selectedTeamIds.clear();
+      if (preset.teams?.length) preset.teams.forEach(t => selectedTeamIds.add(t));
+      else TeamsConfig.getTeams().forEach(t => selectedTeamIds.add(t.id));
+      backdrop?.querySelectorAll('.smax-resp-team-pill').forEach(pill => {
+        const id = pill.dataset.teamId;
+        const active = selectedTeamIds.has(id);
+        pill.style.border     = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
+        pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
+        pill.style.color      = active ? '#93c5fd' : '#9ca3af';
+        const dot = pill.querySelector('span');
+        if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+      });
+      // Status e designados
+      selectedStatuses.clear();
+      (preset.statuses  || []).forEach(s => selectedStatuses.add(s));
+      selectedAssignees.clear();
+      (preset.assignees || []).forEach(a => selectedAssignees.add(a));
+      // Texto
+      textFilter = preset.text || '';
+      const inp = backdrop?.querySelector('#smax-resp-text-filter');
+      const clr = backdrop?.querySelector('#smax-resp-text-filter-clear');
+      if (inp) inp.value = textFilter;
+      if (clr) clr.style.display = textFilter ? '' : 'none';
+      // Reaplicar
+      applyFilters();
+      if (allFetchedEntries.length) {
+        renderStatusPills(allFetchedEntries);
+        renderAssigneePills(allFetchedEntries);
+      }
+    };
+
+    const renderPresetPills = () => {
+      const el = backdrop?.querySelector('#smax-resp-preset-pills');
+      if (!el) return;
+      const presets = loadPresets();
+      if (!presets.length) {
+        el.innerHTML = '<span style="font-size:10px;color:#374151;font-style:italic;">Nenhum preset</span>';
+        return;
+      }
+      el.innerHTML = presets.map(p => `
+        <span class="smax-resp-preset-pill" data-preset-id="${Utils.escapeHtml(p.id)}"
+          style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#d1d5db;font-size:10px;cursor:pointer;white-space:nowrap;transition:all .12s;user-select:none;">
+          ${Utils.escapeHtml(p.name)}
+          <button class="smax-resp-preset-del" data-preset-id="${Utils.escapeHtml(p.id)}"
+            style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:2px;" title="Excluir preset">✕</button>
+        </span>`).join('');
+      el.querySelectorAll('.smax-resp-preset-pill').forEach(pill => {
+        pill.addEventListener('click', e => {
+          if (e.target.closest('.smax-resp-preset-del')) return;
+          const p = loadPresets().find(p => p.id === pill.dataset.presetId);
+          if (p) applyPreset(p);
+        });
+        pill.addEventListener('mouseenter', () => { pill.style.background = 'rgba(59,130,246,.2)'; pill.style.borderColor = 'rgba(59,130,246,.4)'; });
+        pill.addEventListener('mouseleave', () => { pill.style.background = 'rgba(255,255,255,.05)'; pill.style.borderColor = 'rgba(255,255,255,.15)'; });
+      });
+      el.querySelectorAll('.smax-resp-preset-del').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const id  = btn.dataset.presetId;
+          const all = loadPresets();
+          const p   = all.find(p => p.id === id);
+          if (p && confirm(`Excluir preset "${p.name}"?`)) {
+            savePresets(all.filter(x => x.id !== id));
+            renderPresetPills();
+          }
+        });
+      });
+    };
+    // ───────────────────────────────────────────────────────────────
+
     const applyFilters = () => {
       const q = textFilter.toLowerCase();
       ticketList = allFetchedEntries.filter(e =>
@@ -9448,6 +9527,11 @@
                   <button id="smax-resp-toggle-criteria" title="Mostrar/ocultar critérios" style="padding:4px 7px;border:1px solid rgba(255,255,255,.12);border-radius:5px;background:transparent;color:#9ca3af;font-size:11px;cursor:pointer;line-height:1;">▲</button>
                 </div>
               </div>
+              <div id="smax-resp-preset-bar" style="padding:5px 12px 6px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:rgba(0,0,0,.12);">
+                <span style="font-size:9px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:.07em;flex-shrink:0;">Presets</span>
+                <div id="smax-resp-preset-pills" style="display:flex;flex-wrap:wrap;gap:4px;flex:1;align-items:center;min-height:20px;"></div>
+                <button id="smax-resp-preset-save" title="Salvar filtro atual como preset" style="flex-shrink:0;padding:3px 8px;border:1px solid rgba(74,222,128,.3);border-radius:6px;background:rgba(74,222,128,.08);color:#4ade80;font-size:10px;cursor:pointer;white-space:nowrap;">💾 Salvar</button>
+              </div>
               <div id="smax-resp-filter-criteria">
                 <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Equipes</div>
                 <div id="smax-resp-team-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
@@ -9742,6 +9826,24 @@
         toggleBtn.title = visible ? 'Ocultar critérios' : 'Mostrar critérios';
       };
       toggleBtn?.addEventListener('click', () => setCriteriaVisible(criteriaEl?.classList.contains('collapsed')));
+
+      // Presets — render inicial e salvar
+      renderPresetPills();
+      backdrop.querySelector('#smax-resp-preset-save')?.addEventListener('click', () => {
+        const name = prompt('Nome para este preset de filtros:');
+        if (!name?.trim()) return;
+        const presets = loadPresets();
+        presets.push({
+          id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          name: name.trim(),
+          statuses:  [...selectedStatuses],
+          assignees: [...selectedAssignees],
+          teams:     [...selectedTeamIds],
+          text:      textFilter,
+        });
+        savePresets(presets);
+        renderPresetPills();
+      });
 
       // Limpar filtros ativos
       backdrop.querySelector('#smax-resp-clear-filters')?.addEventListener('click', () => {
