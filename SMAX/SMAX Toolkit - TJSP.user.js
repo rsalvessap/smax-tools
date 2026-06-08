@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.14
+// @version      2.15
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8653,7 +8653,11 @@
             status: p.Status || '',
             statusSCCD,
             gse: p.AssignedToGroup || '',
-            assignee: p.ExpertAssignee || '',
+            assignee: p.ExpertAssignee
+              ? String(p.ExpertAssignee)
+              : (rel.ExpertAssignee?.Id || rel.ExpertAssignee?.id)
+                ? String(rel.ExpertAssignee.Id || rel.ExpertAssignee.id)
+                : '',
             createTime: parseInt(p.CreateTime, 10) || 0,
             isVip,
             requestedForName,
