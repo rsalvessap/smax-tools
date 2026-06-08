@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.19
+// @version      2.22
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -996,6 +996,8 @@
     .sqc-comment.new-comment{border-color:#4ade80;background:rgba(74,222,128,.05);}
     .sqc-comment-meta{display:flex;gap:10px;font-size:10px;color:#6b7280;margin-bottom:4px;flex-wrap:wrap;}
     .sqc-privacy{background:rgba(167,139,250,.1);border-radius:4px;padding:0 5px;color:#a78bfa;}
+    .sqc-remove-btn{margin-top:8px;padding:4px 10px;border:1px solid rgba(248,113,113,.35);border-radius:6px;background:transparent;color:#f87171;font-size:10px;cursor:pointer;transition:all .12s;}
+    .sqc-remove-btn:hover{background:rgba(248,113,113,.12);border-color:#f87171;}
   `);
 
   // ══════════════════════════════════════════════════════════════════
@@ -1010,6 +1012,7 @@
   let lastResults  = [];
   let lastIds      = [];
   let lastChanges  = null;
+  let lastClosedIds = [];
   let sortMode     = 'default';
   let filterText   = '';
   let arTimer      = null;   // auto-refresh interval handle
@@ -1160,6 +1163,7 @@
             </div>
 
             <div id="sqc-export-section">
+              <button class="sqc-btn-secondary" id="sqc-btn-remove-closed" style="display:none;border-color:rgba(248,113,113,.4);color:#f87171;">🗑️ Remover encerrados da lista</button>
               <div class="sqc-export-divider">Exportar consulta</div>
               <button class="sqc-btn-secondary" id="sqc-btn-word">📄 Word (.doc)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-excel">📊 Excel (.xls)</button>
@@ -1340,7 +1344,12 @@
         <div class="sqc-collapsible" id="sqc-com-${esc(d.ticketId)}">${commentsHtml}</div>
       </div>`);
 
-    return `<div class="${cardClass}">
+    const isSccdFechado = d.statusSCCDLabel.toLowerCase().includes('fechado');
+    const removeBtn = isSccdFechado
+      ? `<button class="sqc-remove-btn" data-remove-id="${esc(d.ticketId)}" title="Status operacional: ${esc(d.statusSCCDLabel)} — remover da lista">🗑️ Remover da lista</button>`
+      : '';
+
+    return `<div class="${cardClass}" data-ticket-id="${esc(d.ticketId)}">
       <div class="sqc-card-header">
         <span style="font-size:17px;">${d.statusEmoji}</span>
         <a class="sqc-ticket-id" href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" target="_blank">#${esc(d.ticketId)}</a>
@@ -1355,6 +1364,7 @@
       ${metaItems.length?`<div class="sqc-meta-grid">${metaItems.join('')}</div>`:''}
       ${commentPreview}
       ${sections.join('')}
+      ${removeBtn}
     </div>`;
   };
 
@@ -1510,6 +1520,21 @@
 
     renderResults();
     renderSummary();
+
+    // Atualiza botão bulk "Remover fechados (status operacional)"
+    lastClosedIds = ids.filter((id, i) => {
+      const r = fetched[i];
+      return r?.ok && r.data.statusSCCDLabel.toLowerCase().includes('fechado');
+    });
+    const removeClosedBtn = panel.querySelector('#sqc-btn-remove-closed');
+    if (removeClosedBtn) {
+      if (lastClosedIds.length > 0) {
+        removeClosedBtn.textContent = `🗑️ Remover ${lastClosedIds.length} fechado${lastClosedIds.length !== 1 ? 's' : ''} da lista`;
+        removeClosedBtn.style.display = 'block';
+      } else {
+        removeClosedBtn.style.display = 'none';
+      }
+    }
 
     const ok  = fetched.filter(r=>r?.ok).length;
     const err = fetched.length - ok;
@@ -1703,15 +1728,64 @@
       // Contador de IDs
       panel.querySelector('#sqc-ids').addEventListener('input', updateIdsCount);
 
-      // Collapsibles
+      // Collapsibles + remover card individual
       panel.querySelector('#sqc-results-area').addEventListener('click', e => {
-        const btn = e.target.closest('.sqc-toggle');
-        if (!btn) return;
-        const content = panel.querySelector('#'+btn.dataset.target);
-        if (!content) return;
-        const open = content.classList.toggle('open');
-        btn.classList.toggle('open', open);
-        btn.textContent = (open?'▾ ':'▸ ') + btn.textContent.replace(/^[▸▾] /,'');
+        // Toggle collapsible
+        const toggleBtn = e.target.closest('.sqc-toggle');
+        if (toggleBtn) {
+          const content = panel.querySelector('#'+toggleBtn.dataset.target);
+          if (!content) return;
+          const open = content.classList.toggle('open');
+          toggleBtn.classList.toggle('open', open);
+          toggleBtn.textContent = (open?'▾ ':'▸ ') + toggleBtn.textContent.replace(/^[▸▾] /,'');
+          return;
+        }
+
+        // Remover chamado da lista
+        const removeBtn = e.target.closest('.sqc-remove-btn[data-remove-id]');
+        if (!removeBtn) return;
+        const ticketId = removeBtn.dataset.removeId;
+        if (!ticketId) return;
+        if (!confirm(`Remover o chamado #${ticketId} da lista?`)) return;
+
+        // Remove do textarea
+        const textarea = panel.querySelector('#sqc-ids');
+        const remaining = parseIds(textarea.value).filter(id => id !== ticketId);
+        textarea.value = remaining.join('\n');
+        updateIdsCount();
+
+        // Atualiza lista salva se houver uma ativa
+        if (activeListId) {
+          const list = lists.find(l => l.id === activeListId);
+          if (list) {
+            list.ids = remaining;
+            saveLists(lists);
+            refreshListSelect();
+          }
+        }
+
+        // Atualiza estado interno
+        const idx = lastIds.indexOf(ticketId);
+        if (idx !== -1) {
+          lastIds.splice(idx, 1);
+          lastResults.splice(idx, 1);
+          if (lastChanges) delete lastChanges[ticketId];
+        }
+        const cidx = lastClosedIds.indexOf(ticketId);
+        if (cidx !== -1) lastClosedIds.splice(cidx, 1);
+
+        // Atualiza botão bulk se existir
+        const bulkBtn = panel.querySelector('#sqc-btn-remove-closed');
+        if (bulkBtn) {
+          if (lastClosedIds.length > 0) {
+            bulkBtn.textContent = `🗑️ Remover ${lastClosedIds.length} encerrado${lastClosedIds.length !== 1 ? 's' : ''} da lista`;
+          } else {
+            bulkBtn.style.display = 'none';
+          }
+        }
+
+        renderResults();
+        renderSummary();
       });
 
       // Sort + filter
@@ -1739,6 +1813,48 @@
           const secs = Number(panel.querySelector('#sqc-autorefresh-interval').value) || 60;
           startAutoRefresh(secs);
         }
+      });
+
+      // Remover encerrados da lista
+      panel.querySelector('#sqc-btn-remove-closed').addEventListener('click', () => {
+        if (!lastClosedIds.length) return;
+        const n = lastClosedIds.length;
+        const msg = `Remover ${n} chamado${n !== 1 ? 's' : ''} encerrado${n !== 1 ? 's' : ''} da lista?\n\nIDs: ${lastClosedIds.join(', ')}`;
+        if (!confirm(msg)) return;
+
+        const closedSet = new Set(lastClosedIds);
+
+        // Atualiza textarea
+        const textarea = panel.querySelector('#sqc-ids');
+        const remaining = parseIds(textarea.value).filter(id => !closedSet.has(id));
+        textarea.value = remaining.join('\n');
+        updateIdsCount();
+
+        // Atualiza lista salva se houver uma ativa
+        if (activeListId) {
+          const list = lists.find(l => l.id === activeListId);
+          if (list) {
+            list.ids = remaining;
+            saveLists(lists);
+            refreshListSelect();
+          }
+        }
+
+        // Atualiza estado interno (lastIds / lastResults / lastChanges)
+        const kept = lastIds.map((id, i) => ({ id, i })).filter(({ id }) => !closedSet.has(id));
+        lastIds     = kept.map(x => x.id);
+        lastResults = kept.map(x => lastResults[x.i]);
+        if (lastChanges) {
+          const newChanges = {};
+          lastIds.forEach(id => { if (lastChanges[id]) newChanges[id] = lastChanges[id]; });
+          lastChanges = newChanges;
+        }
+        lastClosedIds = [];
+
+        // Esconde o botão e atualiza resultados
+        panel.querySelector('#sqc-btn-remove-closed').style.display = 'none';
+        renderResults();
+        renderSummary();
       });
 
       // Consultar
