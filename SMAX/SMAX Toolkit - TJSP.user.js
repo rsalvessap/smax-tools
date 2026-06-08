@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.20
+// @version      2.21
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8598,14 +8598,22 @@
         const tenantId = ApiClient.getTenantId() || '213963628';
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filter)}&layout=${encodeURIComponent(layout)}&size=1000&TENANTID=${tenantId}`;
         console.log('[SMAX ResponseHUD] GET', url);
-        const resp = await fetch(url, { credentials: 'include', headers: buildDefaultHeaders() });
+        // Build headers inline — buildDefaultHeaders() está no escopo de AttachmentService
+        const reqHeaders = { Accept: 'application/json, text/plain, */*', 'X-Requested-With': 'XMLHttpRequest' };
+        const xsrfMatch = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+        if (xsrfMatch) reqHeaders['X-XSRF-TOKEN'] = decodeURIComponent(xsrfMatch[1]);
+        const resp = await fetch(url, { credentials: 'include', headers: reqHeaders });
         if (!resp.ok) {
           const body = await resp.text().catch(() => '');
           console.error('[SMAX ResponseHUD] fetchTickets HTTP', resp.status, body);
           throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
         }
         const data = await resp.json();
+        // Log do body quando 0 entidades — ajuda a diagnosticar mudança de formato da API
         const entities = data?.entities || [];
+        if (!entities.length) {
+          console.warn('[SMAX ResponseHUD] entities vazio. Chaves do response:', Object.keys(data || {}), '| meta:', JSON.stringify(data?.meta || data?.metadata || '').slice(0, 200));
+        }
 
         allFetchedEntries = entities.map(e => {
           const p = e.properties || {};
