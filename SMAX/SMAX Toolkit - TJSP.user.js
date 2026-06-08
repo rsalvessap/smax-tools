@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.19
+// @version      2.20
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8598,7 +8598,7 @@
         const tenantId = ApiClient.getTenantId() || '213963628';
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filter)}&layout=${encodeURIComponent(layout)}&size=1000&TENANTID=${tenantId}`;
         console.log('[SMAX ResponseHUD] GET', url);
-        const resp = await fetch(url, { credentials: 'include' });
+        const resp = await fetch(url, { credentials: 'include', headers: buildDefaultHeaders() });
         if (!resp.ok) {
           const body = await resp.text().catch(() => '');
           console.error('[SMAX ResponseHUD] fetchTickets HTTP', resp.status, body);
@@ -9512,6 +9512,13 @@
         selectedPersonName = prefs.myPersonName || prefs.myPersonId;
         const displayEl = backdrop.querySelector('#smax-resp-person-display');
         if (displayEl) displayEl.textContent = selectedPersonName;
+      }
+      // Sempre exibe o painel de filtros ao abrir para o usuário poder selecionar equipes
+      const criteriaEl = backdrop.querySelector('#smax-resp-filter-criteria');
+      const toggleBtn  = backdrop.querySelector('#smax-resp-toggle-criteria');
+      if (criteriaEl && criteriaEl.classList.contains('collapsed')) {
+        criteriaEl.classList.remove('collapsed');
+        if (toggleBtn) { toggleBtn.textContent = '▲'; toggleBtn.title = 'Ocultar critérios'; }
       }
     };
 
