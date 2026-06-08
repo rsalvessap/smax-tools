@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.21
+// @version      2.22
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -9511,6 +9511,47 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
+    // Renderiza (ou re-renderiza) as pills de equipe — chamado no open() para garantir
+    // que as equipes do SharedConfig (carregado assincronamente) já estejam disponíveis
+    const renderTeamPills = () => {
+      if (!backdrop) return;
+      const teamFilterEl = backdrop.querySelector('#smax-resp-team-filters');
+      if (!teamFilterEl) return;
+      const teams = TeamsConfig.getTeams();
+      // Pré-seleciona todas as equipes na primeira abertura
+      if (selectedTeamIds.size === 0) teams.forEach(t => selectedTeamIds.add(t.id));
+      if (teams.length) {
+        teamFilterEl.innerHTML = teams.map(t => {
+          const active = selectedTeamIds.has(t.id);
+          const hasGSE = (t.gseRules && t.gseRules.some(r => r.id)) || (t.gseIds && t.gseIds.length > 0);
+          const srcHint = hasGSE ? '🔵' : '🟡';
+          const srcTitle = hasGSE ? 'Busca por GSE na API' : 'Busca via fila local (sem GSE IDs configurados)';
+          return `<button class="smax-resp-team-pill" data-team-id="${Utils.escapeHtml(t.id)}"
+            title="${Utils.escapeHtml(srcTitle)}"
+            style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.escapeHtml(t.name || t.id)}</span>
+            <span style="font-size:9px;opacity:.7;">${srcHint}</span>
+          </button>`;
+        }).join('');
+        teamFilterEl.querySelectorAll('.smax-resp-team-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            const id = pill.dataset.teamId;
+            if (selectedTeamIds.has(id)) selectedTeamIds.delete(id);
+            else selectedTeamIds.add(id);
+            const active = selectedTeamIds.has(id);
+            pill.style.border = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
+            pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
+            pill.style.color = active ? '#93c5fd' : '#9ca3af';
+            const dot = pill.querySelector('span');
+            if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+          });
+        });
+      } else {
+        teamFilterEl.innerHTML = '<div style="font-size:11px;color:#6b7280;">Nenhuma equipe configurada.</div>';
+      }
+    };
+
     const open = () => {
       if (!backdrop) return;
       DataRepository.ensurePeopleLoaded();
@@ -9521,7 +9562,10 @@
         const displayEl = backdrop.querySelector('#smax-resp-person-display');
         if (displayEl) displayEl.textContent = selectedPersonName;
       }
-      // Sempre exibe o painel de filtros ao abrir para o usuário poder selecionar equipes
+      // Re-renderiza pills de equipe toda vez que o HUD abre — SharedConfig pode ter
+      // carregado após o init() inicial e as equipes estariam ausentes
+      renderTeamPills();
+      // Sempre exibe o painel de filtros para o usuário poder selecionar equipes
       const criteriaEl = backdrop.querySelector('#smax-resp-filter-criteria');
       const toggleBtn  = backdrop.querySelector('#smax-resp-toggle-criteria');
       if (criteriaEl && criteriaEl.classList.contains('collapsed')) {
@@ -9765,43 +9809,7 @@
         }
       } catch {}
 
-      // Populate team pills
-      const teamFilterEl = backdrop.querySelector('#smax-resp-team-filters');
-      if (teamFilterEl) {
-        const teams = TeamsConfig.getTeams();
-        // Pre-select all teams on first open
-        if (selectedTeamIds.size === 0) teams.forEach(t => selectedTeamIds.add(t.id));
-        if (teams.length) {
-          teamFilterEl.innerHTML = teams.map(t => {
-            const active = selectedTeamIds.has(t.id);
-            const hasGSE = (t.gseRules && t.gseRules.some(r => r.id)) || (t.gseIds && t.gseIds.length > 0);
-            const srcHint = hasGSE ? '🔵' : '🟡';
-            const srcTitle = hasGSE ? 'Busca por GSE na API' : 'Busca via fila local (sem GSE IDs configurados)';
-            return `<button class="smax-resp-team-pill" data-team-id="${Utils.escapeHtml(t.id)}"
-              title="${Utils.escapeHtml(srcTitle)}"
-              style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
-              <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
-              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.escapeHtml(t.name || t.id)}</span>
-              <span style="font-size:9px;opacity:.7;">${srcHint}</span>
-            </button>`;
-          }).join('');
-          teamFilterEl.querySelectorAll('.smax-resp-team-pill').forEach(pill => {
-            pill.addEventListener('click', () => {
-              const id = pill.dataset.teamId;
-              if (selectedTeamIds.has(id)) selectedTeamIds.delete(id);
-              else selectedTeamIds.add(id);
-              const active = selectedTeamIds.has(id);
-              pill.style.border = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
-              pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
-              pill.style.color = active ? '#93c5fd' : '#9ca3af';
-              const dot = pill.querySelector('span');
-              if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
-            });
-          });
-        } else {
-          teamFilterEl.innerHTML = '<div style="font-size:11px;color:#6b7280;">Nenhuma equipe configurada.</div>';
-        }
-      }
+      // Team pills são renderizadas no open() para garantir que SharedConfig já carregou
 
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
