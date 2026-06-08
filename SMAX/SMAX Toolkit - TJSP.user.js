@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.15
+// @version      2.16
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8586,7 +8586,9 @@
 
       // Excluir fechados pelo PhaseId (como o SMAX faz internamente) e pelo Status Operacional
       // "or StatusSCCDSMAX_c=null" inclui chamados sem valor no campo (maioria dos abertos)
-      const filter = `(Active='true' and (PhaseId!='Close' and PhaseId!='Accept' or PhaseId=null) and ${gseFilter} and (StatusSCCDSMAX_c!='Fechado_c' or StatusSCCDSMAX_c=null))`;
+      // Nota: Active='true' (com aspas) quebrou silenciosamente após atualização da plataforma —
+      // PhaseId já cobre a distinção aberto/fechado, então a condição foi removida.
+      const filter = `((PhaseId!='Close' and PhaseId!='Accept' or PhaseId=null) and ${gseFilter} and (StatusSCCDSMAX_c!='Fechado_c' or StatusSCCDSMAX_c=null))`;
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
 
       // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
