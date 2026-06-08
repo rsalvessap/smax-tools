@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.23
+// @version      2.24
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -8582,37 +8582,41 @@
       // Campo correto para filtrar por grupo é AssignedToGroup (ExpertGroup só funciona em updates)
       // Nota: o parser do SMAX exige espaços ao redor dos operadores (= != and or) — sem espaços
       // a API retorna 0 resultados silenciosamente desde a atualização da plataforma.
+      // Filtro sem espaços nos operadores — sintaxe do v1.99 que funcionava
       const gseFilter = gseIds.length === 1
-        ? `AssignedToGroup = '${gseIds[0]}'`
-        : `(${gseIds.map(id => `AssignedToGroup = '${id}'`).join(' or ')})`;
+        ? `AssignedToGroup='${gseIds[0]}'`
+        : `(${gseIds.map(id => `AssignedToGroup='${id}'`).join(' or ')})`;
 
-      // Formato idêntico ao filtro nativo capturado do SMAX (com espaços nos operadores)
-      // StatusSCCDSMAX_c removido — não faz parte do filtro nativo e causava 0 resultados na API
-      const filter = `(Active = 'true' and (PhaseId != 'Close' and PhaseId != 'Accept' or PhaseId = null) and ${gseFilter})`;
-      console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 200));
+      const filter = `(Active='true' and (PhaseId!='Close' and PhaseId!='Accept' or PhaseId=null) and ${gseFilter} and (StatusSCCDSMAX_c!='Fechado_c' or StatusSCCDSMAX_c=null))`;
+      console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 300));
 
-      // Não inclui Description/Solution na listagem — carregados sob demanda em loadTicket
-      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,RequestedForDisplayLabel,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
+      // Layout do v1.99 — sem RequestedForDisplayLabel (adicionado em v2.12, pode causar 0 resultados)
+      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
 
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filter)}&layout=${encodeURIComponent(layout)}&size=1000&TENANTID=${tenantId}`;
         console.log('[SMAX ResponseHUD] GET', url);
-        // Build headers inline — buildDefaultHeaders() está no escopo de AttachmentService
-        const reqHeaders = { Accept: 'application/json, text/plain, */*', 'X-Requested-With': 'XMLHttpRequest' };
-        const xsrfMatch = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
-        if (xsrfMatch) reqHeaders['X-XSRF-TOKEN'] = decodeURIComponent(xsrfMatch[1]);
-        const resp = await fetch(url, { credentials: 'include', headers: reqHeaders });
+        const resp = await fetch(url, { credentials: 'include' });
         if (!resp.ok) {
-          const body = await resp.text().catch(() => '');
-          console.error('[SMAX ResponseHUD] fetchTickets HTTP', resp.status, body);
-          throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+          const errBody = await resp.text().catch(() => '');
+          console.error('[SMAX ResponseHUD] fetchTickets HTTP', resp.status, errBody.slice(0, 500));
+          throw new Error(`HTTP ${resp.status}: ${errBody.slice(0, 200)}`);
         }
-        const data = await resp.json();
-        // Log do body quando 0 entidades — ajuda a diagnosticar mudança de formato da API
+        const rawText = await resp.text();
+        let data;
+        try { data = JSON.parse(rawText); } catch (pe) {
+          console.error('[SMAX ResponseHUD] JSON parse error:', pe.message, '| body:', rawText.slice(0, 500));
+          throw pe;
+        }
         const entities = data?.entities || [];
         if (!entities.length) {
-          console.warn('[SMAX ResponseHUD] entities vazio. Chaves do response:', Object.keys(data || {}), '| meta:', JSON.stringify(data?.meta || data?.metadata || '').slice(0, 200));
+          // Log diagnóstico completo para identificar mudança de formato da API
+          console.warn('[SMAX ResponseHUD] DIAGNÓSTICO entities=0:',
+            '\n  chaves do response:', Object.keys(data || {}),
+            '\n  meta:', JSON.stringify(data?.meta || data?.metadata || {}),
+            '\n  body (500 chars):', rawText.slice(0, 500)
+          );
         }
 
         allFetchedEntries = entities.map(e => {
