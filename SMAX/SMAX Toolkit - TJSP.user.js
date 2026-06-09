@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.26
+// @version      2.27
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.26';
+  const SMAX_TOOLKIT_VERSION = '2.27';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -773,6 +773,11 @@
     .smax-resp-new-disc-footer { display:flex; align-items:center; gap:6px; }
     #smax-resp-new-disc-status { font-size:10px; color:#6b7280; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #smax-resp-new-disc-privacy { background:rgba(15,23,42,.6); border:1px solid rgba(255,255,255,.1); border-radius:5px; color:#9ca3af; font-size:10px; padding:3px 5px; outline:none; cursor:pointer; flex-shrink:0; }
+    #smax-resp-new-disc-to, #smax-resp-new-disc-purpose { background:rgba(15,23,42,.8); border:1px solid rgba(255,255,255,.12); border-radius:5px; color:#d1d5db; font-size:10px; padding:3px 6px; outline:none; cursor:pointer; flex-shrink:0; appearance:none; -webkit-appearance:none; }
+    #smax-resp-new-disc-to:focus, #smax-resp-new-disc-purpose:focus { border-color:rgba(99,102,241,.5); }
+    #smax-resp-new-disc-to option, #smax-resp-new-disc-purpose option { background:#1e293b; color:#e2e8f0; }
+    body[data-smax-theme="light"] #smax-resp-new-disc-to, body[data-smax-theme="light"] #smax-resp-new-disc-purpose { background:#fff; border-color:rgba(0,0,0,.15); color:#475569; }
+    body[data-smax-theme="light"] #smax-resp-new-disc-to option, body[data-smax-theme="light"] #smax-resp-new-disc-purpose option { background:#fff; color:#1e293b; }
     #smax-resp-new-disc-send { flex-shrink:0; padding:4px 11px; border:none; border-radius:5px; background:linear-gradient(135deg,#4f46e5,#4338ca); color:#fff; font-size:11px; font-weight:600; cursor:pointer; transition:opacity .12s; }
     #smax-resp-new-disc-send:disabled { opacity:.45; cursor:default; }
     body[data-smax-theme="light"] #smax-resp-new-disc-panel { border-top-color:rgba(0,0,0,.08); }
@@ -9759,16 +9764,23 @@
                     <span id="smax-resp-new-disc-status"></span>
                     <select id="smax-resp-new-disc-to" title="Para">
                       <option value="Agent">→ Agente</option>
-                      <option value="EndUser">→ Usuário</option>
+                      <option value="User">→ Usuário</option>
+                      <option value="Vendor">→ Fornecedor</option>
+                      <option value="ExternalServiceDesk">→ Central Externa</option>
+                      <option value="Stakeholder">→ Participantes</option>
                     </select>
                     <select id="smax-resp-new-disc-purpose" title="Objetivo">
                       <option value="StatusUpdate">Atualização de status</option>
-                      <option value="AgentResponse">Resposta do agente</option>
                       <option value="FollowUp">Acompanhamento</option>
                       <option value="Resolution">Resolução</option>
-                      <option value="Workaround">Solução temporária</option>
-                      <option value="Information">Informação adicional</option>
-                      <option value="CommunicationLog">Registro de comunicação</option>
+                      <option value="ResolutionActivity">Atividade de resolução</option>
+                      <option value="RequestMoreInformation">Solicitar mais informações</option>
+                      <option value="ProvideInformation">Fornecer informações</option>
+                      <option value="EndUserComment">Comentário do usuário</option>
+                      <option value="Diagnosis">Diagnóstico</option>
+                      <option value="SolucaoContorno_c">Solução de Contorno</option>
+                      <option value="SCCDComment_c">Comentário para SCCD</option>
+                      <option value="Fornecedor_c">Comentário para Fornecedor</option>
                     </select>
                     <button id="smax-resp-new-disc-send" type="button">💬 Enviar</button>
                   </div>
@@ -10302,7 +10314,7 @@
 
           const commentTo = backdrop.querySelector('#smax-resp-new-disc-to')?.value || 'Agent';
           const purposeCode = backdrop.querySelector('#smax-resp-new-disc-purpose')?.value || 'StatusUpdate';
-          const privacyRaw = commentTo === 'EndUser' ? 'PUBLIC' : 'INTERNAL';
+          const privacyRaw = commentTo === 'User' ? 'PUBLIC' : 'INTERNAL';
           const targets = selectedTicketIds.size > 0 ? [...selectedTicketIds] : (activeTicketId ? [activeTicketId] : []);
           if (!targets.length) { setDiscStatus('Nenhum chamado selecionado.', '#fca5a5'); return; }
           if (!prefs.enableRealWrites) { setDiscStatus('⚠️ Escritas reais desativadas.', '#facc15'); return; }
