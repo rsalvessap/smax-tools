@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.27
+// @version      2.28
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.27';
+  const SMAX_TOOLKIT_VERSION = '2.28';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -63,7 +63,6 @@
       radarOn: true,
       nameGroups: {},
       ausentes: [],
-      nameColors: {},
       enableRealWrites: true,
       defaultGlobalChangeId: '',
       personalFinalsRaw: '',
@@ -136,7 +135,6 @@
   const PersonalStore = (() => {
     const STORAGE_KEY = 'smax_personal_prefs';
     const defaults = {
-      myColors:    {},  // { "NOME NORMALIZADO": { bg: "#hex", fg: "#hex" } }
       myDestaque:  [],  // ["NOME NORMALIZADO", ...] — usuários em destaque (pessoal)
       themeMode:   'dark', // 'dark' | 'light'
     };
@@ -514,8 +512,6 @@
     body[data-smax-theme="light"] .smax-triage-queue-item .tqi-id { color:#135bec; }
     body[data-smax-theme="light"] .smax-triage-queue-item .tqi-subject { color:#1e293b; }
     body[data-smax-theme="light"] .smax-triage-queue-item .tqi-meta { color:#64748b; }
-    body[data-smax-theme="light"] #smax-ticket-info-bar { background:rgba(241,245,249,.9); border-bottom:1px solid rgba(0,0,0,.08); color:#334155; }
-    body[data-smax-theme="light"] #smax-ticket-info-bar span { color:#475569; }
     body[data-smax-theme="light"] .smax-triage-field-label { color:#475569; }
     body[data-smax-theme="light"] .smax-triage-field-value { color:#0f172a; }
     body[data-smax-theme="light"] .smax-triage-divider { border-color:rgba(0,0,0,.08); }
@@ -555,11 +551,6 @@
     body[data-smax-theme="light"] #smax-resp-status-msg { color:#475569; }
     body[data-smax-theme="light"] #smax-resp-no-ticket { color:#94a3b8; }
 
-    .slick-cell.tmx-namecell { font-weight:700 !important; transition: box-shadow .15s ease; }
-    .slick-cell.tmx-namecell a { color: inherit !important; }
-    .slick-cell.tmx-namecell:focus-within { outline: 2px solid rgba(0,0,0,.25); outline-offset: 2px; }
-    .slick-cell.tmx-namecell:hover { box-shadow: 0 0 0 2px rgba(0,0,0,.08) inset; }
-
     .comment-items { height: auto !important; max-height: none !important; }
 
     .smax-absent-wrapper { display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:12px; white-space:nowrap; }
@@ -569,9 +560,6 @@
 
     #smax-settings-btn { width:50px; height:50px; border-radius:50%; border:none; background:#0f172a; color:#f8fafc; font-size:26px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,.35); cursor:pointer; }
     #smax-settings-btn:hover { background:#1f2937; }
-    #smax-refresh-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 999998; display: none; align-items: center; justify-content: center; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    #smax-refresh-overlay-inner { width:70px; height:70px; border-radius:50%; background:#34c759; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px rgba(255,255,255,.35), 0 0 16px rgba(52,199,89,.8); }
-    #smax-refresh-now { width:46px; height:46px; border-radius:50%; border:none; background:transparent; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:26px; }
 
     #smax-triage-start-btn { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:999999; padding:12px 28px; border-radius:999px; border:none; cursor:pointer; font-size:16px; font-weight:600; background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%); color:#fff; box-shadow:0 8px 24px rgba(59,130,246,.4),0 0 0 1px rgba(255,255,255,.1) inset; transition:transform .15s ease, box-shadow .15s ease; }
     #smax-triage-start-btn:hover { transform:translateX(-50%) translateY(-2px); box-shadow:0 12px 32px rgba(59,130,246,.5),0 0 0 1px rgba(255,255,255,.15) inset; }
@@ -1055,149 +1043,6 @@
       color: #1e293b !important;
     }
 
-    /* ── Ticket Info Bar ── */
-    #smax-ticket-info-bar {
-      width: 100%;
-      background: #0f172a;
-      border-bottom: 1px solid rgba(56,189,248,.25);
-      font-family: "Segoe UI", system-ui, sans-serif;
-      font-size: 12px;
-      z-index: 9000;
-    }
-    body[data-smax-theme="light"] #smax-ticket-info-bar {
-      background: #1e293b;
-    }
-    .smax-ib-inner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 7px 16px;
-    }
-    .smax-ib-fields {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px 0;
-    }
-    .smax-ib-field {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 0 10px;
-    }
-    .smax-ib-label { color: #64748b; white-space: nowrap; }
-    .smax-ib-val   { color: #e2e8f0; font-weight: 500; }
-    .smax-ib-divider { color: #334155; padding: 0 2px; user-select: none; }
-    .smax-ib-att-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 2px 8px;
-      margin: 0 3px;
-      border-radius: 999px;
-      border: 1px solid rgba(56,189,248,.35);
-      background: rgba(56,189,248,.08);
-      color: #38bdf8;
-      font-size: 11px;
-      text-decoration: none;
-      cursor: pointer;
-      transition: background .15s, color .15s;
-      max-width: 160px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .smax-ib-att-chip:hover { background: #38bdf8; color: #0f172a; }
-    .smax-ib-close {
-      border: none;
-      background: none;
-      color: #475569;
-      cursor: pointer;
-      font-size: 14px;
-      padding: 2px 4px;
-      line-height: 1;
-      flex-shrink: 0;
-      transition: color .15s;
-    }
-    .smax-ib-close:hover { color: #94a3b8; }
-
-    /* ── Contextual Solution / Discussion Bank ── */
-    .smax-ctx-bank-bar {
-      width: 100%;
-      margin-bottom: 8px;
-      padding: 6px 10px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-sizing: border-box;
-      background: var(--sp-surface-2, #f1f5f9);
-      border: 1px solid var(--sp-border, rgba(0,0,0,.1));
-      border-radius: 6px;
-      font-family: "Segoe UI", system-ui, sans-serif;
-      font-size: 12px;
-    }
-    .smax-ctx-bank-label {
-      color: var(--sp-text-muted, #475569);
-      white-space: nowrap;
-      font-weight: 600;
-    }
-    .smax-ctx-bank-select {
-      flex: 1;
-      min-width: 160px;
-      max-width: 320px;
-      padding: 4px 8px;
-      border-radius: 5px;
-      border: 1px solid var(--sp-input-border, #cbd5e1);
-      background: var(--sp-input-bg, #fff);
-      color: var(--sp-input-text, #1e293b);
-      font-size: 12px;
-      cursor: pointer;
-      height: 28px;
-      box-sizing: border-box;
-    }
-    .smax-ctx-bank-btn {
-      padding: 4px 12px;
-      border-radius: 5px;
-      border: 1px solid var(--sp-border, rgba(0,0,0,.1));
-      background: var(--sp-surface, #fff);
-      color: var(--sp-text-muted, #475569);
-      font-size: 11px;
-      cursor: pointer;
-      white-space: nowrap;
-      height: 28px;
-      line-height: 1;
-    }
-    .smax-ctx-bank-btn:hover { background: var(--sp-primary-hover, rgba(19,91,236,.15)); color: var(--sp-primary, #135bec); }
-
-    /* ── Zen Mode ── */
-    body.smax-zen-active div[id*="Fabricante_c_container"],
-    body.smax-zen-active div[id*="TicketFornecedor_c_container"],
-    body.smax-zen-active div[id*="TicketAuxiliar_c_container"],
-    body.smax-zen-active div[id*="DataEnvioFornecedor_c_container"],
-    body.smax-zen-active div[id*="Garantia_c_container"],
-    body.smax-zen-active div[id*="DataAgendamento_c_container"],
-    body.smax-zen-active div[id*="PreferredContactMethod_container"],
-    body.smax-zen-active div[data-aid="related-knowledge-preview"],
-    body.smax-zen-active div[id*="RegisteredForServiceComponent_container"],
-    body.smax-zen-active div[id*="SubscriptionActionType_container"],
-    body.smax-zen-active div[id*="TipoAtendimento_c_container"],
-    body.smax-zen-active div[data-aid="tab-panel-nav-task-plan"],
-    body.smax-zen-active div[data-aid="tab-panel-nav-slts"],
-    body.smax-zen-active div[data-aid="tab-panel-nav-involved-cis"],
-    body.smax-zen-active div[data-aid="tab-panel-nav-related-news"],
-    body.smax-zen-active div[data-aid="tab-panel-nav-reservation"] { display: none !important; }
-
-    /* ── Radar badge ── */
-    #smax-radar-badge { position:fixed; top:10px; right:130px; z-index:999998; background:#ef4444; color:#fff; font-size:11px; font-weight:700; min-width:22px; padding:3px 7px; border-radius:999px; cursor:pointer; display:none; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(239,68,68,.5); font-family:system-ui,sans-serif; }
-    #smax-radar-badge:hover { background:#dc2626; }
-    #smax-radar-dropdown { position:fixed; top:36px; right:80px; z-index:999999; background:#0f172a; border:1px solid rgba(255,255,255,.1); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.5); padding:10px; min-width:240px; max-height:360px; overflow-y:auto; display:none; font-family:system-ui,sans-serif; }
-    .smax-radar-item { padding:7px 10px; border-radius:6px; font-size:12px; color:#e2e8f0; display:flex; align-items:center; gap:8px; cursor:pointer; }
-    .smax-radar-item:hover { background:rgba(255,255,255,.07); }
-    .smax-radar-pill { font-size:10px; font-weight:700; padding:2px 6px; border-radius:999px; white-space:nowrap; }
-    .smax-radar-pill.rejected { background:rgba(239,68,68,.2); color:#fca5a5; border:1px solid rgba(239,68,68,.4); }
-    .smax-radar-pill.accept   { background:rgba(34,197,94,.2);  color:#86efac; border:1px solid rgba(34,197,94,.4); }
-
     /* ── Templates ── */
     #smax-tpl-btn { position:fixed; right:16px; bottom:80px; z-index:999998; width:46px; height:46px; border-radius:50%; border:none; background:#0f172a; color:#f8fafc; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.4); cursor:pointer; transition:background .15s; }
     #smax-tpl-btn:hover { background:#1e293b; }
@@ -1228,12 +1073,6 @@
     .smax-tpl-footer { display:flex; gap:8px; padding:10px 12px; border-top:1px solid rgba(255,255,255,.08); justify-content:flex-end; }
     .smax-tpl-footer button { font-size:12px; padding:7px 16px; border-radius:6px; cursor:pointer; }
     .smax-tpl-close-btn { background:rgba(255,255,255,.06); color:#94a3b8; border:1px solid rgba(255,255,255,.1); }
-
-    /* ── Botões de resolução no topo ── */
-    .tmx-top-actions { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-    .tmx-lifecycle-menu { position:fixed; z-index:999999; background:#0f172a; border:1px solid rgba(255,255,255,.12); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.5); padding:4px 0; min-width:180px; display:none; }
-    .tmx-lifecycle-menu-item { padding:8px 14px; cursor:pointer; font-size:13px; color:#e2e8f0; }
-    .tmx-lifecycle-menu-item:hover { background:rgba(255,255,255,.07); }
   `);
 
 
@@ -1950,126 +1789,6 @@
     const reload = () => { cachedTeams = null; };
 
     return { getTeams, getTeamById, getWorkersForTeam, suggestTeam, suggestWorker, reload, setSharedTeams };
-  })();
-
-  /* =========================================================
-   * Color registry for owner badges (Deterministic Team-Based)
-   * =======================================================*/
-  const ColorRegistry = (() => {
-    // Aesthetic color palettes - each team gets one
-    // REDESIGNED: Wider hue ranges for more variety, lower saturation for softer look
-    const TEAM_PALETTES = [
-      // Team 0: Ocean Blues (wide range from cyan to deep blue)
-      { name: 'ocean', hueStart: 185, hueEnd: 245, saturation: 40, lightnessStart: 40, lightnessEnd: 65 },
-      // Team 1: Earth Greens (olive to emerald)
-      { name: 'forest', hueStart: 80, hueEnd: 160, saturation: 35, lightnessStart: 35, lightnessEnd: 60 },
-      // Team 2: Warm Spectrum (peach to terracotta)
-      { name: 'warm', hueStart: 5, hueEnd: 45, saturation: 45, lightnessStart: 45, lightnessEnd: 68 },
-      // Team 3: Cool Purples (lavender to plum)
-      { name: 'purple', hueStart: 250, hueEnd: 320, saturation: 35, lightnessStart: 42, lightnessEnd: 65 },
-      // Team 4: Aqua Range (mint to teal)
-      { name: 'aqua', hueStart: 155, hueEnd: 200, saturation: 38, lightnessStart: 38, lightnessEnd: 62 },
-      // Team 5: Berry Tones (rose to magenta)
-      { name: 'berry', hueStart: 320, hueEnd: 360, saturation: 40, lightnessStart: 45, lightnessEnd: 65 },
-      // Team 6: Neutral Blues (steel to slate)
-      { name: 'slate', hueStart: 200, hueEnd: 230, saturation: 18, lightnessStart: 40, lightnessEnd: 62 },
-      // Team 7: Golden Range (sand to amber)
-      { name: 'golden', hueStart: 35, hueEnd: 80, saturation: 42, lightnessStart: 48, lightnessEnd: 68 }
-    ];
-
-    // Cache for computed colors
-    const colorCache = new Map();
-
-    /**
-     * Generate a color based on team index and last 2 digits of ticket ID
-     * @param {number} teamIndex - Index of the team (0-based)
-     * @param {number} lastTwoDigits - Last 2 digits of ticket ID (0-99)
-     * @returns {{bg: string, fg: string}}
-     */
-    const generateForTeamAndDigits = (teamIndex, lastTwoDigits) => {
-      // "All colors", forget differentiating teams
-      // Map 0-99 to 0-360 degrees for maximum variety
-      const t = lastTwoDigits / 99;
-
-      // Use a pseudo-random spread to avoid adjacent numbers having adjacent colors
-      // Multiply by a prime number (e.g., 137 degrees - golden angle approx) to scatter colors
-      const hue = (lastTwoDigits * 137.5) % 360;
-
-      // High saturation for vibrancy (65-85%)
-      const saturation = 70 + (Math.sin(t * Math.PI * 4) * 10);
-
-      // Balanced lightness (45-60%) for readability
-      const lightness = 50 + (Math.cos(t * Math.PI * 2) * 8);
-
-      const bg = `hsl(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`;
-      // Always white text for these vibrant dark/mid colors
-      const fg = '#ffffff';
-
-      return { bg, fg };
-    };
-
-    /**
-     * Get the team index from TeamsConfig
-     * @param {string} teamId - Team ID
-     * @returns {number} Team index (0-based)
-     */
-    const getTeamIndex = (teamId) => {
-      if (!teamId) return 0;
-      const teams = TeamsConfig.getTeams();
-      const idx = teams.findIndex(t => t.id === teamId);
-      return idx >= 0 ? idx : 0;
-    };
-
-    /**
-     * Get deterministic color for a ticket based on team and ID
-     * @param {Object} options - Color options
-     * @param {string} options.teamId - Team ID
-     * @param {string|number} options.ticketId - Ticket ID (will extract last 2 digits)
-     * @returns {{bg: string, fg: string}}
-     */
-    const getForTicket = ({ teamId, ticketId }) => {
-      // Extract last 2 digits from ticket ID
-      const idStr = String(ticketId || '').replace(/\D/g, '');
-      const lastTwo = idStr.length >= 2 ? parseInt(idStr.slice(-2), 10) : 0;
-      const teamIndex = getTeamIndex(teamId);
-
-      const cacheKey = `${teamIndex}-${lastTwo}`;
-      if (colorCache.has(cacheKey)) return colorCache.get(cacheKey);
-
-      const color = generateForTeamAndDigits(teamIndex, lastTwo);
-      colorCache.set(cacheKey, color);
-      return color;
-    };
-
-    /**
-     * Legacy fallback: Get color by name (hash-based)
-     * Used when team/ticket info is not available
-     * @param {string} name - Worker/owner name
-     * @returns {{bg: string, fg: string}}
-     */
-    const get = (name) => {
-      if (!name) return { bg: '#374151', fg: '#fff' };
-
-      // Cor pessoal definida pelo usuário tem prioridade
-      const normalized = Utils.normalizeText(name);
-      if (personal.myColors[normalized]) return personal.myColors[normalized];
-
-      // Legacy hash-based generation for backwards compatibility
-      let hash = 0;
-      for (let i = 0; i < name.length; i += 1) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      const hue = Math.abs(hash % 360);
-      const saturation = 45 + (Math.abs(hash >> 8) % 30);
-      const lightness = 50 + (Math.abs(hash >> 16) % 20);
-      const bg = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-      const fg = lightness > 60 ? '#000' : '#fff';
-      return { bg, fg };
-    };
-
-    const clearCache = () => colorCache.clear();
-
-    return { get, getForTicket, clearCache };
   })();
 
   /* =========================================================
@@ -2914,45 +2633,6 @@
   })();
 
   /* =========================================================
-   * Distribution (digits -> owner)
-   * =======================================================*/
-  /* =========================================================
-   * Refresh overlay helper
-   * =======================================================*/
-
-  /* =========================================================
-   * Refresh overlay helper
-   * =======================================================*/
-  const RefreshOverlay = (() => {
-    let overlay;
-    const ensureOverlay = () => {
-      if (overlay) return overlay;
-      overlay = document.createElement('div');
-      overlay.id = 'smax-refresh-overlay';
-      overlay.innerHTML = `
-        <div id="smax-refresh-overlay-inner">
-          <button id="smax-refresh-now" title="Atualizar página">&#x21bb;</button>
-        </div>
-      `;
-      document.body.appendChild(overlay);
-      const btn = overlay.querySelector('#smax-refresh-now');
-      if (btn) {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          window.location.reload();
-        });
-      }
-      return overlay;
-    };
-
-    const show = () => {
-      ensureOverlay().style.display = 'flex';
-    };
-
-    return { show };
-  })();
-
-  /* =========================================================
    * Network patch (intercept SMAX payloads)
    * =======================================================*/
   const Network = (() => {
@@ -3664,115 +3344,6 @@
     return { fetchList, preview };
   })();
 
-  /* =========================================================
-   * Name badges
-   * =======================================================*/
-  const NameBadges = (() => {
-    const processed = new WeakSet();
-    const NAME_MARK_ATTR = 'adMarcado';
-
-    const pickAllLinks = () => {
-      const sel = new Set();
-      const viewport = Utils.getGridViewport();
-      if (!viewport) return [];
-      ['a.entity-link-id', '.slick-row a'].forEach((selector) => {
-        viewport.querySelectorAll(selector).forEach((anchor) => sel.add(anchor));
-      });
-      return Array.from(sel);
-    };
-
-    const apply = () => {
-      if (!prefs.nameBadgesOn) return;
-
-      // Locate columns
-      let gseColIndex = -1;
-      let descColIndex = -1;
-      let subjectColIndex = -1;
-
-      const headers = document.querySelectorAll('.slick-header-column');
-      headers.forEach((col, idx) => {
-        const title = (col.getAttribute('title') || col.textContent || '').trim().toUpperCase();
-        if (title.includes('GRUPO DE ATRIBUI') || title.includes('ASSIGNMENT GROUP') || title.includes('GRUPO')) {
-          gseColIndex = idx;
-        } else if (title.includes('DESCRI')) {
-          descColIndex = idx;
-        } else if (title.includes('ASSUNTO') || title.includes('TÍTULO') || title.includes('TITULO') || title.includes('SUBJECT')) {
-          subjectColIndex = idx;
-        }
-      });
-
-      pickAllLinks().forEach((link) => {
-        if (!link || processed.has(link)) return;
-
-        const cell = link.closest('.slick-cell');
-        if (!cell) return;
-        const row = cell.parentElement;
-        if (!row) return;
-
-        processed.add(link);
-
-        const label = (link.textContent || '').trim();
-
-        let gseName = '';
-        let descriptionText = '';
-        let subjectText = '';
-
-        const cells = row.querySelectorAll('.slick-cell');
-        if (gseColIndex >= 0 && cells[gseColIndex]) gseName = (cells[gseColIndex].textContent || '').trim();
-        if (descColIndex >= 0 && cells[descColIndex]) descriptionText = (cells[descColIndex].textContent || '').trim();
-        if (subjectColIndex >= 0 && cells[subjectColIndex]) subjectText = (cells[subjectColIndex].textContent || '').trim();
-
-        // Resolve Team (GSE First)
-        const team = TeamsConfig.suggestTeam({
-          assignmentGroupName: gseName,
-          descriptionText,
-          subjectText
-        });
-
-        // Resolve Worker
-        const worker = TeamsConfig.suggestWorker(team, label);
-        const owner = worker ? worker.name : null;
-
-        // Get deterministic color based on owner name (same name = same color everywhere)
-        const ownerColor = owner ? ColorRegistry.get(owner) : null;
-
-        if (cell) {
-          cell.classList.add('tmx-namecell');
-          if (owner && ownerColor) {
-            cell.style.background = ownerColor.bg;
-            cell.style.color = ownerColor.fg;
-            cell.querySelectorAll('a').forEach((a) => { a.style.color = 'inherit'; });
-          } else {
-            cell.style.background = '#d32f2f';
-            cell.style.color = '#fff';
-            cell.querySelectorAll('a').forEach((a) => { a.style.color = 'inherit'; });
-          }
-        }
-
-        if (!link.dataset[NAME_MARK_ATTR]) {
-          const tag = document.createElement('span');
-          tag.style.marginLeft = '6px';
-          tag.style.fontWeight = '600';
-          tag.style.padding = '0 4px';
-          tag.style.borderRadius = '4px';
-          if (owner && ownerColor) {
-            tag.textContent = ` ${owner}`;
-            tag.style.background = ownerColor.bg;
-            tag.style.color = ownerColor.fg;
-          } else {
-            tag.textContent = ' SEM DONO';
-            tag.style.background = '#fff';
-            tag.style.color = '#d32f2f';
-            tag.style.border = '2px solid #d32f2f';
-          }
-          link.insertAdjacentElement('afterend', tag);
-          link.dataset[NAME_MARK_ATTR] = '1';
-        }
-      });
-    };
-
-    return { apply };
-  })();
 
   /* =========================================================
    * Settings panel
@@ -3807,7 +3378,6 @@
       prefs.teamsConfigRaw = JSON.stringify(currentTeams.filter(t => !t._shared), null, 2);
       savePrefs();
       TeamsConfig.reload();
-      RefreshOverlay.show();
     };
 
     const renderHeader = () => {
@@ -3915,21 +3485,10 @@
 
       const workersHtml = (team.workers || []).map((w, idx) => {
         const normName = Utils.normalizeText(w.name || '');
-        const myColor  = personal.myColors[normName] || {};
-        const bgVal    = myColor.bg || '#1e293b';
-        const fgVal    = myColor.fg || '#f8fafc';
         return `
         <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:8px;border-radius:8px;flex-wrap:wrap;">
           <input type="text" class="smax-worker-name" data-idx="${idx}" value="${Utils.escapeHtml(w.name || '')}" style="flex:1;min-width:120px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Nome do Responsável">
           <input type="text" class="smax-worker-digits" data-idx="${idx}" value="${Utils.escapeHtml(w.digits || '')}" style="width:80px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Dígitos (ex: 0-9)">
-          <div title="Cor de fundo (pessoal)" style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-            <span style="font-size:9px;color:#64748b;">Fundo</span>
-            <input type="color" class="smax-worker-color-bg" data-idx="${idx}" value="${Utils.escapeHtml(bgVal.startsWith('hsl') ? '#1e293b' : bgVal)}" style="width:28px;height:24px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none;">
-          </div>
-          <div title="Cor do texto (pessoal)" style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-            <span style="font-size:9px;color:#64748b;">Texto</span>
-            <input type="color" class="smax-worker-color-fg" data-idx="${idx}" value="${Utils.escapeHtml(fgVal.startsWith('hsl') ? '#ffffff' : fgVal)}" style="width:28px;height:24px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none;">
-          </div>
           <div class="smax-worker-absent-wrapper" style="display:flex;align-items:center;cursor:pointer;user-select:none;">
              <input type="checkbox" class="smax-worker-absent" data-idx="${idx}" ${w.isAbsent ? 'checked' : ''} style="display:none;">
              <div class="smax-absent-fake" style="width:14px;height:14px;border:1px solid ${w.isAbsent ? '#d32f2f' : '#64748b'};margin-right:4px;background:${w.isAbsent ? '#d32f2f' : 'transparent'};border-radius:2px;display:flex;align-items:center;justify-content:center;"></div>
@@ -4346,22 +3905,9 @@
         // Existing deletes
         container.querySelectorAll('.smax-worker-del-btn').forEach(b => b.addEventListener('click', e => e.target.closest('div').remove()));
 
-        // Color pickers — salvos imediatamente em PersonalStore (não compartilhado)
-        const syncColor = (nameInput, bgInput, fgInput) => {
-          const name = Utils.normalizeText((nameInput?.value || '').trim());
-          if (!name) return;
-          personal.myColors[name] = { bg: bgInput.value, fg: fgInput.value };
-          savePersonal();
-          ColorRegistry.clearCache();
-        };
         container.querySelectorAll('.smax-worker-color-bg, .smax-worker-color-fg').forEach(input => {
           input.addEventListener('change', () => {
-            const idx = input.dataset.idx;
-            const row = input.closest('div[style]');
-            const nameInput   = row?.querySelector(`.smax-worker-name[data-idx="${idx}"]`);
-            const bgInput     = row?.querySelector(`.smax-worker-color-bg[data-idx="${idx}"]`);
-            const fgInput     = row?.querySelector(`.smax-worker-color-fg[data-idx="${idx}"]`);
-            if (nameInput && bgInput && fgInput) syncColor(nameInput, bgInput, fgInput);
+            // color pickers removed — no-op
           });
         });
       }
@@ -4371,7 +3917,7 @@
     const CONFIG_KEYS = [
       'nameBadgesOn', 'collapseOn', 'enlargeCommentsOn', 'flagSkullOn',
       'zenModeOn', 'radarOn',
-      'nameGroups', 'ausentes', 'nameColors', 'enableRealWrites',
+      'nameGroups', 'ausentes', 'enableRealWrites',
       'defaultGlobalChangeId', 'personalFinalsRaw', 'teamsConfigRaw'
     ];
 
@@ -4517,29 +4063,15 @@
       if (!allWorkers.length) return `<div class="smax-sp-card"><div class="smax-sp-muted" style="text-align:center;padding:20px;">Nenhum especialista cadastrado nas equipes.</div></div>`;
       return `
         <div class="smax-sp-card">
-          <div class="smax-sp-section-title">Cores personalizadas por especialista</div>
-          <div class="smax-sp-muted" style="margin-bottom:10px;">Cores salvas localmente — não afetam outros usuários.</div>
+          <div class="smax-sp-section-title">Especialistas cadastrados</div>
           <div style="display:flex;flex-direction:column;gap:6px;">
-            ${allWorkers.map(w => {
-              const normName = Utils.normalizeText(w.name || '');
-              const myColor  = personal.myColors[normName] || {};
-              const bgVal    = myColor.bg || '#1e293b';
-              const fgVal    = myColor.fg || '#f8fafc';
-              return `
-                <div style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface-2);flex-wrap:wrap;">
+            ${allWorkers.map(w => `
+                <div style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface-2);">
                   <div style="flex:1;min-width:100px;">
                     <div style="font-size:13px;font-weight:500;color:var(--sp-text);">${Utils.escapeHtml(w.name || '')}</div>
                     <div class="smax-sp-muted">${Utils.escapeHtml(w.teamName)}</div>
                   </div>
-                  <label style="font-size:11px;color:var(--sp-text-muted);">Fundo</label>
-                  <input type="color" class="smax-worker-color-bg" data-name="${Utils.escapeHtml(normName)}" value="${bgVal}" style="width:30px;height:26px;border:1px solid var(--sp-border);border-radius:4px;cursor:pointer;padding:1px;">
-                  <label style="font-size:11px;color:var(--sp-text-muted);">Texto</label>
-                  <input type="color" class="smax-worker-color-fg" data-name="${Utils.escapeHtml(normName)}" value="${fgVal}" style="width:30px;height:26px;border:1px solid var(--sp-border);border-radius:4px;cursor:pointer;padding:1px;">
-                  <div class="smax-color-preview" data-name="${Utils.escapeHtml(normName)}" style="width:56px;height:24px;border-radius:6px;background:${bgVal};color:${fgVal};font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:600;">
-                    Prévia
-                  </div>
-                </div>`;
-            }).join('')}
+                </div>`).join('')}
           </div>
         </div>`;
     };
@@ -4788,7 +4320,6 @@
           if (key === 'zenModeOn')      ZenMode.apply();
           if (key === 'radarOn' && cb.checked) RadarRevisar.query();
           if (key === 'flagSkullOn')    HighlightUser.applyAll();
-          if (key === 'nameBadgesOn')   NameBadges.apply();
           if (key === 'collapseOn')     SectionTweaks.applyAll();
         });
       });
@@ -4844,22 +4375,7 @@
     };
 
     const wireEspecialistasEvents = () => {
-      if (!container) return;
-      container.querySelectorAll('.smax-worker-color-bg, .smax-worker-color-fg').forEach(input => {
-        input.addEventListener('change', () => {
-          const normName = input.dataset.name;
-          const row = input.closest('div[style]');
-          const bgInput = row?.querySelector(`.smax-worker-color-bg[data-name="${normName}"]`);
-          const fgInput = row?.querySelector(`.smax-worker-color-fg[data-name="${normName}"]`);
-          if (bgInput && fgInput) {
-            personal.myColors[normName] = { bg: bgInput.value, fg: fgInput.value };
-            savePersonal();
-            ColorRegistry.clearCache();
-            const preview = row.querySelector(`.smax-color-preview[data-name="${normName}"]`);
-            if (preview) { preview.style.background = bgInput.value; preview.style.color = fgInput.value; }
-          }
-        });
-      });
+      // color pickers removed — no-op
     };
 
     const wireDestaqueEvents = () => {
@@ -5460,241 +4976,18 @@
   })();
 
   /* =========================================================
-   * Comment auto height
+   * [Módulos removidos: CommentExpander, SectionTweaks, Orchestrator, HighlightUser, GridTracker]
    * =======================================================*/
-  const CommentExpander = (() => {
-    const expandAll = () => {
-      if (!prefs.enlargeCommentsOn) return;
-      document.querySelectorAll('.comment-items').forEach(el => {
-        el.style.height = 'auto';
-        el.style.maxHeight = 'none';
-      });
-    };
-
-    const init = () => {
-      // Observer always registered — pref check is inside callback
-      const obs = new MutationObserver((mutations) => {
-        if (!prefs.enlargeCommentsOn) return;
-        mutations.forEach((mutation) => {
-          mutation.addedNodes.forEach((node) => {
-            if (!(node instanceof HTMLElement)) return;
-            if (node.matches('.comment-items')) {
-              node.style.height = 'auto';
-              node.style.maxHeight = 'none';
-            } else {
-              node.querySelectorAll('.comment-items').forEach((el) => {
-                el.style.height = 'auto';
-                el.style.maxHeight = 'none';
-              });
-            }
-          });
-        });
-      });
-      obs.observe(document.body, { childList: true, subtree: true });
-      expandAll();
-      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
-    };
-    return { init, expandAll };
-  })();
-
-  /* =========================================================
-   * Section tweaks (collapse catalogue block)
-   * =======================================================*/
-  const SectionTweaks = (() => {
-    const SECTION_SELECTOR = '#form-section-5, [data-aid="section-catalog-offering"]';
-    const IDS_TO_REMOVE = ['form-section-1', 'form-section-7', 'form-section-8'];
-    const collapsedOnce = new WeakSet();
-
-    const isOpen = (section) => {
-      const content = section?.querySelector?.('.pl-entity-page-component-content');
-      return !!content && !content.classList.contains('ng-hide');
-    };
-
-    const fixAria = (header, section) => {
-      if (!header || !section) return;
-      if (header.getAttribute('aria-expanded') !== 'false') header.setAttribute('aria-expanded', 'false');
-      const sr = section.querySelector('.pl-entity-page-component-header-sr');
-      if (sr && /Expandido/i.test(sr.textContent || '')) sr.textContent = sr.textContent.replace(/Expandido/ig, 'Recolhido');
-      const icon = header.querySelector('[pl-bidi-collapse-arrow]') || header.querySelector('.icon-arrow-med-down, .icon-arrow-med-right');
-      if (icon) {
-        icon.classList.remove('icon-arrow-med-down');
-        icon.classList.add('icon-arrow-med-right');
-      }
-    };
-
-    const collapseSectionOnce = (section) => {
-      if (section.dataset.userInteracted === '1') return;
-      if (collapsedOnce.has(section)) return;
-      const header = section.querySelector('.pl-entity-page-component-header[role="button"]');
-      if (!header) return;
-      if (isOpen(section)) {
-        header.click();
-        setTimeout(() => fixAria(header, section), 0);
-      } else {
-        fixAria(header, section);
-      }
-      collapsedOnce.add(section);
-    };
-
-    const removeSections = () => {
-      IDS_TO_REMOVE.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el && el.parentNode) el.remove();
-      });
-    };
-
-    const applyAll = () => {
-      if (!prefs.collapseOn) return; // pref check here, not in init
-      document.querySelectorAll(SECTION_SELECTOR).forEach(collapseSectionOnce);
-      removeSections();
-    };
-
-    const init = () => {
-      // Click tracking: mark sections the user manually interacted with
-      document.addEventListener('click', (event) => {
-        const header = event.target.closest('.pl-entity-page-component-header[role="button"]');
-        if (!header) return;
-        const section = header.closest('#form-section-5, [data-aid="section-catalog-offering"]');
-        if (section) section.dataset.userInteracted = '1';
-      }, { capture: true });
-
-      // Observer always registered — pref check is inside applyAll
-      const schedule = Utils.debounce(applyAll, 100);
-      const obs = new MutationObserver(() => schedule());
-      setTimeout(applyAll, 300);
-      obs.observe(document.documentElement, { childList: true, subtree: true });
-      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
-    };
-
-    return { init, applyAll };
-  })();
-
-  /* =========================================================
-   * Orchestrator for repeated UI refresh
-   * =======================================================*/
-  const Orchestrator = (() => {
-    const runAll = () => {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(NameBadges.apply, { timeout: 500 });
-        requestIdleCallback(HighlightUser.applyAll, { timeout: 500 });
-      } else {
-        setTimeout(NameBadges.apply, 0);
-        setTimeout(HighlightUser.applyAll, 0);
-      }
-    };
-
-    const schedule = Utils.debounce(runAll, 80);
-
-    const init = () => {
-      runAll();
-      const obsMain = new MutationObserver(() => schedule());
-      obsMain.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: ['class', 'style', 'aria-expanded']
-      });
-
-      const headerEl = document.querySelector('.slick-header-columns') || document.body;
-      const obsHeader = new MutationObserver(() => schedule());
-      obsHeader.observe(headerEl, { childList: true, subtree: true, attributes: true });
-
-      window.addEventListener('scroll', schedule, true);
-      window.addEventListener('resize', schedule, { passive: true });
-      window.addEventListener('beforeunload', () => { obsMain.disconnect(); obsHeader.disconnect(); }, { once: true });
-    };
-
-    return { init };
-  })();
-
-  /* =========================================================
-   * Highlight user — destaque âmbar na lista de chamados
-   * =======================================================*/
-  const HighlightUser = (() => {
-    const isHighlighted = (nameRaw) => {
-      const key = Utils.normalizeText(nameRaw);
-      if (!key || key.length < 3) return false;
-      const list = (personal.myDestaque || []).map(Utils.normalizeText).filter(Boolean);
-      return list.some(d => d === key || (key.length >= 8 && d.length >= 4 && (key.includes(d) || d.includes(key))));
-    };
-
-    // Applies (or removes) amber highlight on a single .slick-row.
-    // SlickGrid reuses row elements during scroll — so we always re-evaluate, never cache on the row.
-    const applyRow = (row) => {
-      try {
-        if (!(row instanceof HTMLElement)) return;
-        const cells = row.querySelectorAll('.slick-cell');
-        let found = false;
-        cells.forEach(cell => {
-          if (found) return;
-          const text = (cell.textContent || '').trim();
-          if (text && isHighlighted(text)) found = true;
-        });
-        if (found) {
-          row.style.setProperty('background', 'linear-gradient(90deg, rgba(251,191,36,.18) 0%, rgba(245,158,11,.07) 100%)', 'important');
-          row.style.setProperty('box-shadow', 'inset 3px 0 0 #f59e0b', 'important');
-        } else {
-          row.style.removeProperty('background');
-          row.style.removeProperty('box-shadow');
-        }
-      } catch { }
-    };
-
-    const applyAll = () => {
-      if (!prefs.flagSkullOn) return;
-      if (!Utils.isListPage()) return; // only on list page, not on ticket detail
-      Utils.getGridViewport().querySelectorAll('.slick-row').forEach(applyRow);
-    };
-
-    const init = () => {
-      // Observer always registered — pref check is inside applyAll
-      const obs = new MutationObserver(Utils.debounce(applyAll, 200));
-      obs.observe(document.body, { childList: true, subtree: true });
-      applyAll();
-      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
-    };
-
-    return { init, applyAll, isHighlighted };
-  })();
-
-  /* =========================================================
-   * Grid tracker for triage HUD
-   * =======================================================*/
-  const GridTracker = (() => {
+  const CommentExpander    = (() => { const init = () => {}; return { init, expandAll: () => {} }; })();
+  const SectionTweaks      = (() => { const init = () => {}; return { init, applyAll: () => {} }; })();
+  const Orchestrator       = (() => { const init = () => {}; return { init }; })();
+  const HighlightUser      = (() => { const init = () => {}; return { init, applyAll: () => {}, isHighlighted: () => false }; })();
+  const GridTracker        = (() => {
     let needsRebuild = false;
-
-    const markDirty = () => {
-      needsRebuild = true;
-    };
-
-    const init = () => {
-      try {
-        const viewport = Utils.getGridViewport();
-        if (!viewport) return;
-        let lastCount = viewport.querySelectorAll('.slick-row').length;
-        const obs = new MutationObserver(() => {
-          const currentCount = viewport.querySelectorAll('.slick-row').length;
-          if (currentCount !== lastCount) {
-            lastCount = currentCount;
-            markDirty();
-          }
-        });
-        obs.observe(viewport, { childList: true, subtree: true });
-        window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
-      } catch (err) {
-        console.warn('[SMAX] Failed to observe grid changes:', err);
-      }
-    };
-
-    const consume = () => {
-      const flag = needsRebuild;
-      needsRebuild = false;
-      return flag;
-    };
-
+    const markDirty  = () => { needsRebuild = true; };
+    const consume    = () => { const f = needsRebuild; needsRebuild = false; return f; };
+    const init       = () => {};
     DataRepository.onQueueUpdate(markDirty);
-
     return { init, consume, markDirty };
   })();
 
@@ -10375,130 +9668,15 @@
   })();
 
   /* =========================================================
-   * ZenMode — oculta campos desnecessários do formulário
+   * [ZenMode removido]
    * =======================================================*/
-  const ZenMode = (() => {
-    const ZEN_CLASS = 'smax-zen-active';
-
-    const apply = () => {
-      if (prefs.zenModeOn) document.body.classList.add(ZEN_CLASS);
-      else document.body.classList.remove(ZEN_CLASS);
-    };
-
-    const init = () => apply();
-    return { init, apply };
-  })();
+  const ZenMode = (() => { const init = () => {}; return { init, apply: () => {} }; })();
 
   /* =========================================================
-   * RadarRevisar — badge com chamados rejeitados/pendentes
+   * [RadarRevisar removido]
    * =======================================================*/
-  const RadarRevisar = (() => {
-    let badgeEl = null;
-    let dropdownEl = null;
-    let dropdownOpen = false;
+  const RadarRevisar = (() => { const init = () => {}; return { init, query: () => {} }; })();
 
-    const BADGE_ID    = 'smax-radar-badge';
-    const DROPDOWN_ID = 'smax-radar-dropdown';
-
-    const ensureElements = () => {
-      if (!badgeEl) {
-        badgeEl = document.createElement('div');
-        badgeEl.id = BADGE_ID;
-        badgeEl.setAttribute('role', 'button');
-        badgeEl.setAttribute('aria-label', 'Chamados pendentes');
-        document.body.appendChild(badgeEl);
-        badgeEl.addEventListener('click', toggleDropdown);
-      }
-      if (!dropdownEl) {
-        dropdownEl = document.createElement('div');
-        dropdownEl.id = DROPDOWN_ID;
-        document.body.appendChild(dropdownEl);
-        const _radarCloseHandler = (e) => {
-          if (!badgeEl.contains(e.target) && !dropdownEl.contains(e.target)) closeDropdown();
-        };
-        document.addEventListener('mousedown', _radarCloseHandler);
-      }
-    };
-
-    const closeDropdown = () => {
-      if (dropdownEl) dropdownEl.style.display = 'none';
-      dropdownOpen = false;
-    };
-
-    const toggleDropdown = () => {
-      if (!dropdownEl) return;
-      dropdownOpen = !dropdownOpen;
-      dropdownEl.style.display = dropdownOpen ? 'block' : 'none';
-      if (dropdownOpen) {
-        const r = badgeEl.getBoundingClientRect();
-        dropdownEl.style.top  = (r.bottom + 6) + 'px';
-        dropdownEl.style.right = (window.innerWidth - r.right) + 'px';
-        dropdownEl.style.left = 'auto';
-      }
-    };
-
-    const renderDropdown = (rejected, ready) => {
-      if (!dropdownEl) return;
-      const all = [
-        ...rejected.map(id => ({ id, type: 'rejected' })),
-        ...ready.map(id => ({ id, type: 'accept' })),
-      ];
-      if (!all.length) { dropdownEl.innerHTML = '<div style="padding:12px;font-size:12px;color:#64748b;">Nenhum chamado pendente.</div>'; return; }
-      dropdownEl.innerHTML = all.map(({ id, type }) => `
-        <div class="smax-radar-item" data-id="${Utils.escapeHtml(id)}">
-          <span class="smax-radar-pill ${type === 'rejected' ? 'rejected' : 'accept'}">${type === 'rejected' ? 'Rejeitado' : 'Aceitar'}</span>
-          <span style="font-family:monospace;">${Utils.escapeHtml(id)}</span>
-        </div>
-      `).join('');
-      dropdownEl.querySelectorAll('.smax-radar-item').forEach(el => {
-        el.addEventListener('click', () => {
-          const id = el.dataset.id;
-          if (id) window.open(`https://suporte.tjsp.jus.br/saw/Request/${encodeURIComponent(id)}/general`, '_blank');
-          closeDropdown();
-        });
-      });
-    };
-
-    const updateBadge = (rejected, ready) => {
-      ensureElements();
-      const total = rejected.length + ready.length;
-      if (total === 0) { badgeEl.style.display = 'none'; closeDropdown(); return; }
-      badgeEl.style.display = 'flex';
-      badgeEl.textContent = total;
-      badgeEl.title = `${rejected.length} rejeitado(s) • ${ready.length} aguardando aceite`;
-      renderDropdown(rejected, ready);
-    };
-
-    const query = async () => {
-      if (!prefs.radarOn) return;
-      const personId = prefs.myPersonId;
-      if (!personId) return;
-      try {
-        const url = `/rest/213963628/ems/Request?filter=(ExpertAssignee=%27${encodeURIComponent(personId)}%27%20and%20(PhaseId%3D%27Review%27%20or%20PhaseId%3D%27Accept%27))&layout=Id,PhaseId,Status&size=500`;
-        const res = await fetch(url, { credentials: 'include' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const items = (data.entities || []).map(e => ({
-          id: (e.properties?.Id || '').replace(/^IMRfc:/, ''),
-          phase: e.properties?.PhaseId || '',
-        }));
-        const rejected = items.filter(i => i.phase === 'Review').map(i => i.id);
-        const ready    = items.filter(i => i.phase === 'Accept').map(i => i.id);
-        updateBadge(rejected, ready);
-      } catch (err) {
-        console.warn('[SMAX Radar]', err);
-      }
-    };
-
-    const init = () => {
-      if (!prefs.radarOn) return;
-      ensureElements();
-      query();
-      setInterval(query, 5 * 60 * 1000);
-    };
-
-    return { init, query };
-  })();
 
   /* =========================================================
    * Templates — respostas reutilizáveis (localStorage)
@@ -10705,772 +9883,6 @@
     const init = () => { /* botão externo removido — acesso via painel de configurações */ };
 
     return { init, openModal, load, loadAll, save, insertIntoEditor, setSharedScripts };
-  })();
-
-  /* =========================================================
-   * ContextualSolutionBank — barra de templates injetada
-   * diretamente no container de Solução e na aba Discussão
-   * =======================================================*/
-  const ContextualSolutionBank = (() => {
-    // Localiza o CKEditor dentro de um container específico do DOM
-    const findEditorInContainer = (containerEl) => {
-      if (!containerEl) return null;
-      const ck = getPageCKEditor();
-      if (!(ck && ck.instances)) return null;
-      return Object.values(ck.instances).find(inst => {
-        try {
-          return !!(inst.container && inst.container.$ && containerEl.contains(inst.container.$));
-        } catch { return false; }
-      }) || null;
-    };
-
-    // Insere HTML no editor correto usando insertHtml (não substitui o conteúdo)
-    const smartInsert = (html, isDisc) => {
-      const containerSel = isDisc
-        ? 'pl-entity-comment-tab'
-        : '#onlyResolution_Solution_container';
-      const containerEl = document.querySelector(containerSel);
-      const editor = findEditorInContainer(containerEl);
-
-      if (editor) {
-        editor.insertHtml(html);
-        editor.fire('change');
-        return true;
-      }
-      // Fallback: injeta no div editável diretamente
-      const fallbackSel = isDisc
-        ? 'pl-entity-comment-tab .cke_wysiwyg_div'
-        : '#onlyResolution_Solution_container .cke_wysiwyg_div';
-      const div = document.querySelector(fallbackSel);
-      if (div) {
-        div.focus();
-        document.execCommand('insertHTML', false, html);
-        ['input', 'change'].forEach(e => div.dispatchEvent(new Event(e, { bubbles: true })));
-        return true;
-      }
-      return false;
-    };
-
-    // Constrói a barra com select + botão Gerenciar
-    const buildBar = (idPrefix, labelText, isDisc) => {
-      const bar = document.createElement('div');
-      bar.id = `${idPrefix}-bar`;
-      bar.className = 'smax-ctx-bank-bar';
-
-      const label = document.createElement('span');
-      label.className = 'smax-ctx-bank-label';
-      label.textContent = labelText;
-
-      const select = document.createElement('select');
-      select.id = `${idPrefix}-select`;
-      select.className = 'smax-ctx-bank-select';
-
-      const refreshSelect = () => {
-        select.innerHTML = '<option value="">— Selecione para aplicar —</option>';
-        Templates.load(isDisc).forEach((t, i) => {
-          const opt = document.createElement('option');
-          opt.value = String(i);
-          opt.textContent = t.title;
-          select.appendChild(opt);
-        });
-      };
-      refreshSelect();
-
-      select.addEventListener('change', () => {
-        if (!select.value) return;
-        const tpl = Templates.load(isDisc)[parseInt(select.value, 10)];
-        if (tpl) smartInsert(tpl.html, isDisc);
-        select.value = '';
-      });
-
-      const btnManage = document.createElement('button');
-      btnManage.className = 'smax-ctx-bank-btn';
-      btnManage.type = 'button';
-      btnManage.textContent = '⚙️ Gerenciar';
-      btnManage.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        Templates.openModal(isDisc);
-      });
-
-      bar._refresh = refreshSelect;
-      bar.append(label, select, btnManage);
-      return bar;
-    };
-
-    // Injeta barra no container de Solução
-    const injectSolutionBar = () => {
-      const container = document.getElementById('onlyResolution_Solution_container');
-      if (!container || document.getElementById('smax-solution-bank-bar')) return;
-      const bar = buildBar('smax-solution-bank', 'Soluções:', false);
-      const control = container.querySelector('.control-container');
-      if (control) control.insertBefore(bar, control.firstChild);
-      else container.prepend(bar);
-    };
-
-    // Injeta barra no container de Discussão
-    const injectDiscussionBar = () => {
-      const container = document.querySelector('pl-entity-comment-tab');
-      if (!container || document.getElementById('smax-discussion-bank-bar')) return;
-      const bar = buildBar('smax-discussion-bank', 'Discussões:', true);
-      const editorContent = container.querySelector('.currentUserComment .editor-content');
-      const commentArea  = container.querySelector('.currentUserComment');
-      const filterArea   = container.querySelector('.comment-filter');
-      if (editorContent) {
-        editorContent.insertBefore(bar, editorContent.firstChild);
-      } else if (commentArea) {
-        bar.style.marginLeft = '55px';
-        bar.style.width = 'calc(100% - 55px)';
-        commentArea.parentNode.insertBefore(bar, commentArea);
-      } else if (filterArea) {
-        filterArea.parentNode.insertBefore(bar, filterArea.nextSibling);
-      } else {
-        container.prepend(bar);
-      }
-    };
-
-    const tick = () => {
-      injectSolutionBar();
-      injectDiscussionBar();
-    };
-
-    let _tickInterval = null;
-    const init = () => {
-      if (_tickInterval) return; // guard contra múltiplas inicializações
-      const schedule = Utils.debounce(tick, 300);
-      const obs = new MutationObserver(schedule);
-      obs.observe(document.body, { childList: true, subtree: true });
-      // Re-scan periódico: Angular pode re-renderizar o container sem disparar mutations
-      _tickInterval = setInterval(tick, 1500);
-      tick();
-    };
-
-    return { init };
-  })();
-
-  /* =========================================================
-   * ResolutionButtons — Salvar / Salvar e fechar / Lifecycle
-   * no topo da seção de resolução (evita scroll)
-   * =======================================================*/
-  const ResolutionButtons = (() => {
-    const TARGET   = '#onlyResolution_CloseTime_container';
-    const SEL_SAVE = 'button[data-aid="tool-bar-btn-save"].tool-bar-btn-save';
-    const SEL_SAVE_CLOSE = 'button[data-aid="tool-bar-btn-save-and-close"].tool-bar-btn-save-and-close';
-    const SEL_LC   = 'div.pl-lifecycle-overview[data-aid="lifecycle-overview"] div.overview-buttons-container:not(.tmx-clone-lc)';
-    const CLS_WRAP = 'tmx-top-actions';
-    const CLS_MENU = 'tmx-lifecycle-menu';
-
-    const removeIds = (root) => root.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
-
-    const clickReal = (sel) => {
-      const el = document.querySelector(sel);
-      if (el && !el.disabled) el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    };
-
-    let lcMenu = null;
-    const showLcMenu = (anchor) => {
-      if (!lcMenu) { lcMenu = document.createElement('div'); lcMenu.className = CLS_MENU; document.body.appendChild(lcMenu); }
-      const src = document.querySelector(SEL_LC);
-      lcMenu.innerHTML = '';
-      if (src) {
-        src.querySelectorAll('[target-phase-id]').forEach(el => {
-          const label = el.textContent.trim();
-          const phaseId = el.getAttribute('target-phase-id');
-          if (!label || !phaseId) return;
-          const item = document.createElement('div');
-          item.className = 'tmx-lifecycle-menu-item';
-          item.textContent = label;
-          item.onclick = () => {
-            const realEl = document.querySelector(`${SEL_LC} [target-phase-id="${phaseId}"]`);
-            if (realEl) realEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-            lcMenu.style.display = 'none';
-          };
-          lcMenu.appendChild(item);
-        });
-      }
-      if (!lcMenu.children.length) return;
-      const r = anchor.getBoundingClientRect();
-      lcMenu.style.top  = (r.bottom + window.scrollY + 4) + 'px';
-      lcMenu.style.left = (r.left  + window.scrollX) + 'px';
-      lcMenu.style.display = 'block';
-    };
-
-    document.addEventListener('mousedown', (e) => {
-      if (lcMenu && !lcMenu.contains(e.target)) lcMenu.style.display = 'none';
-    });
-
-    const tick = () => {
-      const dst = document.querySelector(TARGET);
-      if (!dst) return;
-      if (dst.querySelector('.' + CLS_WRAP)) return; // já existe
-
-      const wrap = document.createElement('div');
-      wrap.className = CLS_WRAP;
-
-      const makeBtnClone = (sel, cls) => {
-        const src = document.querySelector(sel);
-        if (!src) return null;
-        const clone = src.cloneNode(true);
-        clone.classList.add(cls);
-        removeIds(clone);
-        clone.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); clickReal(sel); }, true);
-        return clone;
-      };
-
-      const btnSave     = makeBtnClone(SEL_SAVE,       'tmx-clone-save');
-      const btnSaveCl   = makeBtnClone(SEL_SAVE_CLOSE, 'tmx-clone-save-close');
-
-      // Lifecycle button
-      const srcLc = document.querySelector(SEL_LC);
-      let btnLc = null;
-      if (srcLc) {
-        btnLc = srcLc.cloneNode(true);
-        btnLc.classList.add('tmx-clone-lc');
-        removeIds(btnLc);
-        btnLc.querySelectorAll('ul.dropdown-menu').forEach(u => u.remove());
-        btnLc.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showLcMenu(btnLc); }, true);
-      }
-
-      [btnSave, btnSaveCl, btnLc].forEach(b => b && wrap.appendChild(b));
-      dst.prepend(wrap);
-    };
-
-    const schedule = Utils.debounce(tick, 120);
-
-    const init = () => {
-      tick();
-      const obs = new MutationObserver(schedule);
-      obs.observe(document.body, { childList: true, subtree: true });
-    };
-
-    return { init };
-  })();
-
-  /* =========================================================
-   * BlackHeader — barra de navegação preta
-   * =======================================================*/
-  const BlackHeader = (() => {
-    const paintEl = (el) => {
-      el.style.setProperty('background', '#000', 'important');
-      el.style.setProperty('background-color', '#000', 'important');
-    };
-
-    // document.elementsFromPoint(x, y) returns every element stacked at that
-    // screen coordinate, from topmost to root — it does NOT care about class
-    // names, tag names, or position CSS. It finds whatever is actually rendered
-    // there. We sample several y values to cover the full nav height.
-    const applyHeuristic = () => {
-      try {
-        const W = window.innerWidth;
-        const found = new Set();
-        [2, 12, 28, 50].forEach(y => {
-          try {
-            (document.elementsFromPoint(W / 2, y) || []).forEach(el => found.add(el));
-          } catch {}
-        });
-        found.forEach(el => {
-          if (el === document.body || el === document.documentElement) return;
-          try {
-            const r = el.getBoundingClientRect();
-            // Must span ≥70 % of viewport (full-width bar, not a nav item inside it)
-            // and sit at the very top (top < 80px, height 20-200px)
-            if (r.width > W * 0.7 && r.height > 20 && r.height < 200 && r.top < 80) {
-              // Only paint fixed/sticky elements — real nav bars are always fixed/sticky;
-              // form containers and ticket-page panels are static/relative and must be skipped.
-              const pos = window.getComputedStyle(el).position;
-              if (pos !== 'fixed' && pos !== 'sticky') return;
-              paintEl(el);
-            }
-          } catch {}
-        });
-      } catch {}
-    };
-
-    const init = () => {
-      // Apply at several points after page load — Angular bootstrap is async
-      [0, 300, 800, 1500, 3000, 5000, 8000].forEach(t => setTimeout(applyHeuristic, t));
-      // Keep reapplying every 2 s: Angular change-detection may reset inline styles
-      setInterval(applyHeuristic, 2000);
-    };
-
-    return { init };
-  })();
-
-  /* =========================================================
-   * TicketInfoBar — exibe nome, unidade e processo no topo
-   * da tela de chamado (intercepta a API de inicialização)
-   * =======================================================*/
-  const TicketInfoBar = (() => {
-    const BAR_ID    = 'smax-ticket-info-bar';
-    const CACHE_KEY = '_smaxTicketInfoCache';
-    let   lastTicketId = null;
-
-    // ── dados extraídos da resposta de API ──
-    const parseInitData = (json) => {
-      try {
-        const body = (typeof json === 'string') ? JSON.parse(json) : json;
-        // Suporta envelope com entities[] ou resposta direta
-        const entity = body?.entity_result_list?.[0] || body?.EntityData || body;
-        const props   = entity?.properties || {};
-        const related = entity?.related_properties || {};
-
-        const person   = related?.RequestedForPerson?.Name
-                      || related?.RequestedByPerson?.Name
-                      || props?.RequestedByPerson?.Name
-                      || '';
-        const location = related?.RegisteredForLocation?.DisplayName
-                      || related?.RegisteredForLocation?.Name
-                      || related?.RequestedForLocation?.DisplayName
-                      || '';
-        const orgGroup = related?.RequestedForPerson?.OrganizationalGroup
-                      || '';
-        // Número de processo (campo customizado TJSP)
-        const rawProc = props?.UserOptions
-          ? (() => {
-              try {
-                const opts = typeof props.UserOptions === 'string' ? JSON.parse(props.UserOptions) : props.UserOptions;
-                return opts?.complexTypeProperties?.[0]?.properties?.NumerodoProcesso_c || '';
-              } catch { return ''; }
-            })()
-          : props?.NumerodoProcesso_c || '';
-
-        // Anexos: lista de nomes/urls
-        const attachments = [];
-        try {
-          const raw = props?.RequestAttachments || entity?.RequestAttachments;
-          const arr = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : null);
-          if (arr) arr.forEach(a => {
-            const name = a.name || a.Name || a.file_name || '';
-            const url  = a.url  || a.Url  || a.file_url  || '';
-            if (name || url) attachments.push({ name, url });
-          });
-        } catch { /* ignore */ }
-
-        return { person, location, orgGroup, process: rawProc, attachments };
-      } catch { return null; }
-    };
-
-    const renderBar = (data, ticketId) => {
-      let bar = document.getElementById(BAR_ID);
-      if (!bar) {
-        bar = document.createElement('div');
-        bar.id = BAR_ID;
-      }
-
-      const copyBtn = (text) => text
-        ? `<button class="smax-ib-copy" data-copy="${Utils.escapeHtml(text)}" title="Copiar" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:var(--sp-primary,#38bdf8);line-height:1;">📋</button>`
-        : '';
-
-      const fields = [];
-      if (data.person)   fields.push(`<span class="smax-ib-field"><span class="smax-ib-label">👤 Solicitante:</span> <span class="smax-ib-val">${Utils.escapeHtml(data.person)}</span>${copyBtn(data.person)}</span>`);
-      if (data.location) fields.push(`<span class="smax-ib-field"><span class="smax-ib-label">📍 Unidade:</span> <span class="smax-ib-val">${Utils.escapeHtml(data.location)}</span>${copyBtn(data.location)}</span>`);
-      if (data.process)  fields.push(`<span class="smax-ib-field"><span class="smax-ib-label">⚖️ Processo:</span> <span class="smax-ib-val">${Utils.escapeHtml(data.process)}</span>${copyBtn(data.process)}</span>`);
-
-      const attHtml = data.attachments.length
-        ? `<span class="smax-ib-divider">|</span><span class="smax-ib-field"><span class="smax-ib-label">📎 Anexos:</span> ${data.attachments.map(a =>
-            `<a class="smax-ib-att-chip" ${a.url ? `href="${Utils.escapeHtml(a.url)}" target="_blank" rel="noopener"` : ''} title="${Utils.escapeHtml(a.name)}">${Utils.escapeHtml(a.name || 'Arquivo')}</a>`
-          ).join('')}</span>`
-        : '';
-
-      bar.innerHTML = `
-        <div class="smax-ib-inner">
-          <div class="smax-ib-fields">
-            ${fields.join('<span class="smax-ib-divider">|</span>')}
-            ${attHtml}
-          </div>
-          <button class="smax-ib-close" title="Fechar">✕</button>
-        </div>
-      `;
-
-      bar.querySelectorAll('.smax-ib-copy').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          navigator.clipboard.writeText(btn.dataset.copy || '').catch(() => {});
-        });
-      });
-      bar.querySelector('.smax-ib-close')?.addEventListener('click', () => bar.remove());
-
-      return bar;
-    };
-
-    const inject = (data, ticketId) => {
-      if (!data || (!data.person && !data.location && !data.process && !data.attachments.length)) return;
-      // Find the ticket title area — try multiple selectors
-      const anchors = [
-        document.querySelector('input[data-aid="withoutResolution_DisplayLabel"]'),
-        document.querySelector('.pl-entity-page-component-header'),
-        document.querySelector('[data-aid="record-id"]'),
-        document.querySelector('.pl-record-info'),
-      ];
-      const anchor = anchors.find(Boolean);
-      if (!anchor) return;
-
-      const container = anchor.closest('.field-container') || anchor.closest('.pl-entity-page-component-header') || anchor.parentElement;
-      if (!container) return;
-
-      // Remove old bar if ticket changed
-      const existing = document.getElementById(BAR_ID);
-      if (existing && ticketId !== lastTicketId) existing.remove();
-      if (document.getElementById(BAR_ID)) return; // already injected for this ticket
-
-      lastTicketId = ticketId;
-      const bar = renderBar(data, ticketId);
-      container.parentElement?.insertBefore(bar, container);
-    };
-
-    // ── Intercept XHR + fetch ──
-    const hookNetwork = () => {
-      // XHR hook
-      const origOpen = XMLHttpRequest.prototype.open;
-      const origSend = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-        this._smaxUrl = url;
-        return origOpen.call(this, method, url, ...rest);
-      };
-      XMLHttpRequest.prototype.send = function(...args) {
-        const url = this._smaxUrl || '';
-        if (url.includes('/entity-page/initializationDataByLayout/Request/') || url.includes('/ems/Request/')) {
-          this.addEventListener('load', () => {
-            try {
-              const data = parseInitData(this.responseText);
-              const m = url.match(/\/Request\/(\d+)/);
-              if (data) inject(data, m?.[1] || '');
-            } catch { /* ignore */ }
-          });
-        }
-        return origSend.apply(this, args);
-      };
-
-      // fetch hook
-      const origFetch = pageWindow.fetch;
-      pageWindow.fetch = function(input, init) {
-        const url = (typeof input === 'string') ? input : (input?.url || '');
-        const p = origFetch.call(this, input, init);
-        if (url.includes('/entity-page/initializationDataByLayout/Request/') || url.includes('/ems/Request/')) {
-          p.then(res => res.clone().text().then(text => {
-            try {
-              const data = parseInitData(text);
-              const m = url.match(/\/Request\/(\d+)/);
-              if (data) inject(data, m?.[1] || '');
-            } catch { /* ignore */ }
-          })).catch(() => {});
-        }
-        return p;
-      };
-    };
-
-    const init = () => {
-      hookNetwork();
-      // Re-inject on SPA navigation (ticket changes)
-      const onNav = Utils.debounce(() => {
-        const existing = document.getElementById(BAR_ID);
-        if (existing) existing.remove();
-        lastTicketId = null;
-      }, 400);
-      const origPush    = history.pushState.bind(history);
-      const origReplace = history.replaceState.bind(history);
-      history.pushState    = (...a) => { origPush(...a);    onNav(); };
-      history.replaceState = (...a) => { origReplace(...a); onNav(); };
-      window.addEventListener('popstate', onNav);
-    };
-
-    return { init };
-  })();
-
-  /* =========================================================
-   * PageLinkifier — linkifica CNJs em toda a página SMAX
-   * (tela normal de chamado, fora do HUD de triagem)
-   * =======================================================*/
-  const PageLinkifier = (() => {
-    const CNJ_RE = /\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}|\d{20})\b/g;
-    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE', 'PRE', 'SELECT', 'OPTION']);
-
-    const hasCNJ = (text) => { CNJ_RE.lastIndex = 0; return CNJ_RE.test(text); };
-
-    const processNode = (root) => {
-      if (!Utils.isTicketDetailPage()) return; // apenas na tela de chamado, não na lista
-      if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
-      if (root.dataset.smaxProc) return; // o próprio nó já é um link
-      if (root.closest && root.closest('#smax-triage-hud-backdrop')) return; // HUD cuida do próprio
-
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-          const parent = node.parentElement;
-          if (!parent) return NodeFilter.FILTER_REJECT;
-          if (parent.dataset.smaxProc) return NodeFilter.FILTER_REJECT;
-          if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-          if (parent.closest && parent.closest('#smax-triage-hud-backdrop')) return NodeFilter.FILTER_REJECT;
-          // Não linkificar dentro de <a> — evita converter nomes de anexo em links de processo
-          if (parent.closest && parent.closest('a')) return NodeFilter.FILTER_REJECT;
-          if (!hasCNJ(node.nodeValue)) return NodeFilter.FILTER_SKIP;
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      });
-
-      const toProcess = [];
-      let node;
-      while ((node = walker.nextNode())) toProcess.push(node);
-
-      for (const textNode of toProcess) {
-        if (!textNode.parentNode) continue; // pode ter sido removido no loop
-        CNJ_RE.lastIndex = 0;
-        const text = textNode.nodeValue;
-        const frag = document.createDocumentFragment();
-        let last = 0, m;
-        while ((m = CNJ_RE.exec(text)) !== null) {
-          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-          const formatted = Utils.normalizeCNJ(m[1]);
-          const span = document.createElement('span');
-          span.textContent = formatted;
-          span.dataset.smaxProc = formatted;
-          span.style.cssText = 'color:#38bdf8;font-family:monospace;font-weight:600;border-bottom:1px dotted rgba(56,189,248,.6);cursor:pointer;';
-          span.title = `Consultar processo no eProc: ${formatted}`;
-          frag.appendChild(span);
-          last = m.index + m[0].length;
-        }
-        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-        textNode.parentNode.replaceChild(frag, textNode);
-      }
-    };
-
-    // Fila de elementos pendentes — evita processar o mesmo elemento várias vezes
-    const pending = new Set();
-    const flush = Utils.debounce(() => {
-      const els = [...pending];
-      pending.clear();
-      els.forEach(processNode);
-    }, 250);
-    const queue = (el) => { pending.add(el); flush(); };
-
-    // Seletores do campo de descrição no SMAX ticket (tentativa direta)
-    const DESC_SELS = [
-      '.pl-richtext-viewer', '[data-aid*="description"]', '[data-aid*="Description"]',
-      '[class*="richtext"]', '[class*="rich-text"]', '.pl-entity-field-content',
-      '[data-aid="preview_Description"]', '[data-aid="preview_Notes"]',
-      '.ql-editor', '[contenteditable]',
-    ];
-    const scanDescFields = () => {
-      if (!Utils.isTicketDetailPage()) return; // apenas na tela de chamado
-      DESC_SELS.forEach(sel => {
-        try { document.querySelectorAll(sel).forEach(el => {
-          if (!el.closest('#smax-triage-hud-backdrop')) processNode(el);
-        }); } catch {}
-      });
-    };
-
-    // CKEditor 4 renders content inside an <iframe> even in view mode.
-    // document.body TreeWalker can't cross into iframes — scan them explicitly.
-    const scanIframes = () => {
-      if (!Utils.isTicketDetailPage()) return;
-      try {
-        document.querySelectorAll('iframe').forEach(iframe => {
-          try {
-            const doc = iframe.contentDocument || iframe.contentWindow?.document;
-            if (doc && doc.body) processNode(doc.body);
-          } catch {} // cross-origin iframes throw SecurityError — ignore
-        });
-      } catch {}
-    };
-
-    const fullScan = () => {
-      if (!Utils.isTicketDetailPage()) return;
-      processNode(document.body);
-      scanDescFields();
-      scanIframes();
-    };
-
-    // Re-scan após navegação SPA (pushState / popstate)
-    const onNavigate = Utils.debounce(() => {
-      // Múltiplas tentativas — Angular + SMAX renderizam conteúdo de forma assíncrona
-      [800, 2000, 4000, 7000].forEach(t => setTimeout(fullScan, t));
-    }, 300);
-
-    let _scanInterval = null;
-    const init = () => {
-      if (_scanInterval) return; // guard contra múltiplas inicializações
-      // Scan inicial
-      [500, 1500, 3500, 6000].forEach(t => setTimeout(fullScan, t));
-
-      // Periodic sweep: catches content rendered after initial retries
-      _scanInterval = setInterval(fullScan, 4000);
-
-      // MutationObserver: captura nós adicionados E alterações de texto (characterData)
-      const obs = new MutationObserver((mutations) => {
-        if (!Utils.isTicketDetailPage()) return;
-        for (const mut of mutations) {
-          if (mut.type === 'childList') {
-            for (const node of mut.addedNodes) {
-              if (node.nodeType === Node.ELEMENT_NODE) queue(node);
-            }
-          } else if (mut.type === 'characterData') {
-            const parent = mut.target.parentElement;
-            if (parent && !parent.dataset.smaxProc) queue(parent);
-          }
-        }
-      });
-      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
-
-      // Detecta navegação SPA via history API
-      const origPush    = history.pushState.bind(history);
-      const origReplace = history.replaceState.bind(history);
-      history.pushState    = (...a) => { origPush(...a);    onNavigate(); };
-      history.replaceState = (...a) => { origReplace(...a); onNavigate(); };
-      window.addEventListener('popstate', onNavigate);
-    };
-
-    return { init };
-  })();
-
-  /* =========================================================
-   * CellHighlighter — destaque de palavras-chave nas células da
-   * grade de chamados (apenas na tela de lista)
-   * Baseado no script SMAX SGS 221 do Adriano Cardoso
-   * =======================================================*/
-  const CellHighlighter = (() => {
-    const escapeReg = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    // Grupos de palavras-chave e suas cores
-    const GROUPS = {
-      amarelo: {
-        cls: 'smax-hl-yellow',
-        whole: ['jurisprudência','jurisprudencia','distribuidor','DJEN','Diário Eletrônico',
-                'automatização','ceman','Central de Mandados','mandado','mandados',
-                'movimentar','dois fatores','Renajud','Sisbajud',
-                'Autenticador','carta','evento','automação','automações',
-                'migrar','migrador','migração','perito','perita',
-                'localizadores','localizador'],
-        substr: ['mail'],
-        custom: [],
-      },
-      vermelho: {
-        cls: 'smax-hl-red',
-        whole: ['ERRO_AGENDAMENTO_EVENTO','ERRO_ENVIO_INTIMACAO_DJEN','Cookie not found',
-                'Item 04 do Comunicado 435/2025','Erro ao gerar o Documento Comprobatório Renajud'],
-        substr: ['erro','errado','réu revel','Urgente','urgência','Plantão'],
-        custom: [],
-      },
-      verde: {
-        cls: 'smax-hl-green',
-        whole: ['taxa','taxas','custa','custas','restituir','restituição',
-                'guia','diligência','diligencia','justiça gratuíta',
-                'parcelamento','parcelamento das custas'],
-        substr: [],
-        custom: [],
-      },
-      azul: {
-        cls: 'smax-hl-blue',
-        whole: ['magistrado','magistrada','acesso','acessar','cadastro','senha','login','2fa','autenticação'],
-        substr: ['acess'],
-        custom: [/\bju[ií]z(?:a|es)?\b/gi],
-      },
-      rosa: {
-        cls: 'smax-hl-pink',
-        whole: ['BdOrigem'],
-        substr: ['BdOrigem'],
-        custom: [],
-      },
-    };
-
-    const GROUP_ORDER = ['vermelho','rosa','amarelo','verde','azul'];
-
-    const buildRegexes = (g) => {
-      const regs = [];
-      if (g.whole?.length) {
-        regs.push(new RegExp(`(?<![\\p{L}\\d_])(${g.whole.map(escapeReg).join('|')})(?![\\p{L}\\d_])`, 'giu'));
-      }
-      if (g.substr?.length) {
-        regs.push(new RegExp(`(${g.substr.map(escapeReg).join('|')})`, 'giu'));
-      }
-      if (g.custom?.length) {
-        regs.push(...g.custom.map(r => new RegExp(r.source, r.flags || 'giu')));
-      }
-      return regs;
-    };
-
-    const ORDERED_GROUPS = GROUP_ORDER.map(name => ({
-      cls: GROUPS[name].cls,
-      regexes: buildRegexes(GROUPS[name]),
-    }));
-
-    const HL_CLS = ['smax-hl-yellow','smax-hl-red','smax-hl-green','smax-hl-blue','smax-hl-pink'];
-
-    const injectStyles = () => {
-      if (document.getElementById('smax-cellhl-styles')) return;
-      const s = document.createElement('style');
-      s.id = 'smax-cellhl-styles';
-      s.textContent = `
-        .smax-hl-yellow { background:#ffeb3b !important; color:#000 !important; font-weight:700; border-radius:5px; padding:0 .14em; }
-        .smax-hl-red    { background:#d32f2f !important; color:#fff !important; font-weight:700; border-radius:3px; padding:0 .16em; }
-        .smax-hl-green  { background:#2e7d32 !important; color:#fff !important; font-weight:700; border-radius:3px; padding:0 .14em; }
-        .smax-hl-blue   { background:#1e88e5 !important; color:#fff !important; font-weight:700; border-radius:3px; padding:0 .14em; }
-        .smax-hl-pink   { background:#000    !important; color:#ffeb3b !important; font-weight:700; border-radius:3px; padding:0 .14em; }
-      `;
-      (document.head || document.documentElement).appendChild(s);
-    };
-
-    const unwrap = (root) => {
-      root.querySelectorAll(HL_CLS.map(c => `.${c}`).join(','))
-          .forEach(span => span.replaceWith(document.createTextNode(span.textContent || '')));
-    };
-
-    const highlightWithRegex = (container, regex, cls) => {
-      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-          const pe = node.parentElement;
-          if (!pe) return NodeFilter.FILTER_ACCEPT;
-          if (HL_CLS.some(c => pe.classList?.contains(c))) return NodeFilter.FILTER_REJECT;
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      });
-      const nodes = [];
-      for (let n; (n = walker.nextNode()); ) nodes.push(n);
-      for (const textNode of nodes) {
-        if (!textNode.parentNode) continue;
-        const text = textNode.nodeValue;
-        if (!regex.test(text)) { regex.lastIndex = 0; continue; }
-        regex.lastIndex = 0;
-        const frag = document.createDocumentFragment();
-        let last = 0, m;
-        while ((m = regex.exec(text)) !== null) {
-          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-          const span = document.createElement('span');
-          span.className = cls;
-          span.textContent = m[0];
-          frag.appendChild(span);
-          last = m.index + m[0].length;
-        }
-        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-        textNode.parentNode.replaceChild(frag, textNode);
-      }
-    };
-
-    const processCell = (cell) => {
-      const current = (cell.textContent || '').trim();
-      const last = cell.getAttribute('data-smax-hl-last') || '';
-      if (current === last) return; // unchanged — skip
-      unwrap(cell);
-      for (const g of ORDERED_GROUPS) {
-        for (const re of g.regexes) highlightWithRegex(cell, re, g.cls);
-      }
-      cell.setAttribute('data-smax-hl-last', (cell.textContent || '').trim());
-    };
-
-    const applyAll = () => {
-      if (!Utils.isListPage()) return;
-      document.querySelectorAll('.slick-cell').forEach(processCell);
-    };
-
-    const init = () => {
-      injectStyles();
-      applyAll();
-      const obs = new MutationObserver(Utils.debounce(applyAll, 120));
-      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
-      setInterval(applyAll, 1500);
-      window.addEventListener('beforeunload', () => obs.disconnect(), { once: true });
-    };
-
-    return { init, applyAll };
   })();
 
   /* =========================================================
@@ -12135,23 +10547,10 @@
    * =======================================================*/
   const boot = () => {
     ThemeManager.init();
-    CommentExpander.init();
-    SectionTweaks.init();
-    Orchestrator.init();
     SettingsPanel.init();
-    GridTracker.init();
     TriageHUD.init();
     ResponseHUD.init();
-    HighlightUser.init();
-    CellHighlighter.init();
-    ZenMode.init();
-    RadarRevisar.init();
     Templates.init();
-    ContextualSolutionBank.init();
-    ResolutionButtons.init();
-    PageLinkifier.init();
-    BlackHeader.init();
-    TicketInfoBar.init();
     SharedConfig.init();
     AuditQueryPanel.init();
     DataRepository.refreshQueueFromApi().catch(() => { });
