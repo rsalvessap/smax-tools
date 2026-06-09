@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.24
+// @version      2.26
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.12';
+  const SMAX_TOOLKIT_VERSION = '2.26';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -746,6 +746,10 @@
     .smax-resp-disc-replicate-btn { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#6b7280; cursor:pointer; transition:all .12s; }
     .smax-resp-disc-replicate-btn:hover:not(:disabled) { border-color:rgba(59,130,246,.5); color:#93c5fd; background:rgba(59,130,246,.1); }
     .smax-resp-disc-replicate-btn:disabled { opacity:.5; cursor:default; }
+    #smax-resp-completion-bar { display:flex; align-items:center; gap:6px; padding:5px 0 3px; flex-wrap:wrap; flex-shrink:0; }
+    .smax-resp-completion-btn { font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.05); color:#9ca3af; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .smax-resp-completion-btn:hover { border-color:rgba(34,197,94,.4); color:#86efac; background:rgba(34,197,94,.08); }
+    .smax-resp-completion-btn.active { border-color:#22c55e; color:#4ade80; background:rgba(34,197,94,.18); font-weight:600; }
     #smax-resp-attachment-row { display:flex; align-items:center; gap:8px; padding:4px 0; min-height:22px; flex-shrink:0; }
     #smax-resp-attachment-row[data-empty="true"] { display:none; }
     #smax-resp-attachment-list { display:flex; flex-wrap:wrap; gap:5px; flex:1; }
@@ -3152,7 +3156,7 @@
       return 'PrivacyTypeInternal';
     };
 
-    const postDiscussion = async (ticketId, { bodyHtml, purposeCode, privacyRaw } = {}) => {
+    const postDiscussion = async (ticketId, { bodyHtml, purposeCode, privacyRaw, commentTo } = {}) => {
       if (!prefs.enableRealWrites) return { skipped: true };
       if (!ticketId || !bodyHtml) return null;
 
@@ -3194,7 +3198,7 @@
         CommentFrom: 'Agent',
         FunctionalPurpose: purposeCode || 'StatusUpdate',
         PrivacyType: privacyShort,
-        CommentTo: 'Agent',
+        CommentTo: commentTo || 'Agent',
         CommentBody: bodyHtml,
         DeltaCreateTime: 1,
         AttachmentIds: ''
@@ -7702,12 +7706,17 @@
       el.style.color = color || '#9ca3af';
     };
 
+    const getSelectedCompletionCode = () => {
+      const active = backdrop?.querySelector('.smax-resp-completion-btn.active');
+      return active?.dataset?.code || null;
+    };
+
     const updateSendButton = () => {
       const btn = backdrop?.querySelector('#smax-resp-send-btn');
       if (!btn) return;
       const count = selectedTicketIds.size;
       const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
-      const hasSolution = !!(solEl?.textContent || '').trim();
+      const hasSolution = !!(solEl?.textContent || '').trim() && !!getSelectedCompletionCode();
       const pending = getBatchPending();
       const hasPending = !!(pending.gse || pending.assignee || pendingStatusByTicket[activeTicketId] || pendingStatusSCCDByTicket[activeTicketId]);
       if (count > 1) {
@@ -7716,9 +7725,12 @@
       } else if (!hasSolution && hasPending) {
         btn.textContent = 'Atualizar';
         btn.style.background = 'linear-gradient(135deg,#3b82f6,#1d4ed8)';
-      } else {
+      } else if (hasSolution) {
         btn.textContent = 'Enviar';
         btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+      } else {
+        btn.textContent = 'Atualizar';
+        btn.style.background = 'linear-gradient(135deg,#3b82f6,#1d4ed8)';
       }
     };
 
@@ -8849,7 +8861,7 @@
                willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange };
     };
 
-    const commitTicket = async (id, solutionRaw) => {
+    const commitTicket = async (id, solutionRaw, completionCode) => {
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const pending = getBatchPending();
       const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, statusSCCDWillChange, willAct } = analyzeTicket(id, solutionRaw);
@@ -8858,7 +8870,7 @@
       const props = { Id: id };
       if (hasSolution) {
         props.Solution = solutionRaw; // já é HTML do contenteditable
-        props.CompletionCode = 'CompletionCodeFulfilled'; // encerra o chamado (igual à triagem)
+        props.CompletionCode = completionCode || 'CompletionCodeFulfilled';
       }
       if (gseWillChange) props.ExpertGroup = pending.gse.id;
       if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
@@ -8910,7 +8922,7 @@
       }
     };
 
-    const executeCommitAll = async (targets, solutionRaw) => {
+    const executeCommitAll = async (targets, solutionRaw, completionCode) => {
       const sendBtn  = backdrop?.querySelector('#smax-resp-send-btn');
       const batchBtn = backdrop?.querySelector('#smax-resp-batch-send-btn');
       if (sendBtn)  sendBtn.disabled  = true;
@@ -8919,7 +8931,7 @@
       let ok = 0, fail = 0, skipped = 0;
       for (let i = 0; i < targets.length; i++) {
         setStatusMsg(`Enviando ${i + 1}/${targets.length}...`, '#93c5fd');
-        const r = await commitTicket(targets[i], solutionRaw);
+        const r = await commitTicket(targets[i], solutionRaw, completionCode);
         if (r?.skipped) skipped++;
         else if (r?.ok !== false) ok++;
         else fail++;
@@ -8935,6 +8947,7 @@
         targets.forEach(id => { delete pendingStatusByTicket[id]; delete pendingStatusSCCDByTicket[id]; });
         const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
         if (solEl) solEl.innerHTML = '';
+        backdrop?.querySelectorAll('.smax-resp-completion-btn').forEach(b => b.classList.remove('active'));
         if (activeTicketId) {
           const entry = DataRepository.triageCache.get(activeTicketId);
           if (entry) renderTicketDetail(entry);
@@ -9082,15 +9095,16 @@
 
       const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
       const solutionRaw = solEl?.innerHTML || '';
+      const completionCode = getSelectedCompletionCode();
 
       // Chamado único: executa diretamente sem modal de confirmação
       if (targets.length === 1) {
-        executeCommitAll(targets, solutionRaw);
+        executeCommitAll(targets, solutionRaw, completionCode);
         return;
       }
 
       // Múltiplos: mostra confirmação antes de executar
-      showBatchConfirm(targets, solutionRaw, () => executeCommitAll(targets, solutionRaw));
+      showBatchConfirm(targets, solutionRaw, () => executeCommitAll(targets, solutionRaw, completionCode));
     };
 
     const closeAllPickers = () => {
@@ -9720,6 +9734,12 @@
                       <div id="smax-resp-solution-editor" contenteditable="true" spellcheck="false" data-placeholder="Digite aqui a solução do chamado..."></div>
                       <div id="smax-resp-script-picker"></div>
                     </div>
+                    <div id="smax-resp-completion-bar">
+                      <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;flex-shrink:0;">Código:</span>
+                      <button type="button" class="smax-resp-completion-btn" data-code="CompletionCodeFulfilled">Atendido Offline</button>
+                      <button type="button" class="smax-resp-completion-btn" data-code="CompletionCodeFulfilledByLiveSupport">Suporte ao Vivo</button>
+                      <button type="button" class="smax-resp-completion-btn" data-code="CompletionCodeIncidentResolved">Incidente Resolvido</button>
+                    </div>
                   </div>
                   <!-- Anexos -->
                   <div id="smax-resp-attachment-row" data-empty="true">
@@ -9737,10 +9757,18 @@
                   <div id="smax-resp-new-disc-editor" contenteditable="true" spellcheck="false" data-placeholder="Escreva a nova discussão..."></div>
                   <div class="smax-resp-new-disc-footer">
                     <span id="smax-resp-new-disc-status"></span>
-                    <select id="smax-resp-new-disc-privacy">
-                      <option value="INTERNAL">🔒 Interno</option>
-                      <option value="PUBLIC">🌐 Público</option>
-                      <option value="AGENT">👤 Agente</option>
+                    <select id="smax-resp-new-disc-to" title="Para">
+                      <option value="Agent">→ Agente</option>
+                      <option value="EndUser">→ Usuário</option>
+                    </select>
+                    <select id="smax-resp-new-disc-purpose" title="Objetivo">
+                      <option value="StatusUpdate">Atualização de status</option>
+                      <option value="AgentResponse">Resposta do agente</option>
+                      <option value="FollowUp">Acompanhamento</option>
+                      <option value="Resolution">Resolução</option>
+                      <option value="Workaround">Solução temporária</option>
+                      <option value="Information">Informação adicional</option>
+                      <option value="CommunicationLog">Registro de comunicação</option>
                     </select>
                     <button id="smax-resp-new-disc-send" type="button">💬 Enviar</button>
                   </div>
@@ -9914,6 +9942,16 @@
       const solEditor = backdrop.querySelector('#smax-resp-solution-editor');
       solEditor?.addEventListener('input', updateSendButton);
       addImagePasteHandler(solEditor, updateSendButton);
+
+      // Botões de código de conclusão — toggle (clique no ativo desmarca)
+      backdrop.querySelectorAll('.smax-resp-completion-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const isActive = btn.classList.contains('active');
+          backdrop.querySelectorAll('.smax-resp-completion-btn').forEach(b => b.classList.remove('active'));
+          if (!isActive) btn.classList.add('active');
+          updateSendButton();
+        });
+      });
 
       // Toolbar de formatação (execCommand via mousedown para não tirar o foco do editor)
       backdrop.querySelectorAll('#smax-resp-solution-toolbar .smax-resp-tb-btn').forEach(btn => {
@@ -10262,7 +10300,9 @@
           const bodyHtml = newDiscEditor.innerHTML.trim();
           if (!bodyHtml || bodyHtml === '<br>') { setDiscStatus('Escreva algo antes de enviar.', '#fca5a5'); return; }
 
-          const privacyRaw = backdrop.querySelector('#smax-resp-new-disc-privacy')?.value || 'INTERNAL';
+          const commentTo = backdrop.querySelector('#smax-resp-new-disc-to')?.value || 'Agent';
+          const purposeCode = backdrop.querySelector('#smax-resp-new-disc-purpose')?.value || 'StatusUpdate';
+          const privacyRaw = commentTo === 'EndUser' ? 'PUBLIC' : 'INTERNAL';
           const targets = selectedTicketIds.size > 0 ? [...selectedTicketIds] : (activeTicketId ? [activeTicketId] : []);
           if (!targets.length) { setDiscStatus('Nenhum chamado selecionado.', '#fca5a5'); return; }
           if (!prefs.enableRealWrites) { setDiscStatus('⚠️ Escritas reais desativadas.', '#facc15'); return; }
@@ -10273,7 +10313,7 @@
           for (let i = 0; i < targets.length; i++) {
             setDiscStatus(`Enviando ${i + 1}/${targets.length}...`, '#93c5fd');
             try {
-              const result = await Api.postDiscussion(targets[i], { bodyHtml, purposeCode: 'StatusUpdate', privacyRaw });
+              const result = await Api.postDiscussion(targets[i], { bodyHtml, purposeCode, privacyRaw, commentTo });
               const outcome = Api.summarizeBulkOutcome(result);
               if (result?.skipped || outcome?.ok !== false) {
                 ok++;
