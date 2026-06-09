@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.31
+// @version      2.32
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.31';
+  const SMAX_TOOLKIT_VERSION = '2.32';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -446,8 +446,8 @@
       --sp-surface: #ffffff;
       --sp-surface-2: #f5f5f5;
       --sp-text: #333333;
-      --sp-text-muted: #757575;
-      --sp-text-dim: #888888;
+      --sp-text-muted: #555555;
+      --sp-text-dim: #6b6b6b;
       --sp-border: #cccccc;
       --sp-border-strong: rgba(0,0,0,.18);
       --sp-accent: #0073e7;
@@ -739,7 +739,7 @@
     #smax-triage-attachment-list[data-state="error"] { display:block; text-align:right; }
     .smax-attachment-chip { border:1px solid #38bdf8; border-radius:999px; padding:3px 8px; background:transparent; color:#38bdf8; font-size:11px; cursor:pointer; transition:background 0.15s ease, color 0.15s ease; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .smax-attachment-chip:hover { background:#38bdf8; color:#0f172a; }
-    #smax-attachment-modal { position:fixed; inset:0; background:var(--sp-surface-2); z-index:1000003; display:none; align-items:center; justify-content:center; padding:30px; }
+    #smax-attachment-modal { position:fixed; inset:0; background:rgba(2,6,23,0.92); z-index:1000003; display:none; align-items:center; justify-content:center; padding:30px; }
     #smax-attachment-modal[data-visible="true"] { display:flex; }
     #smax-attachment-modal img { max-width:90vw; max-height:90vh; border-radius:10px; box-shadow:0 20px 45px rgba(0,0,0,0.65); }
     #smax-attachment-modal button { position:absolute; top:18px; right:18px; border:none; width:40px; height:40px; border-radius:50%; background:var(--sp-surface); color:var(--sp-text); font-size:22px; cursor:pointer; }
@@ -759,9 +759,9 @@
     .smax-resp-ticket-item.active { background:rgba(59,130,246,.12); border-left:3px solid #3b82f6; }
     .smax-resp-ticket-cb { margin-top:2px; flex-shrink:0; accent-color:#3b82f6; cursor:pointer; }
     .smax-resp-ticket-info { flex:1; min-width:0; }
-    .smax-resp-ticket-id { font-size:11px; font-weight:700; color:#60a5fa; }
-    .smax-resp-ticket-subject { font-size:11px; color:var(--sp-text); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .smax-resp-ticket-status { font-size:10px; color:var(--sp-text-muted); margin-top:2px; }
+    .smax-resp-ticket-id { font-size:12px; font-weight:700; color:#60a5fa; }
+    .smax-resp-ticket-subject { font-size:12px; color:var(--sp-text); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .smax-resp-ticket-status { font-size:11px; color:var(--sp-text-muted); margin-top:2px; }
     #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
     #smax-resp-hud-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0073e7 0%,#005bb5 100%); border-radius:0; flex-shrink:0; }
     #smax-resp-hud-body { flex:1; display:flex; min-height:0; overflow:hidden; }
@@ -772,8 +772,8 @@
     #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
     #smax-resp-solution-toolbar { display:flex; gap:2px; padding:4px 6px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; }
     .smax-resp-tb-btn { background:transparent; border:1px solid transparent; border-radius:4px; color:var(--sp-text-muted); cursor:pointer; font-size:12px; line-height:1; padding:3px 7px; transition:background .12s,color .12s; }
-    .smax-resp-tb-btn:hover { background:rgba(255,255,255,.1); color:var(--sp-text); }
-    .smax-resp-tb-sep { width:1px; background:rgba(255,255,255,.12); margin:3px 2px; align-self:stretch; }
+    .smax-resp-tb-btn:hover { background:var(--sp-primary-hover); color:var(--sp-text); }
+    .smax-resp-tb-sep { width:1px; background:var(--sp-border); margin:3px 2px; align-self:stretch; }
     #smax-resp-solution-editor { min-height:105px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:10px 12px; color:var(--sp-text); font-size:13px; line-height:1.6; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
     #smax-resp-solution-editor:focus { border-color:#3b82f6; }
     #smax-resp-solution-editor:empty::before { content:attr(data-placeholder); color:var(--sp-text-muted); pointer-events:none; display:block; }
@@ -804,14 +804,14 @@
     #smax-resp-hud-discussions { width:300px; flex-shrink:0; border-left:1px solid var(--sp-border); display:flex; flex-direction:column; overflow:hidden; background:var(--sp-surface-2); }
     #smax-resp-discussions-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:8px; }
     .smax-resp-discussion-item { border:1px solid var(--sp-border); border-radius:8px; padding:8px 10px; background:var(--sp-surface); font-size:12px; }
-    .smax-resp-disc-meta { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; font-size:10px; color:var(--sp-text-muted); }
+    .smax-resp-disc-meta { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; font-size:12px; color:var(--sp-text-muted); }
     .smax-resp-disc-author { color:var(--sp-text-muted); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
     .smax-resp-disc-body { color:var(--sp-text); line-height:1.45; font-size:11px; max-height:80px; overflow-y:auto; }
     .smax-resp-disc-body p { margin:0 0 4px; }
     .smax-resp-disc-expand-btn { font-size:10px; padding:2px 7px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; }
     .smax-resp-disc-expand-btn:hover { border-color:rgba(148,163,184,.4); color:#94a3b8; background:rgba(148,163,184,.08); }
     #smax-resp-new-disc-panel { flex-shrink:0; border-top:1px solid var(--sp-border); padding:8px; display:flex; flex-direction:column; gap:5px; }
-    #smax-resp-new-disc-label { font-size:9px; font-weight:600; color:var(--sp-text-muted); text-transform:uppercase; letter-spacing:.06em; }
+    #smax-resp-new-disc-label { font-size:11px; font-weight:600; color:var(--sp-text); text-transform:uppercase; letter-spacing:.06em; }
     #smax-resp-new-disc-editor { min-height:56px; max-height:110px; overflow-y:auto; background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:6px; color:var(--sp-text); font-size:11px; padding:5px 8px; outline:none; line-height:1.5; font-family:inherit; }
     #smax-resp-new-disc-editor:empty:before { content:attr(data-placeholder); color:var(--sp-text-muted); pointer-events:none; display:block; }
     #smax-resp-new-disc-editor:focus { border-color:rgba(99,102,241,.4); }
@@ -873,7 +873,7 @@
     #smax-resp-detail { display:flex; flex-direction:column; flex:1; min-height:0; gap:10px; }
     #smax-resp-meta-bar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; flex-shrink:0; }
     .smax-resp-meta-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:20px; border:1px solid var(--sp-border); background:var(--sp-surface-2); color:var(--sp-text); font-size:11px; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
-    .smax-resp-meta-chip:hover { border-color:rgba(255,255,255,.3); background:rgba(255,255,255,.1); color:#fff; }
+    .smax-resp-meta-chip:hover { border-color:var(--sp-accent); background:var(--sp-primary-hover); color:var(--sp-accent); }
     .smax-resp-meta-chip.dirty { border-color:#f59e0b; background:rgba(245,158,11,.15); color:#fcd34d; }
     .smax-resp-meta-chip .chip-edit { font-size:9px; opacity:.5; margin-left:2px; }
     .smax-resp-field-picker { display:none; position:fixed; z-index:999999; background:var(--sp-bg); border:1px solid var(--sp-border); border-radius:10px; box-shadow:0 12px 36px rgba(0,0,0,.75); overflow:hidden; width:380px; }
@@ -3479,7 +3479,7 @@
     const renderHeader = () => {
       const isDark = (personal.themeMode || 'dark') === 'dark';
       return `
-      <div id="smax-settings-header" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:10px 18px;background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%);border-radius:12px 12px 0 0;flex-shrink:0;gap:12px;">
+      <div id="smax-settings-header" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:10px 18px;background:linear-gradient(90deg,#0073e7 0%,#005bb5 100%);border-radius:0;flex-shrink:0;gap:12px;">
         <div style="font-weight:700;font-size:16px;letter-spacing:.03em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.3);white-space:nowrap;">
           ⚙️ SMAX Toolkit
         </div>
@@ -4974,12 +4974,12 @@
         top: '0',
         right: '0',
         bottom: '0',
-        left: 'auto',
-        width: '50vw',
+        left: '0',
+        width: '100vw',
         height: '100vh',
         zIndex: '999999',
         borderRadius: '0',
-        boxShadow: '-6px 0 40px rgba(0,0,0,0.45)',
+        boxShadow: 'none',
         display: 'none',
         fontSize: '14px',
         flexDirection: 'column',
@@ -8983,9 +8983,9 @@
                 <span id="smax-resp-detail-global-badge" style="display:none;flex-shrink:0;"></span>
                 <span id="smax-resp-vip-badge" style="display:none;padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;flex-shrink:0;">VIP</span>
                 <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;flex-shrink:0;"></span>
-                <span id="smax-resp-requester-title" style="display:none;font-size:10px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;flex-shrink:0;font-style:italic;"></span>
-                <span id="smax-resp-location-label" style="display:none;font-size:10px;color:rgba(255,255,255,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;cursor:pointer;" title="Clique para ver nome completo"></span>
-                <span id="smax-resp-created-label" style="display:none;font-size:10px;color:rgba(255,255,255,.4);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
+                <span id="smax-resp-requester-title" style="display:none;font-size:12px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;flex-shrink:0;font-style:italic;"></span>
+                <span id="smax-resp-location-label" style="display:none;font-size:12px;color:rgba(255,255,255,.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;cursor:pointer;" title="Clique para ver nome completo"></span>
+                <span id="smax-resp-created-label" style="display:none;font-size:12px;color:rgba(255,255,255,.65);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <input type="text" id="smax-resp-global-id" placeholder="Global ID" inputmode="numeric" autocomplete="off"
