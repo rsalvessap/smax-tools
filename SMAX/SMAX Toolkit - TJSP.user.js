@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.28
-// @description  Conjunto de ferramentas para o SMAX TJSP: triagem, scripts de respostas, radar, Zen Mode e consulta de processos no eProc
+// @version      2.29
+// @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.28';
+  const SMAX_TOOLKIT_VERSION = '2.29';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -55,12 +55,6 @@
    * =======================================================*/
   const PrefStore = (() => {
     const defaults = {
-      nameBadgesOn: true,
-      collapseOn: false,
-      enlargeCommentsOn: true,
-      flagSkullOn: true,
-      zenModeOn: false,
-      radarOn: true,
       nameGroups: {},
       ausentes: [],
       enableRealWrites: true,
@@ -3915,8 +3909,6 @@
 
     // Shareable config keys (no personal identity — meant for team distribution)
     const CONFIG_KEYS = [
-      'nameBadgesOn', 'collapseOn', 'enlargeCommentsOn', 'flagSkullOn',
-      'zenModeOn', 'radarOn',
       'nameGroups', 'ausentes', 'enableRealWrites',
       'defaultGlobalChangeId', 'personalFinalsRaw', 'teamsConfigRaw'
     ];
@@ -3987,45 +3979,6 @@
                 </div>
               `}
             </div>
-          </div>
-          <div class="smax-sp-card">
-            <div class="smax-sp-section-title">Opções dos módulos</div>
-            <div class="smax-module-group-label">📋 Tela de Lista (fila de chamados)</div>
-            ${[
-              ['radarOn',      '📡', 'Radar de pendentes',  'Badge com chamados rejeitados ou aguardando aceite'],
-              ['flagSkullOn',  '⭐', 'Usuários Destaque',   'Destaca linha inteira do chamado para usuários da lista de destaque'],
-              ['nameBadgesOn', '🏷️', 'Badges na grid',      'Exibe o responsável ao lado do chamado na lista'],
-            ].map(([key, icon, label, tip]) => `
-              <div class="smax-module-row${prefs[key] ? ' smax-active' : ''}" data-key="${key}">
-                <div class="smax-module-icon">${icon}</div>
-                <div class="smax-module-info">
-                  <div class="smax-module-name">${label}</div>
-                  <div class="smax-module-desc">${tip}</div>
-                </div>
-                <label class="smax-toggle-sw" onclick="event.stopPropagation()">
-                  <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''}>
-                  <span class="smax-toggle-track"></span>
-                </label>
-              </div>
-            `).join('')}
-            <div class="smax-module-group-label" style="margin-top:6px;">🎫 Tela de Chamado (interno)</div>
-
-            ${[
-              ['zenModeOn',  '🧘', 'Zen Mode',       'Oculta campos desnecessários no formulário de chamado'],
-              ['collapseOn', '📂', 'Recolher seções', 'Recolhe automaticamente seções desnecessárias'],
-            ].map(([key, icon, label, tip]) => `
-              <div class="smax-module-row${prefs[key] ? ' smax-active' : ''}" data-key="${key}">
-                <div class="smax-module-icon">${icon}</div>
-                <div class="smax-module-info">
-                  <div class="smax-module-name">${label}</div>
-                  <div class="smax-module-desc">${tip}</div>
-                </div>
-                <label class="smax-toggle-sw" onclick="event.stopPropagation()">
-                  <input type="checkbox" class="smax-pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''}>
-                  <span class="smax-toggle-track"></span>
-                </label>
-              </div>
-            `).join('')}
           </div>
         </div>
         <div class="smax-sp-card">
@@ -4155,20 +4108,6 @@
           <button id="smax-launch-triage-btn" style="padding:12px 32px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);color:#fff;box-shadow:0 6px 20px rgba(59,130,246,.4),0 0 0 1px rgba(255,255,255,.1) inset;transition:transform .15s,box-shadow .15s;">
             🚀 Iniciar Triagem
           </button>
-        </div>
-        <div class="smax-sp-card">
-          <div class="smax-sp-section-title" style="margin-bottom:8px;">⚙️ Opções de Triagem</div>
-          <div class="smax-module-row${prefs.enlargeCommentsOn ? ' smax-active' : ''}" data-key="enlargeCommentsOn">
-            <div class="smax-module-icon">💬</div>
-            <div class="smax-module-info">
-              <div class="smax-module-name">Comentários expandidos</div>
-              <div class="smax-module-desc">Exibe todos os comentários do chamado sem limite de altura</div>
-            </div>
-            <label class="smax-toggle-sw" onclick="event.stopPropagation()">
-              <input type="checkbox" class="smax-pref-toggle" data-key="enlargeCommentsOn" ${prefs.enlargeCommentsOn ? 'checked' : ''}>
-              <span class="smax-toggle-track"></span>
-            </label>
-          </div>
         </div>
         <div class="smax-sp-card">
           <div class="smax-sp-section-title">📖 Guia Rápido</div>
@@ -4317,10 +4256,6 @@
           savePrefs();
           const row = cb.closest('.smax-module-row');
           if (row) row.classList.toggle('smax-active', cb.checked);
-          if (key === 'zenModeOn')      ZenMode.apply();
-          if (key === 'radarOn' && cb.checked) RadarRevisar.query();
-          if (key === 'flagSkullOn')    HighlightUser.applyAll();
-          if (key === 'collapseOn')     SectionTweaks.applyAll();
         });
       });
 
@@ -4661,7 +4596,6 @@
           savePrefs();
           const row = cb.closest('.smax-module-row');
           if (row) row.classList.toggle('smax-active', cb.checked);
-          if (key === 'enlargeCommentsOn') CommentExpander.expandAll();
         });
       });
 
@@ -4975,13 +4909,6 @@
     return { init, renderPanel };
   })();
 
-  /* =========================================================
-   * [Módulos removidos: CommentExpander, SectionTweaks, Orchestrator, HighlightUser, GridTracker]
-   * =======================================================*/
-  const CommentExpander    = (() => { const init = () => {}; return { init, expandAll: () => {} }; })();
-  const SectionTweaks      = (() => { const init = () => {}; return { init, applyAll: () => {} }; })();
-  const Orchestrator       = (() => { const init = () => {}; return { init }; })();
-  const HighlightUser      = (() => { const init = () => {}; return { init, applyAll: () => {}, isHighlighted: () => false }; })();
   const GridTracker        = (() => {
     let needsRebuild = false;
     const markDirty  = () => { needsRebuild = true; };
@@ -6626,22 +6553,7 @@
 
       const currentId = currentItem()?.idText || null;
 
-      if (GridTracker.consume()) {
-        const { list: rebuilt } = buildQueue();
-        if (rebuilt.length) {
-          triageQueue = rebuilt;
-          if (currentId) {
-            const nextIndex = rebuilt.findIndex((entry) => entry.idText === currentId);
-            if (nextIndex >= 0) triageIndex = (nextIndex + delta + rebuilt.length) % rebuilt.length;
-            else triageIndex = delta > 0 ? 0 : rebuilt.length - 1;
-          } else {
-            triageIndex = delta > 0 ? 0 : rebuilt.length - 1;
-          }
-        } else {
-          triageQueue = rebuilt;
-          triageIndex = -1;
-        }
-      } else if (triageQueue.length) {
+      if (triageQueue.length) {
         const length = triageQueue.length;
         triageIndex = (triageIndex + delta + length) % length;
       }
@@ -7153,10 +7065,6 @@
         const nameToCheck = entry.requestedForName
           || DataRepository.triageCache.get(entry.id)?.requestedForName
           || '';
-        if (HighlightUser.isHighlighted(nameToCheck)) {
-          el.style.setProperty('background', 'linear-gradient(90deg,rgba(251,191,36,.18) 0%,rgba(245,158,11,.07) 100%)', 'important');
-          el.style.setProperty('box-shadow', 'inset 3px 0 0 #f59e0b', 'important');
-        }
       });
     };
 
@@ -9667,15 +9575,6 @@
     return { init, open };
   })();
 
-  /* =========================================================
-   * [ZenMode removido]
-   * =======================================================*/
-  const ZenMode = (() => { const init = () => {}; return { init, apply: () => {} }; })();
-
-  /* =========================================================
-   * [RadarRevisar removido]
-   * =======================================================*/
-  const RadarRevisar = (() => { const init = () => {}; return { init, query: () => {} }; })();
 
 
   /* =========================================================
