@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.39
+// @version      2.40
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.39';
+  const SMAX_TOOLKIT_VERSION = '2.40';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -457,10 +457,10 @@
       --sp-primary: #0064d2;
       --sp-primary-bg: rgba(0,100,210,.08);
       --sp-primary-hover: rgba(0,100,210,.15);
-      --sp-sidebar-bg: #eaeff5;
-      --sp-sidebar-text: #4a5568;
-      --sp-sidebar-active-bg: rgba(0,100,210,.1);
-      --sp-sidebar-active-text: #0064d2;
+      --sp-sidebar-bg: #bed4e8;
+      --sp-sidebar-text: #2d3f52;
+      --sp-sidebar-active-bg: rgba(0,100,210,.12);
+      --sp-sidebar-active-text: #004bb5;
       --sp-input-bg: #ffffff;
       --sp-input-border: #c4ced8;
       --sp-input-text: #1a202c;
@@ -510,7 +510,7 @@
     #smax-triage-hud-backdrop { background:rgba(0,0,0,0.5); }
     #smax-triage-hud { background:#e8edf4; color:#1a202c; box-shadow:0 8px 40px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.08) inset; }
     #smax-triage-hud-body { background:#ffffff; border:1px solid #b8c4d4; }
-    #smax-triage-hud-footer { background:#dde4ed; border-top:1px solid #b8c4d4; color:#1a202c; }
+    #smax-triage-hud-footer { background:#eaf2fa; border-top:2px solid #8ab8d8; color:#1a202c; }
     #smax-triage-sidebar { background:#d4dce8; border-right:2px solid #b0bcd0; }
     .smax-triage-sidebar-section { color:#374151; font-weight:600; }
     .smax-triage-queue-item { background:#edf1f7; border:1px solid #b8c4d4; color:#1a202c; }
@@ -664,7 +664,7 @@
     .smax-triage-main-actions-buttons { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
     .smax-triage-urg-group { display:flex; flex-wrap:wrap; gap:6px; }
     .smax-triage-auto-panels { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start; min-width:260px; justify-content:flex-end; margin-left:auto; }
-    .smax-triage-indicator { display:flex; flex-direction:column; gap:3px; padding:8px 12px; border-radius:12px; border:1px solid var(--sp-border); background:var(--sp-surface-2); min-width:150px; font-size:12px; color:#f1f5f9; transition:all .2s ease; flex:0 0 auto; width:auto; box-shadow:0 4px 12px rgba(0,0,0,.2); }
+    .smax-triage-indicator { display:flex; flex-direction:column; gap:3px; padding:8px 12px; border-radius:12px; border:1px solid var(--sp-border); background:var(--sp-surface-2); min-width:150px; font-size:12px; color:var(--sp-text); transition:all .2s ease; flex:0 0 auto; width:auto; box-shadow:0 4px 12px rgba(0,0,0,.12); }
     .smax-triage-indicator .smax-indicator-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--sp-text-muted); font-weight:500; }
     .smax-triage-indicator[data-state="pending"] { border-color:#facc15; box-shadow:0 0 12px rgba(250,204,21,0.25); }
     .smax-triage-indicator[data-state="staged"] { border-color:#22c55e; box-shadow:0 0 16px rgba(34,197,94,0.35); }
@@ -698,6 +698,9 @@
     .smax-triage-primary:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(34,197,94,.45); }
     .smax-triage-secondary { padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.05); color:var(--sp-text); cursor:pointer; font-size:13px; transition:all .15s ease; }
     .smax-triage-secondary:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.25); }
+    body:not([data-smax-theme="dark"]) .smax-triage-secondary { background:#e8f0f8; border-color:#9ab8d4; color:#1a3048; }
+    body:not([data-smax-theme="dark"]) .smax-triage-secondary:hover { background:#d8e8f5; border-color:#6a98bc; }
+    body:not([data-smax-theme="dark"]) .smax-triage-secondary:disabled { background:#edf2f7; border-color:#c4d4e4; color:#6a8090; }
     .smax-triage-chip { transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease; }
     .smax-triage-chip[data-active="true"], .smax-triage-chip[data-active="selected"] { box-shadow:0 0 0 1px rgba(250,250,250,0.7), 0 0 18px rgba(250,250,250,0.55); transform:translateY(-1px) scale(1.01); }
     .smax-urg-low[data-active="true"]  { background:#facc15;color:#111827;border-color:#facc15; }
@@ -708,13 +711,17 @@
     #smax-triage-discussions { width:340px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-radius:0 0 12px 0; padding:14px; display:flex; flex-direction:column; gap:12px; overflow:auto; flex-shrink:0; min-height:0; max-height:100%; }
     .smax-discussions-placeholder { font-size:13px; color:var(--sp-text-muted); line-height:1.5; }
     .smax-discussion-card { border:1px solid var(--sp-border); border-radius:10px; padding:10px 12px; background:var(--sp-surface); display:flex; flex-direction:column; gap:8px; transition:border-color .15s ease, box-shadow .15s ease; }
-    .smax-discussion-card:hover { border-color:rgba(255,255,255,.2); box-shadow:0 4px 16px rgba(0,0,0,.3); }
+    .smax-discussion-card:hover { border-color:var(--sp-primary); box-shadow:0 4px 12px rgba(0,0,0,.12); }
+    body[data-smax-theme="dark"] .smax-discussion-card:hover { border-color:rgba(255,255,255,.2); box-shadow:0 4px 16px rgba(0,0,0,.3); }
     .smax-discussion-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; }
     .smax-discussion-title { font-weight:600; color:var(--sp-text); }
     .smax-discussion-privacy { font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding:1px 8px; border-radius:999px; border:1px solid rgba(248,250,252,0.3); color:var(--sp-text); }
-    .smax-discussion-card[data-privacy="PUBLIC"] .smax-discussion-privacy { background:#082f49; border-color:#38bdf8; color:#bae6fd; }
-    .smax-discussion-card[data-privacy="INTERNAL"] .smax-discussion-privacy { background:#1e1b4b; border-color:#a78bfa; color:#ede9fe; }
-    .smax-discussion-card[data-privacy="EXTERNAL"] .smax-discussion-privacy { background:#0f172a; border-color:#4ade80; color:#bbf7d0; }
+    .smax-discussion-card[data-privacy="PUBLIC"] .smax-discussion-privacy { background:#e0f2fe; border-color:#38bdf8; color:#0369a1; }
+    .smax-discussion-card[data-privacy="INTERNAL"] .smax-discussion-privacy { background:#ede9fe; border-color:#a78bfa; color:#5b21b6; }
+    .smax-discussion-card[data-privacy="EXTERNAL"] .smax-discussion-privacy { background:#dcfce7; border-color:#4ade80; color:#166534; }
+    body[data-smax-theme="dark"] .smax-discussion-card[data-privacy="PUBLIC"] .smax-discussion-privacy { background:#082f49; border-color:#38bdf8; color:#bae6fd; }
+    body[data-smax-theme="dark"] .smax-discussion-card[data-privacy="INTERNAL"] .smax-discussion-privacy { background:#1e1b4b; border-color:#a78bfa; color:#ede9fe; }
+    body[data-smax-theme="dark"] .smax-discussion-card[data-privacy="EXTERNAL"] .smax-discussion-privacy { background:#0f172a; border-color:#4ade80; color:#bbf7d0; }
     .smax-discussion-body { font-size:13px; color:var(--sp-text); line-height:1.45; max-height:150px; overflow:auto; }
     .smax-discussion-body p { margin:0 0 6px; }
     .smax-discussion-body p:last-child { margin-bottom:0; }
@@ -1156,10 +1163,10 @@
       border-color: rgba(248,113,113,.25) !important;
     }
     #smax-settings-sidebar {
-      border-right-color: #c4ced8;
+      border-right: 2px solid #7aaac8 !important;
     }
     body[data-smax-theme="dark"] #smax-settings-sidebar {
-      border-right-color: #2a3448;
+      border-right: 2px solid #2a3448 !important;
     }
     /* Input base (light) */
     #smax-settings input[type="text"],
