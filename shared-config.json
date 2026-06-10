@@ -1,8 +1,150 @@
 {
-  "_version": 1,
-  "_updatedAt": "2026-06-01",
+  "_version": 2,
+  "_updatedAt": "2026-06-10",
   "_description": "Configuracao compartilhada SMAX Toolkit TJSP. Edite para distribuir equipes e scripts para toda a equipe automaticamente.",
-
+  "nameGroups": {
+    "DANIEL CAMPOS LEAL": [
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "DOUGLAS MACHADO DA SILVA": [
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "IONE CHINA": [
+      22,
+      23,
+      24,
+      25,
+      26
+    ],
+    "IVAN APARECIDO DOS SANTOS": [
+      33,
+      34,
+      35,
+      36,
+      37,
+      38
+    ],
+    "LAIS MARTINS BARRETO NOVAIS": [
+      44,
+      45,
+      46,
+      47,
+      48,
+      49
+    ],
+    "LEONARDO YAN DA SILVA FERNANDES": [
+      50,
+      51,
+      52,
+      53,
+      54,
+      55
+    ],
+    "LUANA ALVES VIEIRA": [
+      56,
+      57,
+      58,
+      59,
+      60
+    ],
+    "LUIS FELIPE NEVES": [
+      61,
+      62,
+      63,
+      64,
+      65,
+      66
+    ],
+    "MARCELO APARECIDO DOS SANTOS LAZARO": [
+      67,
+      68,
+      69,
+      70,
+      71,
+      72
+    ],
+    "MARLON TERGILENE BICALHO DOS SANTOS": [
+      73,
+      74,
+      75,
+      76,
+      77
+    ],
+    "ROBSON SOUZA ALVES": [
+      78,
+      79,
+      80,
+      81,
+      82,
+      83
+    ],
+    "SAMUEL RODRIGUES": [
+      89,
+      90,
+      91,
+      92,
+      93,
+      94
+    ],
+    "YVES JERONIMO DA SILVA MESQUITA": [
+      95,
+      96,
+      97,
+      98,
+      99
+    ],
+    "ISABELLA DA SILVA SANTOS": [
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "DOUGLAS SUGAHARA": [
+      16,
+      17,
+      18,
+      19,
+      20,
+      21
+    ],
+    "ADRIANO AUGUSTO CARDOSO E SANTOS": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "LAIS AKEMI KANEMOTO MAEDO FERREIRA": [
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "RODRIGO SALES ZIZUEL": [
+      84,
+      85,
+      86,
+      87,
+      88
+    ]
+  },
+  "ausentes": [
+    "IONE CHINA"
+  ],
+  "enableRealWrites": true,
+  "defaultGlobalChangeId": "",
   "teams": [
     {
       "id": "2.2.2",
@@ -35,22 +177,71 @@
         }
       ],
       "workers": [
-        { "name": "DIEGO DE JESUS LEITE",            "digits": "00-12", "isAbsent": false },
-        { "name": "FABIO ROBERTO YOSHIMOTO MENDES",  "digits": "13-25", "isAbsent": false },
-        { "name": "ISABELLA DA SILVA SANTOS",        "digits": "26-38", "isAbsent": false },
-        { "name": "JEAN HENRIQUE SANTOS",            "digits": "39-51", "isAbsent": false },
-        { "name": "MARCELO APARECIDO DOS SANTOS LAZARO", "digits": "52-64", "isAbsent": false },
-        { "name": "ROBSON SOUZA ALVES",              "digits": "65-77", "isAbsent": false },
-        { "name": "THAIS HELENA FERREIRA JULIO",     "digits": "87-99", "isAbsent": false }
+        {
+          "name": "DIEGO DE JESUS LEITE",
+          "digits": "00-12",
+          "isAbsent": false
+        },
+        {
+          "name": "FABIO ROBERTO YOSHIMOTO MENDES",
+          "digits": "13-25",
+          "isAbsent": false
+        },
+        {
+          "name": "ISABELLA DA SILVA SANTOS",
+          "digits": "26-38",
+          "isAbsent": false
+        },
+        {
+          "name": "JEAN HENRIQUE SANTOS",
+          "digits": "39-51",
+          "isAbsent": false
+        },
+        {
+          "name": "MARCELO APARECIDO DOS SANTOS LAZARO",
+          "digits": "52-64",
+          "isAbsent": false
+        },
+        {
+          "name": "ROBSON SOUZA ALVES",
+          "digits": "65-77",
+          "isAbsent": false
+        },
+        {
+          "name": "THAIS HELENA FERREIRA JULIO",
+          "digits": "87-99",
+          "isAbsent": false
+        }
       ],
       "gseRules": [
-        { "id": "51642957", "name": "GSE - SGS - EPROC 1G - JUIESP" },
-        { "id": "66561429", "name": "GSE - SGS - EPROC - MIGRAÇÃO 1G" },
-        { "id": "51644373", "name": "GSE - SGS - EPROC 1G - CEJUSCS" },
-        { "id": "51642766", "name": "GSE - SGS - EPROC 1G - CLMAND" },
-        { "id": "51643432", "name": "GSE - SGS - EPROC 1G - OFJUST" },
-        { "id": "51642772", "name": "GSE - SGS - EPROC 1G - DISTR" },
-        { "id": "67109543", "name": "GSE - SGS - EPROC - HOMOLOGACAO" }
+        {
+          "id": "51642957",
+          "name": "GSE - SGS - EPROC 1G - JUIESP"
+        },
+        {
+          "id": "66561429",
+          "name": "GSE - SGS - EPROC - MIGRAÇÃO 1G"
+        },
+        {
+          "id": "51644373",
+          "name": "GSE - SGS - EPROC 1G - CEJUSCS"
+        },
+        {
+          "id": "51642766",
+          "name": "GSE - SGS - EPROC 1G - CLMAND"
+        },
+        {
+          "id": "51643432",
+          "name": "GSE - SGS - EPROC 1G - OFJUST"
+        },
+        {
+          "id": "51642772",
+          "name": "GSE - SGS - EPROC 1G - DISTR"
+        },
+        {
+          "id": "67109543",
+          "name": "GSE - SGS - EPROC - HOMOLOGACAO"
+        }
       ]
     },
     {
@@ -58,26 +249,94 @@
       "name": "2.2.1",
       "priority": 0,
       "gseRules": [
-        { "id": "51642955", "name": "GSE - SGS - EPROC 1G - ACIV" },
-        { "id": "51642956", "name": "GSE - SGS - EPROC 1G - ACRIM" },
-        { "id": "51642761", "name": "GSE - SGS - EPROC 1G - AEXCRIM" },
-        { "id": "67109543", "name": "GSE - SGS - EPROC - HOMOLOGACAO" }
+        {
+          "id": "51642955",
+          "name": "GSE - SGS - EPROC 1G - ACIV"
+        },
+        {
+          "id": "51642956",
+          "name": "GSE - SGS - EPROC 1G - ACRIM"
+        },
+        {
+          "id": "51642761",
+          "name": "GSE - SGS - EPROC 1G - AEXCRIM"
+        },
+        {
+          "id": "67109543",
+          "name": "GSE - SGS - EPROC - HOMOLOGACAO"
+        }
       ],
       "workers": [
-        { "name": "DANIEL CAMPOS LEAL",                  "digits": "00-06", "isAbsent": false },
-        { "name": "DOUGLAS MACHADO DA SILVA",             "digits": "07-13", "isAbsent": false },
-        { "name": "DOUGLAS SUGAHARA",                    "digits": "14-20", "isAbsent": false },
-        { "name": "IONE CHINA",                          "digits": "21-27", "isAbsent": false },
-        { "name": "IVAN APARECIDO DOS SANTOS",           "digits": "28-34", "isAbsent": false },
-        { "name": "LAIS MARTINS BARRETO NOVAIS",         "digits": "35-41", "isAbsent": false },
-        { "name": "LEONARDO YAN DA SILVA FERNANDES",     "digits": "42-48", "isAbsent": false },
-        { "name": "LUIS FELIPE NEVES",                   "digits": "49-55", "isAbsent": false },
-        { "name": "RODRIGO SALES ZIZUEL",                "digits": "56-62", "isAbsent": false },
-        { "name": "SAMUEL RODRIGUES",                    "digits": "63-69", "isAbsent": false },
-        { "name": "YVES JERONIMO DA SILVA MESQUITA",     "digits": "70-75", "isAbsent": false },
-        { "name": "FELIPE FONTES DO NASCIMENTO",         "digits": "76-81", "isAbsent": false },
-        { "name": "FERNANDA SANTOS DE JESUS",            "digits": "82-87", "isAbsent": false },
-        { "name": "WEBSTER VINICIUS DE MOITINHO",        "digits": "88-93", "isAbsent": false }
+        {
+          "name": "DANIEL CAMPOS LEAL",
+          "digits": "00-06",
+          "isAbsent": false
+        },
+        {
+          "name": "DOUGLAS MACHADO DA SILVA",
+          "digits": "07-13",
+          "isAbsent": false
+        },
+        {
+          "name": "DOUGLAS SUGAHARA",
+          "digits": "14-20",
+          "isAbsent": false
+        },
+        {
+          "name": "IONE CHINA",
+          "digits": "21-27",
+          "isAbsent": false
+        },
+        {
+          "name": "IVAN APARECIDO DOS SANTOS",
+          "digits": "28-34",
+          "isAbsent": false
+        },
+        {
+          "name": "LAIS MARTINS BARRETO NOVAIS",
+          "digits": "35-41",
+          "isAbsent": false
+        },
+        {
+          "name": "LEONARDO YAN DA SILVA FERNANDES",
+          "digits": "42-48",
+          "isAbsent": false
+        },
+        {
+          "name": "LUIS FELIPE NEVES",
+          "digits": "49-55",
+          "isAbsent": false
+        },
+        {
+          "name": "RODRIGO SALES ZIZUEL",
+          "digits": "56-62",
+          "isAbsent": false
+        },
+        {
+          "name": "SAMUEL RODRIGUES",
+          "digits": "63-69",
+          "isAbsent": false
+        },
+        {
+          "name": "YVES JERONIMO DA SILVA MESQUITA",
+          "digits": "70-75",
+          "isAbsent": false
+        },
+        {
+          "name": "FELIPE FONTES DO NASCIMENTO",
+          "digits": "76-81",
+          "isAbsent": false
+        },
+        {
+          "name": "FERNANDA SANTOS DE JESUS",
+          "digits": "82-87",
+          "isAbsent": false
+        },
+        {
+          "name": "WEBSTER VINICIUS DE MOITINHO",
+          "digits": "88-93",
+          "isAbsent": false
+        }
       ],
       "matchers": []
     },
@@ -91,7 +350,6 @@
       "gseRules": []
     }
   ],
-
   "scripts": {
     "sol": [],
     "disc": []
