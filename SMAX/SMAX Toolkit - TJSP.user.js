@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.41
+// @version      2.42
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.41';
+  const SMAX_TOOLKIT_VERSION = '2.42';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1232,6 +1232,20 @@
     body:not([data-smax-theme="dark"]) #smax-resp-search-info { background:var(--sp-surface-2) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
     body:not([data-smax-theme="dark"]) .smax-sort-btn.active { background:rgba(0,100,210,.15); border-color:#0064d2; color:#003e8a; }
     body:not([data-smax-theme="dark"]) .smax-resp-ticket-item.active { background:rgba(0,100,210,.1); border-left-color:#0064d2; }
+
+    /* ── ResponseHUD sidebars — light theme: usar mesma cor da sidebar do SettingsPanel ── */
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-list { background:var(--sp-sidebar-bg); }
+    body:not([data-smax-theme="dark"]) #smax-resp-ticket-list { background:var(--sp-surface); }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-discussions { background:var(--sp-sidebar-bg); }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-footer { background:var(--sp-surface-2); border-top-color:var(--sp-border); }
+    /* Barra de preset na sidebar clara: distinguir do fundo azul-cinza */
+    body:not([data-smax-theme="dark"]) #smax-resp-filter-header { background:var(--sp-sidebar-bg); }
+    /* Itens de discussão destacam sobre o fundo da sidebar */
+    body:not([data-smax-theme="dark"]) .smax-resp-discussion-item { background:var(--sp-surface); border-color:var(--sp-border); }
+
+    /* ── ResponseHUD área central — modo escuro mais escuro ── */
+    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#080d17; }
+    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#080d17; }
   `);
 
 
@@ -9284,7 +9298,7 @@
                 <span id="smax-resp-vip-badge" style="display:none;padding:2px 7px;border-radius:999px;background:#facc15;color:#854d0e;font-size:10px;font-weight:700;flex-shrink:0;">VIP</span>
                 <span id="smax-resp-opener" style="font-size:13px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;max-width:280px;"></span>
                 <span id="smax-resp-requester-title" style="display:none;font-size:13px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;max-width:240px;font-style:italic;"></span>
-                <span id="smax-resp-location-label" style="display:none;font-size:13px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0;max-width:400px;cursor:pointer;" title="Clique para ver nome completo"></span>
+                <span id="smax-resp-location-label" style="display:none;font-size:13px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;cursor:pointer;" title="Clique para ver nome completo"></span>
                 <span id="smax-resp-created-label" style="display:none;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
