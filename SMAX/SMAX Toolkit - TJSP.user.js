@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.37
+// @version      2.38
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.37';
+  const SMAX_TOOLKIT_VERSION = '2.38';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -444,171 +444,171 @@
   GM_addStyle(`
     /* ── Theme variables (light é o padrão) ── */
     :root {
-      --sp-bg: #f0f0f0;
+      --sp-bg: #f0f4f8;
       --sp-surface: #ffffff;
-      --sp-surface-2: #f5f5f5;
-      --sp-text: #333333;
-      --sp-text-muted: #555555;
-      --sp-text-dim: #6b6b6b;
-      --sp-border: #cccccc;
+      --sp-surface-2: #f7f9fc;
+      --sp-text: #1a202c;
+      --sp-text-muted: #4a5568;
+      --sp-text-dim: #718096;
+      --sp-border: #c4ced8;
       --sp-border-strong: rgba(0,0,0,.18);
-      --sp-accent: #0073e7;
-      --sp-accent-hover: #005bb5;
-      --sp-primary: #0073e7;
-      --sp-primary-bg: rgba(0,115,231,.08);
-      --sp-primary-hover: rgba(0,115,231,.15);
-      --sp-sidebar-bg: #e5e5e5;
-      --sp-sidebar-text: #757575;
-      --sp-sidebar-active-bg: rgba(0,115,231,.1);
-      --sp-sidebar-active-text: #0073e7;
+      --sp-accent: #0064d2;
+      --sp-accent-hover: #004fa3;
+      --sp-primary: #0064d2;
+      --sp-primary-bg: rgba(0,100,210,.08);
+      --sp-primary-hover: rgba(0,100,210,.15);
+      --sp-sidebar-bg: #eaeff5;
+      --sp-sidebar-text: #4a5568;
+      --sp-sidebar-active-bg: rgba(0,100,210,.1);
+      --sp-sidebar-active-text: #0064d2;
       --sp-input-bg: #ffffff;
-      --sp-input-border: #cccccc;
-      --sp-input-text: #333333;
+      --sp-input-border: #c4ced8;
+      --sp-input-text: #1a202c;
       --sp-shadow: 0 8px 40px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06) inset;
       --sp-card-bg: #ffffff;
-      --sp-danger: #e5004c;
-      --sp-danger-bg: #fff0f3;
-      --sp-danger-text: #e5004c;
-      --sp-danger-border: #fca5a5;
+      --sp-danger: #c0392b;
+      --sp-danger-bg: #fff5f5;
+      --sp-danger-text: #c0392b;
+      --sp-danger-border: #feb2b2;
       --sp-success: #16a34a;
       --sp-success-bg: rgba(22,163,74,.08);
       --sp-success-text: #16a34a;
     }
     body[data-smax-theme="dark"] {
-      --sp-bg: #0d1117;
-      --sp-surface: #161b22;
-      --sp-surface-2: #1e2530;
-      --sp-text: #e6edf3;
-      --sp-text-muted: #8b949e;
+      --sp-bg: #0f1520;
+      --sp-surface: #161e2c;
+      --sp-surface-2: #1c2535;
+      --sp-text: #e2eaf4;
+      --sp-text-muted: #9faaba;
       --sp-text-dim: #64748b;
-      --sp-border: #30363d;
-      --sp-border-strong: rgba(255,255,255,.18);
-      --sp-accent: #58a6ff;
-      --sp-accent-hover: #79b8ff;
-      --sp-primary: #58a6ff;
-      --sp-primary-bg: rgba(88,166,255,.1);
-      --sp-primary-hover: rgba(88,166,255,.18);
-      --sp-sidebar-bg: #0d1117;
-      --sp-sidebar-text: #8b949e;
-      --sp-sidebar-active-bg: rgba(88,166,255,.12);
-      --sp-sidebar-active-text: #58a6ff;
-      --sp-input-bg: #0d1117;
-      --sp-input-border: #30363d;
-      --sp-input-text: #e6edf3;
-      --sp-shadow: 0 25px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07) inset;
-      --sp-card-bg: #161b22;
-      --sp-danger: #f85149;
-      --sp-danger-bg: #3d1212;
-      --sp-danger-text: #f85149;
-      --sp-danger-border: #6e2020;
-      --sp-success: #3fb950;
-      --sp-success-bg: rgba(63,185,80,.12);
-      --sp-success-text: #3fb950;
+      --sp-border: #2a3448;
+      --sp-border-strong: rgba(255,255,255,.15);
+      --sp-accent: #4d9de0;
+      --sp-accent-hover: #6ab0e8;
+      --sp-primary: #4d9de0;
+      --sp-primary-bg: rgba(77,157,224,.1);
+      --sp-primary-hover: rgba(77,157,224,.18);
+      --sp-sidebar-bg: #0c1219;
+      --sp-sidebar-text: #9faaba;
+      --sp-sidebar-active-bg: rgba(77,157,224,.12);
+      --sp-sidebar-active-text: #4d9de0;
+      --sp-input-bg: #1a2233;
+      --sp-input-border: #2a3448;
+      --sp-input-text: #e2eaf4;
+      --sp-shadow: 0 25px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06) inset;
+      --sp-card-bg: #161e2c;
+      --sp-danger: #f87171;
+      --sp-danger-bg: #2d1515;
+      --sp-danger-text: #f87171;
+      --sp-danger-border: #7f1d1d;
+      --sp-success: #4ade80;
+      --sp-success-bg: rgba(74,222,128,.1);
+      --sp-success-text: #4ade80;
     }
 
     /* ── Tema base (light): HUD de Triagem ── */
     #smax-triage-hud-backdrop { background:rgba(0,0,0,0.5); }
-    #smax-triage-hud { background:#ffffff; color:#333333; box-shadow:0 8px 40px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06) inset; }
-    #smax-triage-hud-body { background:#f5f5f5; border:1px solid #cccccc; }
-    #smax-triage-hud-footer { color:#333333; }
-    #smax-triage-sidebar { background:#e5e5e5; border-right:1px solid #cccccc; }
-    .smax-triage-sidebar-section { color:#444444; }
-    .smax-triage-queue-item { background:rgba(0,0,0,.02); border:1px solid #cccccc; color:#333333; }
-    .smax-triage-queue-item:hover { background:rgba(0,115,231,.06); }
-    .smax-triage-queue-item.active { background:rgba(0,115,231,.1); border-color:rgba(0,115,231,.3); }
-    .smax-triage-queue-item .tqi-id { color:#0073e7; }
-    .smax-triage-queue-item .tqi-subject { color:#333333; }
-    .smax-triage-queue-item .tqi-meta { color:#555555; }
-    .smax-triage-field-label { color:#444444; }
-    .smax-triage-field-value { color:#333333; }
-    .smax-triage-divider { border-color:#cccccc; }
-    #smax-triage-solution-editor { background:#ffffff; color:#333333; border-color:#cccccc; }
-    .smax-triage-btn-secondary { background:rgba(0,0,0,.04); color:#333333; border-color:#cccccc; }
+    #smax-triage-hud { background:#ffffff; color:#1a202c; box-shadow:0 8px 40px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06) inset; }
+    #smax-triage-hud-body { background:#f7f9fc; border:1px solid #c4ced8; }
+    #smax-triage-hud-footer { color:#1a202c; }
+    #smax-triage-sidebar { background:#eaeff5; border-right:1px solid #c4ced8; }
+    .smax-triage-sidebar-section { color:#4a5568; }
+    .smax-triage-queue-item { background:rgba(0,0,0,.02); border:1px solid #c4ced8; color:#1a202c; }
+    .smax-triage-queue-item:hover { background:rgba(0,100,210,.06); }
+    .smax-triage-queue-item.active { background:rgba(0,100,210,.1); border-color:rgba(0,100,210,.3); }
+    .smax-triage-queue-item .tqi-id { color:#0064d2; }
+    .smax-triage-queue-item .tqi-subject { color:#1a202c; }
+    .smax-triage-queue-item .tqi-meta { color:#4a5568; }
+    .smax-triage-field-label { color:#4a5568; }
+    .smax-triage-field-value { color:#1a202c; }
+    .smax-triage-divider { border-color:#c4ced8; }
+    #smax-triage-solution-editor { background:#ffffff; color:#1a202c; border-color:#c4ced8; }
+    .smax-triage-btn-secondary { background:rgba(0,0,0,.04); color:#1a202c; border-color:#c4ced8; }
     .smax-triage-btn-secondary:hover { background:rgba(0,0,0,.08); }
 
     /* ── Tema dark: HUD de Triagem ── */
     body[data-smax-theme="dark"] #smax-triage-hud-backdrop { background:rgba(0,0,0,0.7); }
-    body[data-smax-theme="dark"] #smax-triage-hud { background:#161b22; color:#e6edf3; box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07) inset; }
-    body[data-smax-theme="dark"] #smax-triage-hud-body { background:rgba(13,17,23,.85); border:1px solid #30363d; }
-    body[data-smax-theme="dark"] #smax-triage-hud-footer { color:#e6edf3; }
-    body[data-smax-theme="dark"] #smax-triage-sidebar { background:#0d1117; border-right:1px solid #30363d; }
-    body[data-smax-theme="dark"] .smax-triage-sidebar-section { color:#8b949e; }
-    body[data-smax-theme="dark"] .smax-triage-queue-item { background:rgba(255,255,255,.03); border:1px solid #30363d; color:#e6edf3; }
-    body[data-smax-theme="dark"] .smax-triage-queue-item:hover { background:rgba(88,166,255,.06); }
-    body[data-smax-theme="dark"] .smax-triage-queue-item.active { background:rgba(88,166,255,.12); border-color:rgba(88,166,255,.3); }
-    body[data-smax-theme="dark"] .smax-triage-queue-item .tqi-id { color:#58a6ff; }
-    body[data-smax-theme="dark"] .smax-triage-queue-item .tqi-subject { color:#e6edf3; }
-    body[data-smax-theme="dark"] .smax-triage-queue-item .tqi-meta { color:#8b949e; }
-    body[data-smax-theme="dark"] .smax-triage-field-label { color:#8b949e; }
-    body[data-smax-theme="dark"] .smax-triage-field-value { color:#e6edf3; }
-    body[data-smax-theme="dark"] .smax-triage-divider { border-color:#30363d; }
-    body[data-smax-theme="dark"] #smax-triage-solution-editor { background:#0d1117; color:#e6edf3; border-color:#30363d; }
-    body[data-smax-theme="dark"] .smax-triage-btn-secondary { background:rgba(255,255,255,.05); color:#e6edf3; border-color:#30363d; }
+    body[data-smax-theme="dark"] #smax-triage-hud { background:#161e2c; color:#e2eaf4; box-shadow:0 25px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06) inset; }
+    body[data-smax-theme="dark"] #smax-triage-hud-body { background:rgba(15,21,32,.85); border:1px solid #2a3448; }
+    body[data-smax-theme="dark"] #smax-triage-hud-footer { color:#e2eaf4; }
+    body[data-smax-theme="dark"] #smax-triage-sidebar { background:#0c1219; border-right:1px solid #2a3448; }
+    body[data-smax-theme="dark"] .smax-triage-sidebar-section { color:#9faaba; }
+    body[data-smax-theme="dark"] .smax-triage-queue-item { background:rgba(255,255,255,.03); border:1px solid #2a3448; color:#e2eaf4; }
+    body[data-smax-theme="dark"] .smax-triage-queue-item:hover { background:rgba(77,157,224,.06); }
+    body[data-smax-theme="dark"] .smax-triage-queue-item.active { background:rgba(77,157,224,.12); border-color:rgba(77,157,224,.3); }
+    body[data-smax-theme="dark"] .smax-triage-queue-item .tqi-id { color:#4d9de0; }
+    body[data-smax-theme="dark"] .smax-triage-queue-item .tqi-subject { color:#e2eaf4; }
+    body[data-smax-theme="dark"] .smax-triage-queue-item .tqi-meta { color:#9faaba; }
+    body[data-smax-theme="dark"] .smax-triage-field-label { color:#9faaba; }
+    body[data-smax-theme="dark"] .smax-triage-field-value { color:#e2eaf4; }
+    body[data-smax-theme="dark"] .smax-triage-divider { border-color:#2a3448; }
+    body[data-smax-theme="dark"] #smax-triage-solution-editor { background:#1a2233; color:#e2eaf4; border-color:#2a3448; }
+    body[data-smax-theme="dark"] .smax-triage-btn-secondary { background:rgba(255,255,255,.05); color:#e2eaf4; border-color:#2a3448; }
     body[data-smax-theme="dark"] .smax-triage-btn-secondary:hover { background:rgba(255,255,255,.1); }
 
     /* ── Tema base (light): ResponseHUD ── */
-    #smax-resp-hud-backdrop { background:rgba(0,0,0,0.5); }
-    #smax-resp-hud { background:#ffffff; color:#333333; box-shadow:0 8px 40px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06) inset; }
-    #smax-resp-hud-list { background:#e5e5e5; border-right:1px solid #cccccc; }
-    #smax-resp-hud-main { background:#ffffff; }
-    #smax-resp-hud-body { background:#ffffff; }
-    #smax-resp-hud-footer { background:#f5f5f5; border-top:1px solid #cccccc; }
-    #smax-resp-hud-discussions { background:#f0f0f0; border-left:1px solid #cccccc; }
-    #smax-resp-content-area { background:#ffffff; }
-    #smax-resp-detail { color:#333333; }
-    .smax-resp-meta-chip { background:rgba(0,0,0,.04); border-color:#cccccc; color:#333333; }
-    .smax-resp-meta-chip:hover { background:rgba(0,0,0,.08); color:#333333; }
-    .smax-resp-ticket-item { background:rgba(0,0,0,.01); border-bottom:1px solid #cccccc; color:#333333; }
-    .smax-resp-ticket-item:hover { background:rgba(0,115,231,.05); }
-    .smax-resp-ticket-item.active { background:rgba(0,115,231,.09); }
-    .smax-resp-ticket-item .rti-id { color:#0073e7; }
-    .smax-resp-ticket-item .rti-subject { color:#333333; }
-    .smax-resp-ticket-item .rti-meta { color:#888888; }
-    #smax-resp-solution-editor { background:#ffffff; color:#333333; border-color:#cccccc; }
-    #smax-resp-desc-content { color:#333333; }
-    .smax-resp-discussion-item { background:rgba(0,0,0,.02); border-bottom:1px solid #cccccc; }
-    .smax-resp-discussion-item .disc-body { color:#333333; }
-    .smax-resp-discussion-item .disc-meta { color:#888888; }
-    .smax-resp-field-picker { background:#ffffff; border-color:#cccccc; box-shadow:0 8px 24px rgba(0,0,0,.15); }
-    .smax-resp-field-picker-item { color:#333333; }
-    .smax-resp-field-picker-item:hover { background:rgba(0,115,231,.07); }
-    .smax-resp-field-picker-item.active { color:#0073e7; }
-    #smax-resp-search { background:#ffffff; border-color:#cccccc; color:#333333; }
-    #smax-resp-global-id { background:#ffffff; border-color:#cccccc; color:#333333; }
-    #smax-resp-status-msg { color:#555555; }
-    #smax-resp-no-ticket { color:#888888; }
+    #smax-resp-hud-backdrop { background:rgba(0,0,0,0.45); }
+    #smax-resp-hud { background:#f8f9fb; color:#1a202c; box-shadow:0 12px 48px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.07) inset; }
+    #smax-resp-hud-list { background:#edf0f5; border-right:2px solid #c8cdd8; }
+    #smax-resp-hud-main { background:#f8f9fb; }
+    #smax-resp-hud-body { background:#f8f9fb; }
+    #smax-resp-hud-footer { background:#edf0f5; border-top:1px solid #c8cdd8; }
+    #smax-resp-hud-discussions { background:#f0f4f8; border-left:2px solid #c8cdd8; }
+    #smax-resp-content-area { background:#ffffff; border:1px solid #dde2ea; border-radius:8px; }
+    #smax-resp-detail { color:#1a202c; }
+    .smax-resp-meta-chip { background:#ffffff; border-color:#c0c8d8; color:#2d3748; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+    .smax-resp-meta-chip:hover { background:#edf2ff; color:#0055cc; border-color:#a0b4d8; }
+    .smax-resp-ticket-item { background:transparent; border-bottom:1px solid #d4dae4; color:#1a202c; }
+    .smax-resp-ticket-item:hover { background:rgba(0,100,210,.06); }
+    .smax-resp-ticket-item.active { background:rgba(0,100,210,.1); border-left:3px solid #0064d2; }
+    .smax-resp-ticket-item .rti-id { color:#0055cc; font-weight:700; }
+    .smax-resp-ticket-item .rti-subject { color:#1a202c; }
+    .smax-resp-ticket-item .rti-meta { color:#4a5568; }
+    #smax-resp-solution-editor { background:#ffffff; color:#1a202c; border-color:#c0c8d8; }
+    #smax-resp-desc-content { color:#2d3748; }
+    .smax-resp-discussion-item { background:#ffffff; border:1px solid #d4dae4; border-left:3px solid #c0c8d8; }
+    .smax-resp-discussion-item .disc-body { color:#2d3748; }
+    .smax-resp-discussion-item .disc-meta { color:#4a5568; font-weight:600; }
+    .smax-resp-field-picker { background:#ffffff; border-color:#c0c8d8; box-shadow:0 8px 28px rgba(0,0,0,.18); }
+    .smax-resp-field-picker-item { color:#2d3748; }
+    .smax-resp-field-picker-item:hover { background:rgba(0,100,210,.07); color:#0055cc; }
+    .smax-resp-field-picker-item.active { color:#0055cc; background:rgba(0,100,210,.06); font-weight:600; }
+    #smax-resp-search { background:#ffffff; border-color:#c0c8d8; color:#1a202c; }
+    #smax-resp-global-id { background:#ffffff; border-color:#c0c8d8; color:#1a202c; }
+    #smax-resp-status-msg { color:#4a5568; }
+    #smax-resp-no-ticket { color:#718096; }
 
     /* ── Tema dark: ResponseHUD ── */
-    body[data-smax-theme="dark"] #smax-resp-hud-backdrop { background:rgba(0,0,0,0.7); }
-    body[data-smax-theme="dark"] #smax-resp-hud { background:#161b22; color:#e6edf3; box-shadow:0 25px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07) inset; }
-    body[data-smax-theme="dark"] #smax-resp-hud-list { background:#0d1117; border-right:1px solid #30363d; }
-    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#161b22; }
-    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#161b22; }
-    body[data-smax-theme="dark"] #smax-resp-hud-footer { background:rgba(13,17,23,.4); border-top:1px solid #30363d; }
-    body[data-smax-theme="dark"] #smax-resp-hud-discussions { background:rgba(13,17,23,.5); border-left:1px solid #30363d; }
-    body[data-smax-theme="dark"] #smax-resp-content-area { background:#161b22; }
-    body[data-smax-theme="dark"] #smax-resp-detail { color:#e6edf3; }
-    body[data-smax-theme="dark"] .smax-resp-meta-chip { background:rgba(255,255,255,.05); border-color:#30363d; color:#c9d1d9; }
-    body[data-smax-theme="dark"] .smax-resp-meta-chip:hover { background:rgba(255,255,255,.1); color:#e6edf3; }
-    body[data-smax-theme="dark"] .smax-resp-ticket-item { background:rgba(255,255,255,.02); border-bottom:1px solid #30363d; color:#c9d1d9; }
-    body[data-smax-theme="dark"] .smax-resp-ticket-item:hover { background:rgba(88,166,255,.05); }
-    body[data-smax-theme="dark"] .smax-resp-ticket-item.active { background:rgba(88,166,255,.12); }
-    body[data-smax-theme="dark"] .smax-resp-ticket-item .rti-id { color:#58a6ff; }
-    body[data-smax-theme="dark"] .smax-resp-ticket-item .rti-subject { color:#e6edf3; }
-    body[data-smax-theme="dark"] .smax-resp-ticket-item .rti-meta { color:#8b949e; }
-    body[data-smax-theme="dark"] #smax-resp-solution-editor { background:#0d1117; color:#e6edf3; border-color:#30363d; }
-    body[data-smax-theme="dark"] #smax-resp-desc-content { color:#c9d1d9; }
-    body[data-smax-theme="dark"] .smax-resp-discussion-item { background:rgba(255,255,255,.02); border-bottom:1px solid #30363d; }
-    body[data-smax-theme="dark"] .smax-resp-discussion-item .disc-body { color:#c9d1d9; }
-    body[data-smax-theme="dark"] .smax-resp-discussion-item .disc-meta { color:#8b949e; }
-    body[data-smax-theme="dark"] .smax-resp-field-picker { background:#0d1117; border-color:#30363d; box-shadow:0 8px 24px rgba(0,0,0,.55); }
+    body[data-smax-theme="dark"] #smax-resp-hud-backdrop { background:rgba(0,0,0,0.72); }
+    body[data-smax-theme="dark"] #smax-resp-hud { background:#161e2c; color:#e2eaf4; box-shadow:0 25px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06) inset; }
+    body[data-smax-theme="dark"] #smax-resp-hud-list { background:#0c1219; border-right:1px solid #2a3448; }
+    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#161e2c; }
+    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#161e2c; }
+    body[data-smax-theme="dark"] #smax-resp-hud-footer { background:#0c1219; border-top:1px solid #2a3448; }
+    body[data-smax-theme="dark"] #smax-resp-hud-discussions { background:#0f1520; border-left:1px solid #2a3448; }
+    body[data-smax-theme="dark"] #smax-resp-content-area { background:#1a2233; border:1px solid #2a3448; border-radius:8px; }
+    body[data-smax-theme="dark"] #smax-resp-detail { color:#e2eaf4; }
+    body[data-smax-theme="dark"] .smax-resp-meta-chip { background:rgba(255,255,255,.07); border-color:#2a3448; color:#c9d1d9; }
+    body[data-smax-theme="dark"] .smax-resp-meta-chip:hover { background:rgba(77,157,224,.15); color:#6ab0e8; border-color:#2a4a6a; }
+    body[data-smax-theme="dark"] .smax-resp-ticket-item { background:transparent; border-bottom:1px solid #1e2d42; color:#c9d1d9; }
+    body[data-smax-theme="dark"] .smax-resp-ticket-item:hover { background:rgba(77,157,224,.07); }
+    body[data-smax-theme="dark"] .smax-resp-ticket-item.active { background:rgba(77,157,224,.15); border-left:3px solid #4d9de0; }
+    body[data-smax-theme="dark"] .smax-resp-ticket-item .rti-id { color:#6ab0e8; font-weight:700; }
+    body[data-smax-theme="dark"] .smax-resp-ticket-item .rti-subject { color:#e2eaf4; }
+    body[data-smax-theme="dark"] .smax-resp-ticket-item .rti-meta { color:#9faaba; }
+    body[data-smax-theme="dark"] #smax-resp-solution-editor { background:#1a2233; color:#e2eaf4; border-color:#2a3448; }
+    body[data-smax-theme="dark"] #smax-resp-desc-content { color:#d1dde8; }
+    body[data-smax-theme="dark"] .smax-resp-discussion-item { background:#1a2233; border:1px solid #2a3448; border-left:3px solid #2a4060; }
+    body[data-smax-theme="dark"] .smax-resp-discussion-item .disc-body { color:#d1dde8; }
+    body[data-smax-theme="dark"] .smax-resp-discussion-item .disc-meta { color:#9faaba; font-weight:600; }
+    body[data-smax-theme="dark"] .smax-resp-field-picker { background:#1a2233; border-color:#2a3448; box-shadow:0 8px 32px rgba(0,0,0,.65); }
     body[data-smax-theme="dark"] .smax-resp-field-picker-item { color:#c9d1d9; }
-    body[data-smax-theme="dark"] .smax-resp-field-picker-item:hover { background:rgba(88,166,255,.07); }
-    body[data-smax-theme="dark"] .smax-resp-field-picker-item.active { color:#58a6ff; }
-    body[data-smax-theme="dark"] #smax-resp-search { background:#0d1117; border-color:#30363d; color:#e6edf3; }
-    body[data-smax-theme="dark"] #smax-resp-global-id { background:#0d1117; border-color:#30363d; color:#e6edf3; }
-    body[data-smax-theme="dark"] #smax-resp-status-msg { color:#8b949e; }
-    body[data-smax-theme="dark"] #smax-resp-no-ticket { color:#8b949e; }
+    body[data-smax-theme="dark"] .smax-resp-field-picker-item:hover { background:rgba(77,157,224,.1); color:#6ab0e8; }
+    body[data-smax-theme="dark"] .smax-resp-field-picker-item.active { color:#6ab0e8; background:rgba(77,157,224,.08); font-weight:600; }
+    body[data-smax-theme="dark"] #smax-resp-search { background:#1a2233; border-color:#2a3448; color:#e2eaf4; }
+    body[data-smax-theme="dark"] #smax-resp-global-id { background:#1a2233; border-color:#2a3448; color:#e2eaf4; }
+    body[data-smax-theme="dark"] #smax-resp-status-msg { color:#9faaba; }
+    body[data-smax-theme="dark"] #smax-resp-no-ticket { color:#9faaba; }
 
     .comment-items { height: auto !important; max-height: none !important; }
 
@@ -766,33 +766,33 @@
     #smax-resp-filter-criteria { padding:0 12px 10px; overflow-y:auto; max-height:38vh; }
     #smax-resp-filter-criteria.collapsed { display:none; }
     #smax-resp-ticket-list { flex:1; overflow-y:auto; }
-    .smax-resp-ticket-item { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; cursor:pointer; border-bottom:1px solid var(--sp-border); transition:background .12s; }
+    .smax-resp-ticket-item { display:flex; align-items:flex-start; gap:8px; padding:9px 10px; cursor:pointer; border-bottom:1px solid var(--sp-border); transition:background .12s,border-left .1s; border-left:3px solid transparent; }
     .smax-resp-ticket-item:hover { background:var(--sp-surface-2); }
     .smax-resp-ticket-item.active { background:rgba(59,130,246,.12); border-left:3px solid #3b82f6; }
     .smax-resp-ticket-cb { margin-top:2px; flex-shrink:0; accent-color:#3b82f6; cursor:pointer; }
     .smax-resp-ticket-info { flex:1; min-width:0; }
-    .smax-resp-ticket-id { font-size:12px; font-weight:700; color:#0073e7; }
+    .smax-resp-ticket-id { font-size:13px; font-weight:700; color:#0073e7; }
     body[data-smax-theme="dark"] .smax-resp-ticket-id { color:#60a5fa; }
     .smax-resp-ticket-subject { font-size:12px; color:var(--sp-text); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .smax-resp-ticket-status { font-size:11px; color:var(--sp-text-muted); margin-top:2px; }
+    .smax-resp-ticket-status { font-size:11px; color:var(--sp-text-muted); margin-top:3px; }
     #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
     #smax-resp-hud-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0073e7 0%,#005bb5 100%); border-radius:0; flex-shrink:0; }
     #smax-resp-hud-body { flex:1; display:flex; min-height:0; overflow:hidden; }
     #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow-y:auto; min-width:0; }
     #smax-resp-desc-panel { background:var(--sp-surface-2); border:1px solid var(--sp-border); border-radius:10px; padding:10px 12px; flex-shrink:0; }
-    #smax-resp-desc-content { font-size:12px; color:var(--sp-text); overflow-y:auto; min-height:40px; max-height:28vh; line-height:1.5; }
+    #smax-resp-desc-content { font-size:13px; color:var(--sp-text); overflow-y:auto; min-height:40px; max-height:28vh; line-height:1.6; }
     #smax-resp-desc-content img { max-width:100%; height:auto; border-radius:4px; }
     #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
-    #smax-resp-solution-toolbar { display:flex; gap:2px; padding:4px 6px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; }
-    .smax-resp-tb-btn { background:transparent; border:1px solid transparent; border-radius:4px; color:var(--sp-text-muted); cursor:pointer; font-size:12px; line-height:1; padding:3px 7px; transition:background .12s,color .12s; }
+    #smax-resp-solution-toolbar { display:flex; gap:2px; padding:5px 8px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; }
+    .smax-resp-tb-btn { background:transparent; border:1px solid transparent; border-radius:4px; color:var(--sp-text-muted); cursor:pointer; font-size:12px; line-height:1; padding:4px 8px; transition:background .12s,color .12s; }
     .smax-resp-tb-btn:hover { background:var(--sp-primary-hover); color:var(--sp-text); }
     .smax-resp-tb-sep { width:1px; background:var(--sp-border); margin:3px 2px; align-self:stretch; }
-    #smax-resp-solution-editor { min-height:105px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:10px 12px; color:var(--sp-text); font-size:13px; line-height:1.6; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
-    #smax-resp-solution-editor:focus { border-color:#3b82f6; }
+    #smax-resp-solution-editor { min-height:110px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:12px 14px; color:var(--sp-text); font-size:13px; line-height:1.65; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
+    #smax-resp-solution-editor:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
     #smax-resp-solution-editor:empty::before { content:attr(data-placeholder); color:var(--sp-text-muted); pointer-events:none; display:block; }
     #smax-resp-solution-editor p { margin:0 0 4px; }
     #smax-resp-solution-editor ul, #smax-resp-solution-editor ol { margin:4px 0 4px 20px; }
-    .smax-resp-list-desc { font-size:10px; color:var(--sp-text-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-style:italic; }
+    .smax-resp-list-desc { font-size:11px; color:var(--sp-text-muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .smax-sort-btn { font-size:10px; padding:2px 6px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; white-space:nowrap; line-height:1.4; }
     .smax-sort-btn:hover { color:var(--sp-text); border-color:var(--sp-border); }
     .smax-sort-btn.active { background:rgba(59,130,246,.2); border-color:#3b82f6; color:#93c5fd; }
@@ -842,8 +842,8 @@
     #smax-resp-new-disc-editor { background:#ffffff; border-color:#cccccc; color:#333333; }
     #smax-resp-new-disc-editor:empty:before { color:#888888; }
     body[data-smax-theme="dark"] #smax-resp-new-disc-panel { border-top-color:rgba(255,255,255,.07); }
-    body[data-smax-theme="dark"] #smax-resp-new-disc-editor { background:rgba(13,17,23,.6); border-color:rgba(255,255,255,.1); color:#e6edf3; }
-    body[data-smax-theme="dark"] #smax-resp-new-disc-editor:empty:before { color:#64748b; }
+    body[data-smax-theme="dark"] #smax-resp-new-disc-editor { background:#1a2233; border-color:#2a3448; color:#e2e8f0; }
+    body[data-smax-theme="dark"] #smax-resp-new-disc-editor:empty:before { color:#8b9ab0; }
     body[data-smax-theme="dark"] #smax-resp-new-disc-privacy { background:rgba(13,17,23,.6); border-color:rgba(255,255,255,.1); color:#8b949e; }
     #smax-disc-modal { display:none; position:absolute; inset:0; z-index:20; background:#f5f5f5; border-radius:inherit; flex-direction:column; overflow:hidden; }
     #smax-disc-modal-header { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-bottom:1px solid #cccccc; flex-shrink:0; }
@@ -1011,16 +1011,16 @@
       background: var(--sp-surface, rgba(15,23,42,0.85));
       border: 1px solid var(--sp-border, rgba(255,255,255,.1));
       border-radius: 10px;
-      padding: 14px;
+      padding: 12px;
     }
     #smax-settings .smax-sp-section-title {
       font-weight: 600;
       font-size: 13px;
       color: var(--sp-text, #e5e7eb);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     #smax-settings .smax-sp-muted {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--sp-text-muted, #94a3b8);
     }
     #smax-settings .smax-team-item {
@@ -1034,17 +1034,17 @@
     #smax-settings-sidebar .smax-sidebar-item {
       width: 100%;
       text-align: left;
-      padding: 10px 14px;
-      border-radius: 8px;
+      padding: 8px 10px;
+      border-radius: 7px;
       border: none;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       background: transparent;
       color: var(--sp-sidebar-text, #94a3b8);
       transition: all .15s ease;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
     #smax-settings-sidebar .smax-sidebar-item:hover {
       background: var(--sp-primary-hover, rgba(56,189,248,.1));
@@ -1059,7 +1059,7 @@
     #smax-settings-content {
       flex: 1;
       overflow-y: auto;
-      padding: 24px 28px;
+      padding: 16px 20px;
       min-width: 0;
     }
     #smax-settings-content::-webkit-scrollbar { width: 6px; }
@@ -1077,9 +1077,9 @@
     .smax-module-row {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 10px 12px;
-      border-radius: 10px;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
       border: 1px solid var(--sp-border, rgba(255,255,255,.1));
       cursor: pointer;
       transition: background .15s, border-color .15s, opacity .15s;
@@ -1090,10 +1090,10 @@
     .smax-module-row.smax-active { background: var(--sp-primary-bg); border-color: var(--sp-primary); }
     .smax-module-row:not(.smax-active) { opacity: 0.55; }
     .smax-module-row:not(.smax-active):hover { opacity: 0.9; }
-    .smax-module-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .smax-module-icon { font-size: 16px; flex-shrink: 0; width: 22px; text-align: center; }
     .smax-module-info { flex: 1; min-width: 0; }
     .smax-module-name { font-size: 13px; font-weight: 500; color: var(--sp-text); }
-    .smax-module-desc { font-size: 11px; color: var(--sp-text-muted); margin-top: 2px; }
+    .smax-module-desc { font-size: 12px; color: var(--sp-text-muted); margin-top: 1px; }
     /* Toggle pill */
     .smax-toggle-sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
     .smax-toggle-sw input { opacity: 0; width: 0; height: 0; position: absolute; }
@@ -1116,66 +1116,66 @@
     /* Team items — base (light) */
     .smax-team-item {
       background: #ffffff !important;
-      border-color: #cccccc !important;
+      border-color: #c4ced8 !important;
     }
     .smax-team-item strong {
-      color: #333333 !important;
+      color: #1a202c !important;
     }
     .smax-team-item .smax-team-prio-info {
-      color: #757575 !important;
+      color: #4a5568 !important;
     }
     .smax-team-edit-btn {
-      color: #333333 !important;
+      color: #1a202c !important;
       background: rgba(0,0,0,.04) !important;
-      border-color: #cccccc !important;
+      border-color: #c4ced8 !important;
     }
     .smax-team-del-btn {
-      color: #b91c1c !important;
-      background: rgba(220,38,38,.06) !important;
-      border-color: rgba(220,38,38,.2) !important;
+      color: #c0392b !important;
+      background: rgba(192,57,43,.06) !important;
+      border-color: rgba(192,57,43,.2) !important;
     }
     /* Team items — dark override */
     body[data-smax-theme="dark"] .smax-team-item {
-      background: #161b22 !important;
-      border-color: #30363d !important;
+      background: #161e2c !important;
+      border-color: #2a3448 !important;
     }
     body[data-smax-theme="dark"] .smax-team-item strong {
-      color: #e6edf3 !important;
+      color: #e2eaf4 !important;
     }
     body[data-smax-theme="dark"] .smax-team-item .smax-team-prio-info {
-      color: #8b949e !important;
+      color: #9faaba !important;
     }
     body[data-smax-theme="dark"] .smax-team-edit-btn {
-      color: #e6edf3 !important;
+      color: #e2eaf4 !important;
       background: rgba(255,255,255,.06) !important;
-      border-color: rgba(255,255,255,.2) !important;
+      border-color: rgba(255,255,255,.15) !important;
     }
     body[data-smax-theme="dark"] .smax-team-del-btn {
-      color: #f85149 !important;
-      background: rgba(248,81,73,.08) !important;
-      border-color: rgba(248,81,73,.25) !important;
+      color: #f87171 !important;
+      background: rgba(248,113,113,.08) !important;
+      border-color: rgba(248,113,113,.25) !important;
     }
     #smax-settings-sidebar {
-      border-right-color: #cccccc;
+      border-right-color: #c4ced8;
     }
     body[data-smax-theme="dark"] #smax-settings-sidebar {
-      border-right-color: #30363d;
+      border-right-color: #2a3448;
     }
     /* Input base (light) */
     #smax-settings input[type="text"],
     #smax-settings input[type="number"],
     #smax-settings textarea {
       background: #ffffff !important;
-      border-color: #cccccc !important;
-      color: #333333 !important;
+      border-color: #c4ced8 !important;
+      color: #1a202c !important;
     }
     /* Input dark override */
     body[data-smax-theme="dark"] #smax-settings input[type="text"],
     body[data-smax-theme="dark"] #smax-settings input[type="number"],
     body[data-smax-theme="dark"] #smax-settings textarea {
-      background: #0d1117 !important;
-      border-color: #30363d !important;
-      color: #e6edf3 !important;
+      background: #1a2233 !important;
+      border-color: #2a3448 !important;
+      color: #e2eaf4 !important;
     }
 
     /* ── Templates ── */
@@ -3536,8 +3536,8 @@
     };
 
     const renderSidebar = () => `
-      <nav id="smax-settings-sidebar" style="width:220px;flex-shrink:0;background:var(--sp-sidebar-bg,#0d1117);border-right:1px solid var(--sp-border,rgba(255,255,255,.1));padding:14px 10px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;">
-        <div style="font-size:11px;font-weight:600;color:var(--sp-text-dim);text-transform:uppercase;letter-spacing:.08em;padding:4px 12px 10px;">Navegação</div>
+      <nav id="smax-settings-sidebar" style="width:190px;flex-shrink:0;background:var(--sp-sidebar-bg,#0d1117);border-right:1px solid var(--sp-border,rgba(255,255,255,.1));padding:12px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+        <div style="font-size:10px;font-weight:600;color:var(--sp-text-dim);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px 8px;">Navegação</div>
         ${SECTIONS.map(s => `
           <button class="smax-sidebar-item${s.id === activeSection ? ' active' : ''}" data-section="${s.id}">
             <span style="font-size:15px;flex-shrink:0;">${s.icon}</span>
@@ -5148,55 +5148,85 @@
    * Shared status maps (TriageHUD + ResponseHUD + SettingsPanel)
    * =======================================================*/
   const REQUEST_STATUS_LABELS = {
-    RequestStatusInProgress:      'Em Andamento',
-    RequestStatusActive:          'Ativo',
-    RequestStatusSuspended:       'Suspenso',
-    RequestStatusComplete:        'Concluído',
-    RequestStatusAccepted:        'Aceito',
-    RequestStatusReject:          'Rejeitado',
-    RequestStatusPendingApproval: 'Aguardando Aprovação',
-    RequestStatusPendingCustomer: 'Aguardando Solicitante',
-    RequestStatusClassify:        'Classificar',
-    RequestStatusAbandon:         'Abandonado',
-    RequestStatusPendingChange:   'Aguardando Mudança',
-    RequestStatusPending:         'Usuário Final Pendente',
-    RequestStatusReady:           'Pronto',
+    RequestStatusReady:                       'Pronto',
+    RequestStatusInProgress:                  'Em Andamento',
+    RequestStatusPending:                     'Usuário Final Pendente',
+    RequestStatusSuspended:                   'Suspenso',
+    RequestStatusComplete:                    'Concluído',
+    RequestStatusPendingParent:               'Elemento Primário Pendente',
+    RequestStatusRejected:                    'Rejeitado',
+    RequestStatusPendingVendor:               'Fornecedor Pendente',
+    RequestStatusPendingExternalServiceDesk:  'Central de Serviços Externa Pendente',
+    RequestStatusPendingSpecialOperation:     'Operação Especial Pendente',
+    RequestStatusActive:                      'Ativo',
+    RequestStatusAccepted:                    'Aceito',
+    RequestStatusReject:                      'Rejeitado',
+    RequestStatusPendingApproval:             'Aguardando Aprovação',
+    RequestStatusPendingCustomer:             'Aguardando Solicitante',
+    RequestStatusClassify:                    'Classificar',
+    RequestStatusAbandon:                     'Abandonado',
+    RequestStatusPendingChange:               'Aguardando Mudança',
+    DecursoDePrazo_c:                         'Decurso de Prazo',
   };
 
   const STATUS_SCCD_LABELS = {
-    Agendado_c:                          'Agendado',
-    Aguardando3Nivel_c:                  'Aguardando 3º Nível',
-    AguardandoAceiteDefinitivo_c:        'Aguardando Aceite Definitivo',
-    AguardandoAceiteCancelamento_c:      'Aguardando Aceite do Cancelamento',
-    AguardandoAtendimento_c:             'Aguardando Atendimento',
-    AguardandoCliente_c:                 'Aguardando Cliente',
-    AguardandoClienteContato1_c:         'Aguardando Cliente \u2013 Contato 1',
-    AguardandoClienteContato1DiaZero_c:  'Aguardando Cliente \u2013 Contato 1 (Dia Zero)',
-    AguardandoClienteContato2_c:         'Aguardando Cliente \u2013 Contato 2',
-    AguardandoClienteContato3_c:         'Aguardando Cliente \u2013 Contato 3',
-    AguardandoContinuidadeAtendimento_c: 'Aguardando Continuidade de Atendimento',
-    AguardandoDocumentacao_c:            'Aguardando Documenta\u00e7\u00e3o',
-    AguardandoEquipeConfiguracao_c:      'Aguardando Equipe de Configura\u00e7\u00e3o',
-    AguardandoInformacaoProcedimento_c:  'Aguardando Informa\u00e7\u00e3o de Procedimento',
-    AguardandoInstalacaoProducao_c:      'Aguardando Instala\u00e7\u00e3o em Produ\u00e7\u00e3o',
-    AguardandoOutraEquipe_c:             'Aguardando Outra Equipe',
-    AguardandoRetornoCliente_c:          'Aguardando Retorno do Cliente',
-    AguardandoRetornoFornecedor_c:       'Aguardando Retorno do Fornecedor',
-    AguardandoSTI_c:                     'Aguardando STI',
-    ATUALIZADOUSUARIOTEAMS_c:            'Atualizado pelo Usu\u00e1rio do Teams',
-    DevolucaoFaltaSubsidio_c:            'Devolu\u00e7\u00e3o falta de subs\u00eddio',
-    DevolucaoAtendimentoIT2B_c:          'Devolu\u00e7\u00e3o para Atendimento IT2B',
-    AnaliseATIPG_c:                      'Em An\u00e1lise ATIPG',
-    EmAnaliseEmpresa_c:                  'Em An\u00e1lise Empresa',
-    AnaliseSAAB_c:                       'Em An\u00e1lise SAAB',
-    EmAnaliseTJSP_c:                     'Em An\u00e1lise TJSP',
-    EmAtendimento_c:                     'Em Atendimento',
-    ErroIntegracao_c:                    'Erro na Integra\u00e7\u00e3o',
-    Fechado_c:                           'Fechado',
-    DecursoPrazo_c:                      'Fechado por Decurso de Prazo',
-    PedidoRecategorizacao_c:             'Pedido de Recategoriza\u00e7\u00e3o',
-    RetornoAnalise_c:                    'Retorno An\u00e1lise',
-    RetornoAtividade_c:                  'Retorno de Atividade',
+    Agendado_c:                              'Agendado',
+    Aguardando3Nivel_c:                      'Aguardando 3º Nível',
+    AguardandoAceiteDefinitivo_c:            'Aguardando Aceite Definitivo',
+    AguardandoAceiteCancelamento_c:          'Aguardando Aceite do Cancelamento',
+    AguardandoAtendimento_c:                 'Aguardando Atendimento',
+    AguardandoCliente_c:                     'Aguardando Cliente',
+    AguardandoClienteContato1_c:             'Aguardando Cliente – Contato 1',
+    AguardandoClienteContato1DiaZero_c:      'Aguardando Cliente – Contato 1 (Dia Zero)',
+    AguardandoClienteContato2_c:             'Aguardando Cliente – Contato 2',
+    AguardandoClienteContato3_c:             'Aguardando Cliente – Contato 3',
+    AguardandoColeta_c:                      'Aguardando Coleta',
+    AguardandoContinuidadeAtendimento_c:     'Aguardando Continuidade de Atendimento',
+    AguardandoDocumentacao_c:                'Aguardando Documentação',
+    AguardandoEquipeConfiguracao_c:          'Aguardando Equipe de Configuração',
+    AguardandoGarantiaFabricante_c:          'Aguardando Garantia do Fabricante',
+    AguardandoInformacaoProcedimento_c:      'Aguardando Informação de Procedimento',
+    AguardandoInstalacaoProducao_c:          'Aguardando Instalação em Produção',
+    AguardandoOutraEquipe_c:                 'Aguardando Outra Equipe',
+    AguardandoPeca_c:                        'Aguardando Peça',
+    AguardandoRetornoCliente_c:              'Aguardando Retorno do Cliente',
+    AguardandoRetornoFornecedor_c:           'Aguardando Retorno do Fornecedor',
+    AguardandoSTI_c:                         'Aguardando STI',
+    ATUALIZADOUSUARIOTEAMS_c:                'Atualizado pelo Usuário do Teams',
+    DevolucaoFaltaSubsidio_c:                'Devolução falta de subsídio',
+    DevolucaoAtendimentoIT2B_c:              'Devolução para Atendimento IT2B',
+    AnaliseATIPG_c:                          'Em Análise ATIPG',
+    EmAnaliseEmpresa_c:                      'Em Análise Empresa',
+    AnaliseSAAB_c:                           'Em Análise SAAB',
+    EmAnaliseTJSP_c:                         'Em Análise TJSP',
+    EmAtendimento_c:                         'Em Atendimento',
+    EmRota_c:                                'Em Rota',
+    EnviaGSE_c:                              'Envia para GSE',
+    EnviadoReparoExterno_c:                  'Enviado para Reparo Externo',
+    EquipamentoEnviadoReparo_c:              'Equipamento Enviado para Reparo',
+    ErroIntegracao_c:                        'Erro na Integração',
+    Fechado_c:                               'Fechado',
+    DecursoPrazo_c:                          'Fechado por Decurso de Prazo',
+    DecursoDePrazo_c:                        'Fechado por Decurso de Prazo',
+    GarantiaRecusada_c:                      'Garantia Recusada',
+    LaudoDescarte_c:                         'Laudo para Descarte',
+    MetricaAguardando_c:                     'Métricas - Aguardando',
+    MetricaCancelada_c:                      'Métricas - Cancelada',
+    MetricaAnalisa_c:                        'Métricas - Em Análise',
+    MetricaEmExecucao_c:                     'Métricas - Em Execução',
+    MetricaHomologada_c:                     'Métricas - Homologada',
+    MetricaRejeitada_c:                      'Métricas - Rejeitada',
+    PecaDevolvida_c:                         'Peça Devolvida',
+    PecaEnviada_c:                           'Peça Enviada',
+    PedidoPeca_c:                            'Pedido de Peça',
+    PedidoPecaComBackup_c:                   'Pedido de Peça com Backup',
+    PedidoRecategorizacao_c:                 'Pedido de Recategorização',
+    RatAnexada_c:                            'Rat Anexada',
+    ReparoLaboratorio_c:                     'Reparo em Laboratório',
+    RetornoAnalise_c:                        'Retorno Análise',
+    RetornoAtividade_c:                      'Retorno de Atividade',
+    TarefaConcluidaLogista_c:                'Tarefa Concluída Logística',
+    TarefaConcluidaParcialLogisti_c:         'Tarefa Concluída Parcial Logística',
   };
 
   const humanReadableStatus = (raw) => {
@@ -7096,8 +7126,9 @@
     // State
     let selectedPersonId = '';
     let selectedPersonName = '';
-    const selectedStatuses  = new Set(); // vazio = sem filtro de status (mostra todos)
-    const selectedAssignees = new Set(); // vazio = sem filtro de designado (mostra todos); '' = nenhum
+    const selectedStatuses        = new Set(); // vazio = sem filtro de Status Operacional
+    const selectedRequestStatuses = new Set(); // vazio = sem filtro de Status (regular)
+    const selectedAssignees       = new Set(); // vazio = sem filtro de designado; '' = nenhum
     const selectedTeamIds   = new Set();  // equipes selecionadas para busca por GSE
     let ticketList = [];
     let allFetchedEntries = []; // todos os resultados da última busca (antes do filtro de status)
@@ -7332,7 +7363,7 @@
       const subjectText = t.subject && t.subject !== t.id ? (t.subject || '').slice(0, 55) : '';
 
       return `
-        <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);">
+        <div class="smax-resp-ticket-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(t.id)}" style="display:flex;align-items:flex-start;gap:6px;padding:8px 10px;cursor:pointer;">
           <div class="smax-resp-tick-sel" data-id="${Utils.escapeHtml(t.id)}" title="Selecionar para lote"
             style="flex-shrink:0;width:16px;height:16px;border-radius:4px;margin-top:2px;border:1.5px solid ${isChecked ? '#3b82f6' : 'rgba(255,255,255,.25)'};background:${isChecked ? '#3b82f6' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;transition:all .12s;cursor:pointer;">
             ${isChecked ? '✓' : ''}
@@ -7829,6 +7860,42 @@
       });
     };
 
+    const renderRequestStatusPills = (entries) => {
+      const section = backdrop?.querySelector('#smax-resp-req-status-section');
+      const filterEl = backdrop?.querySelector('#smax-resp-req-status-filters');
+      if (!filterEl) return;
+      const statuses = [...new Set(entries.map(e => e.status).filter(Boolean))].sort((a, b) => {
+        const la = REQUEST_STATUS_LABELS[a] || a;
+        const lb = REQUEST_STATUS_LABELS[b] || b;
+        return la.localeCompare(lb, 'pt');
+      });
+      if (!statuses.length) { if (section) section.style.display = 'none'; return; }
+      if (section) section.style.display = '';
+      filterEl.innerHTML = statuses.map(s => {
+        const label = REQUEST_STATUS_LABELS[s] || s;
+        const active = selectedRequestStatuses.has(s);
+        return `<button class="smax-resp-req-status-pill" data-status="${Utils.escapeHtml(s)}"
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#34d399' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(52,211,153,.2)' : 'transparent'};color:${active ? '#6ee7b7' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${active ? '#34d399' : 'transparent'};border:1.5px solid ${active ? '#34d399' : '#6b7280'};"></span>
+          ${Utils.escapeHtml(label)}
+        </button>`;
+      }).join('');
+      filterEl.querySelectorAll('.smax-resp-req-status-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const s = pill.dataset.status;
+          if (selectedRequestStatuses.has(s)) selectedRequestStatuses.delete(s);
+          else selectedRequestStatuses.add(s);
+          const active = selectedRequestStatuses.has(s);
+          pill.style.border = `1px solid ${active ? '#34d399' : 'rgba(255,255,255,.12)'}`;
+          pill.style.background = active ? 'rgba(52,211,153,.2)' : 'transparent';
+          pill.style.color = active ? '#6ee7b7' : '#9ca3af';
+          const dot = pill.querySelector('span');
+          if (dot) { dot.style.background = active ? '#34d399' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#34d399' : '#6b7280'}`; }
+          applyFilters();
+        });
+      });
+    };
+
     const renderAssigneePills = (entries) => {
       const section = backdrop?.querySelector('#smax-resp-assignee-section');
       const filterEl = backdrop?.querySelector('#smax-resp-assignee-filters');
@@ -7890,9 +7957,11 @@
       });
       // Status e designados
       selectedStatuses.clear();
-      (preset.statuses  || []).forEach(s => selectedStatuses.add(s));
+      (preset.statuses        || []).forEach(s => selectedStatuses.add(s));
+      selectedRequestStatuses.clear();
+      (preset.requestStatuses || []).forEach(s => selectedRequestStatuses.add(s));
       selectedAssignees.clear();
-      (preset.assignees || []).forEach(a => selectedAssignees.add(a));
+      (preset.assignees       || []).forEach(a => selectedAssignees.add(a));
       // Texto
       textFilter = preset.text || '';
       const inp = backdrop?.querySelector('#smax-resp-text-filter');
@@ -7903,6 +7972,7 @@
       applyFilters();
       if (allFetchedEntries.length) {
         renderStatusPills(allFetchedEntries);
+        renderRequestStatusPills(allFetchedEntries);
         DataRepository.ensurePeopleLoaded().then(() => renderAssigneePills(allFetchedEntries));
       }
     };
@@ -7950,6 +8020,7 @@
       const q = textFilter.toLowerCase();
       ticketList = allFetchedEntries.filter(e =>
         (selectedStatuses.size === 0 || selectedStatuses.has(e.statusSCCD)) &&
+        (selectedRequestStatuses.size === 0 || selectedRequestStatuses.has(e.status)) &&
         (selectedAssignees.size === 0 || selectedAssignees.has(e.assignee)) &&
         (!q ||
           e.id.includes(q) ||
@@ -7980,10 +8051,10 @@
       const countEl = backdrop?.querySelector('#smax-resp-ticket-count');
       if (countEl) countEl.textContent = `${ticketList.length} chamado${ticketList.length !== 1 ? 's' : ''}`;
       const clearBtn = backdrop?.querySelector('#smax-resp-clear-filters');
-      if (clearBtn) clearBtn.style.display = (selectedStatuses.size > 0 || selectedAssignees.size > 0) ? '' : 'none';
+      if (clearBtn) clearBtn.style.display = (selectedStatuses.size > 0 || selectedRequestStatuses.size > 0 || selectedAssignees.size > 0) ? '' : 'none';
       setStatusMsg('', '');
       // Persiste filtros para próxima sessão
-      try { GM_setValue('smax_resp_filters', JSON.stringify({ statuses: [...selectedStatuses], assignees: [...selectedAssignees], text: textFilter })); } catch {}
+      try { GM_setValue('smax_resp_filters', JSON.stringify({ statuses: [...selectedStatuses], requestStatuses: [...selectedRequestStatuses], assignees: [...selectedAssignees], text: textFilter })); } catch {}
       renderTicketList();
       updateBatchBar();
       if (ticketList.length && !activeTicketId) loadTicket(ticketList[0].id);
@@ -8012,8 +8083,9 @@
       }
 
       // Preservar filtros ativos para restaurar após recarregar
-      const prevStatuses  = new Set(selectedStatuses);
-      const prevAssignees = new Set(selectedAssignees);
+      const prevStatuses        = new Set(selectedStatuses);
+      const prevRequestStatuses = new Set(selectedRequestStatuses);
+      const prevAssignees       = new Set(selectedAssignees);
 
       // Resetar estado
       ticketList = [];
@@ -8021,6 +8093,7 @@
       selectedTicketIds.clear();
       activeTicketId = '';
       selectedStatuses.clear();
+      selectedRequestStatuses.clear();
       selectedAssignees.clear();
       realChildCountMap = new Map();
 
@@ -8094,7 +8167,8 @@
               DataRepository.triageCache.set(rawId, Object.assign({}, existing, { globalChangeId: globalId }));
             }
           }
-          const statusSCCD = (p.StatusSCCDSMAX_c || '').replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
+          const rawSCCDKey = p.StatusSCCDSMAX_c || '';
+          const statusSCCD = STATUS_SCCD_LABELS[rawSCCDKey] || rawSCCDKey.replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
           // Extrai primeira linha de texto da descrição HTML
           let descSnippet = '';
           if (p.Description) {
@@ -8145,7 +8219,8 @@
           for (const [cacheId, ce] of DataRepository.triageCache) {
             if (coveredIds.has(cacheId)) continue;
             if (CLOSED_STATUSES.has(ce.status)) continue;
-            const rawSCCD = (ce.statusSCCD || '').replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
+            const rawSCCDKey2 = ce.statusSCCD || '';
+            const rawSCCD = STATUS_SCCD_LABELS[rawSCCDKey2] || rawSCCDKey2.replace(/_c$/i, '').replace(/([A-Z])/g, ' $1').trim();
             if (rawSCCD === 'Fechado') continue;
             const suggestedTeam = TeamsConfig.suggestTeam(ce);
             if (!suggestedTeam || !teamsWithNoGSE.some(t => t.id === suggestedTeam.id)) continue;
@@ -8182,13 +8257,16 @@
 
         // Restaurar filtros que ainda existam nos novos dados — ANTES de renderizar as pills
         // para que elas reflitam o estado ativo corretamente
-        const newStatusSet   = new Set(allFetchedEntries.map(e => e.statusSCCD).filter(Boolean));
-        const newAssigneeSet = new Set(allFetchedEntries.map(e => e.assignee));
-        prevStatuses.forEach(s  => { if (newStatusSet.has(s))   selectedStatuses.add(s); });
-        prevAssignees.forEach(a => { if (newAssigneeSet.has(a)) selectedAssignees.add(a); });
+        const newStatusSet        = new Set(allFetchedEntries.map(e => e.statusSCCD).filter(Boolean));
+        const newRequestStatusSet = new Set(allFetchedEntries.map(e => e.status).filter(Boolean));
+        const newAssigneeSet      = new Set(allFetchedEntries.map(e => e.assignee));
+        prevStatuses.forEach(s        => { if (newStatusSet.has(s))        selectedStatuses.add(s); });
+        prevRequestStatuses.forEach(s => { if (newRequestStatusSet.has(s)) selectedRequestStatuses.add(s); });
+        prevAssignees.forEach(a       => { if (newAssigneeSet.has(a))      selectedAssignees.add(a); });
 
         // Gerar pills de filtro (agora refletem o estado restaurado)
         renderStatusPills(allFetchedEntries);
+        renderRequestStatusPills(allFetchedEntries);
         renderAssigneePills(allFetchedEntries);
 
         // Re-renderiza pills de especialista após peopleCache carregado (nomes em vez de IDs)
@@ -9104,6 +9182,10 @@
               <div id="smax-resp-filter-criteria">
                 <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Equipes</div>
                 <div id="smax-resp-team-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+                <div id="smax-resp-req-status-section" style="display:none;">
+                  <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Status</div>
+                  <div id="smax-resp-req-status-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
+                </div>
                 <div id="smax-resp-status-section" style="display:none;">
                   <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Status Operacional</div>
                   <div id="smax-resp-status-filters" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;"></div>
@@ -9431,9 +9513,11 @@
       // Limpar filtros ativos
       backdrop.querySelector('#smax-resp-clear-filters')?.addEventListener('click', () => {
         selectedStatuses.clear();
+        selectedRequestStatuses.clear();
         selectedAssignees.clear();
         applyFilters();
         renderStatusPills(allFetchedEntries);
+        renderRequestStatusPills(allFetchedEntries);
         renderAssigneePills(allFetchedEntries);
       });
 
