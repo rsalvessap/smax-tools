@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.42
+// @version      2.43
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.42';
+  const SMAX_TOOLKIT_VERSION = '2.43';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -766,7 +766,7 @@
 
     /* ── Response HUD ── */
     #smax-resp-hud-backdrop { position:fixed; inset:0; width:100vw; height:100vh; z-index:999997; display:none; align-items:stretch; justify-content:stretch; overflow:hidden; }
-    #smax-resp-hud { position:relative; width:100vw; height:100vh; max-width:none; max-height:none; border-radius:0; box-shadow:none; font-family:'Metric-Regular','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; display:flex; overflow:hidden; }
+    #smax-resp-hud { position:relative; width:100vw; height:100vh; max-width:none; max-height:none; border-radius:0; box-shadow:none; font-family:'Metric-Regular','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:14px; display:flex; overflow:hidden; }
     #smax-resp-hud-list { width:270px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid var(--sp-border); background:var(--sp-surface-2); overflow:hidden; }
     #smax-resp-filter-panel { border-bottom:1px solid var(--sp-border); flex-shrink:0; display:flex; flex-direction:column; }
     #smax-resp-filter-header { padding:8px 12px 6px; display:flex; align-items:center; justify-content:space-between; gap:6px; }
@@ -778,23 +778,23 @@
     .smax-resp-ticket-item.active { background:rgba(59,130,246,.12); border-left:3px solid #3b82f6; }
     .smax-resp-ticket-cb { margin-top:2px; flex-shrink:0; accent-color:#3b82f6; cursor:pointer; }
     .smax-resp-ticket-info { flex:1; min-width:0; }
-    .smax-resp-ticket-id { font-size:13px; font-weight:700; color:#0073e7; }
+    .smax-resp-ticket-id { font-size:14px; font-weight:700; color:#0073e7; }
     body[data-smax-theme="dark"] .smax-resp-ticket-id { color:#60a5fa; }
-    .smax-resp-ticket-subject { font-size:12px; color:var(--sp-text); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .smax-resp-ticket-status { font-size:11px; color:var(--sp-text-muted); margin-top:3px; }
+    .smax-resp-ticket-subject { font-size:13px; color:var(--sp-text); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .smax-resp-ticket-status { font-size:12px; color:var(--sp-text-muted); margin-top:3px; }
     #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
     #smax-resp-hud-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0073e7 0%,#005bb5 100%); border-radius:0; flex-shrink:0; }
     #smax-resp-hud-body { flex:1; display:flex; min-height:0; overflow:hidden; }
     #smax-resp-content-area { flex:1; display:flex; flex-direction:column; padding:14px 16px; gap:12px; overflow-y:auto; min-width:0; }
     #smax-resp-desc-panel { background:var(--sp-surface-2); border:1px solid var(--sp-border); border-radius:10px; padding:10px 12px; flex-shrink:0; }
-    #smax-resp-desc-content { font-size:13px; color:var(--sp-text); overflow-y:auto; min-height:40px; max-height:28vh; line-height:1.6; }
+    #smax-resp-desc-content { font-size:14px; color:var(--sp-text); overflow-y:auto; min-height:40px; max-height:28vh; line-height:1.6; }
     #smax-resp-desc-content img { max-width:100%; height:auto; border-radius:4px; }
     #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
     #smax-resp-solution-toolbar { display:flex; gap:2px; padding:5px 8px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; }
     .smax-resp-tb-btn { background:transparent; border:1px solid transparent; border-radius:4px; color:var(--sp-text-muted); cursor:pointer; font-size:12px; line-height:1; padding:4px 8px; transition:background .12s,color .12s; }
     .smax-resp-tb-btn:hover { background:var(--sp-primary-hover); color:var(--sp-text); }
     .smax-resp-tb-sep { width:1px; background:var(--sp-border); margin:3px 2px; align-self:stretch; }
-    #smax-resp-solution-editor { min-height:110px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:12px 14px; color:var(--sp-text); font-size:13px; line-height:1.65; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
+    #smax-resp-solution-editor { min-height:110px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:12px 14px; color:var(--sp-text); font-size:14px; line-height:1.65; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
     #smax-resp-solution-editor:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
     #smax-resp-solution-editor:empty::before { content:attr(data-placeholder); color:var(--sp-text-muted); pointer-events:none; display:block; }
     #smax-resp-solution-editor p { margin:0 0 4px; }
@@ -826,7 +826,7 @@
     .smax-resp-discussion-item { border:1px solid var(--sp-border); border-radius:8px; padding:8px 10px; background:var(--sp-surface); font-size:12px; }
     .smax-resp-disc-meta { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; font-size:12px; color:var(--sp-text-muted); }
     .smax-resp-disc-author { color:var(--sp-text); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
-    .smax-resp-disc-body { color:var(--sp-text); line-height:1.45; font-size:12px; max-height:80px; overflow-y:auto; }
+    .smax-resp-disc-body { color:var(--sp-text); line-height:1.45; font-size:13px; max-height:80px; overflow-y:auto; }
     .smax-resp-disc-body p { margin:0 0 4px; }
     .smax-resp-disc-expand-btn { font-size:10px; padding:2px 7px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; }
     .smax-resp-disc-expand-btn:hover { border-color:var(--sp-accent); color:var(--sp-accent); background:var(--sp-primary-bg); }
@@ -1215,7 +1215,7 @@
     .smax-tpl-close-btn { background:var(--sp-surface-2); color:var(--sp-text-muted); border:1px solid var(--sp-border); }
 
     /* ── ResponseHUD filter panel — light theme overrides ───────────────── */
-    body:not([data-smax-theme="dark"]) #smax-resp-preset-bar { background:var(--sp-surface-2) !important; border-bottom-color:var(--sp-border) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-preset-bar { background:var(--sp-sidebar-bg) !important; border-bottom-color:var(--sp-border) !important; }
     body:not([data-smax-theme="dark"]) #smax-resp-preset-bar > span { color:var(--sp-text-dim) !important; }
     body:not([data-smax-theme="dark"]) .smax-resp-preset-pill { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
     body:not([data-smax-theme="dark"]) #smax-resp-count-bar,
@@ -1234,18 +1234,20 @@
     body:not([data-smax-theme="dark"]) .smax-resp-ticket-item.active { background:rgba(0,100,210,.1); border-left-color:#0064d2; }
 
     /* ── ResponseHUD sidebars — light theme: usar mesma cor da sidebar do SettingsPanel ── */
-    body:not([data-smax-theme="dark"]) #smax-resp-hud-list { background:var(--sp-sidebar-bg); }
-    body:not([data-smax-theme="dark"]) #smax-resp-ticket-list { background:var(--sp-surface); }
-    body:not([data-smax-theme="dark"]) #smax-resp-hud-discussions { background:var(--sp-sidebar-bg); }
-    body:not([data-smax-theme="dark"]) #smax-resp-hud-footer { background:var(--sp-surface-2); border-top-color:var(--sp-border); }
-    /* Barra de preset na sidebar clara: distinguir do fundo azul-cinza */
-    body:not([data-smax-theme="dark"]) #smax-resp-filter-header { background:var(--sp-sidebar-bg); }
-    /* Itens de discussão destacam sobre o fundo da sidebar */
-    body:not([data-smax-theme="dark"]) .smax-resp-discussion-item { background:var(--sp-surface); border-color:var(--sp-border); }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-list { background:var(--sp-sidebar-bg) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-ticket-list { background:var(--sp-surface) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-discussions { background:var(--sp-sidebar-bg) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-footer { background:var(--sp-surface-2) !important; border-top-color:var(--sp-border) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-filter-header { background:var(--sp-sidebar-bg) !important; }
+    body:not([data-smax-theme="dark"]) .smax-resp-discussion-item { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; }
 
     /* ── ResponseHUD área central — modo escuro mais escuro ── */
-    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#080d17; }
-    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#080d17; }
+    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#080d17 !important; }
+    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#080d17 !important; }
+    /* Painéis de descrição e solução — escurecer junto com o fundo */
+    body[data-smax-theme="dark"] #smax-resp-desc-panel { background:#0e1825 !important; border-color:#1c2e48 !important; }
+    body[data-smax-theme="dark"] #smax-resp-solution-toolbar { background:#0e1825 !important; border-color:#1c2e48 !important; }
+    body[data-smax-theme="dark"] #smax-resp-solution-editor { background:#111c2c !important; border-color:#1c2e48 !important; }
   `);
 
 
