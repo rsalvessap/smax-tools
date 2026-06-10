@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.34
+// @version      2.36
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -14,6 +14,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      raw.githubusercontent.com
+// @connect      api.github.com
 // @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @homepageURL  https://github.com/rsalvessap/SMAX-TOOLS
@@ -44,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.34';
+  const SMAX_TOOLKIT_VERSION = '2.36';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -63,6 +64,7 @@
       myPersonId: '',
       myPersonName: '',
       sharedConfigUrl: 'https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/shared-config.json',
+      githubToken: '',
       forwardingButtonsRaw: JSON.stringify([
         { label: 'STI \u2013 Migra\u00e7\u00e3o', text: 'Encaminhado para STI \u2013 Migra\u00e7\u00e3o.' },
         { label: 'N3',            text: 'Encaminhado para N3.' },
@@ -4075,6 +4077,70 @@
       return { ok: true, msg: `${count} configurações aplicadas. ✓` };
     };
 
+    const publishConfigToGit = (onStatus) => {
+      const token  = (prefs.githubToken || '').trim();
+      const rawUrl = (prefs.sharedConfigUrl || '').trim();
+      if (!token)  return onStatus('Configure o Token do GitHub primeiro.', false);
+      if (!rawUrl) return onStatus('URL do shared-config não configurada.', false);
+
+      const m = rawUrl.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
+      if (!m) return onStatus('URL deve ser raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}.', false);
+      const [, owner, repo, branch, filePath] = m;
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+      const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' };
+
+      onStatus('Buscando arquivo atual no GitHub...', null);
+
+      // Busca SHA atual do arquivo
+      GM_xmlhttpRequest({
+        method: 'GET', url: `${apiUrl}?ref=${branch}`, headers,
+        onload: (res) => {
+          let sha = '';
+          try {
+            if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+            sha = JSON.parse(res.responseText).sha;
+          } catch (e) {
+            return onStatus(`Erro ao buscar arquivo: ${e.message}`, false);
+          }
+
+          // Monta novo conteúdo
+          const existing = SharedConfig.get() || {};
+          let teams = [];
+          try { teams = JSON.parse(prefs.teamsConfigRaw); } catch {}
+          const newData = {
+            _version: ((existing._version || 0) * 1 + 1),
+            _updatedAt: new Date().toISOString().split('T')[0],
+            _description: existing._description || 'Configuração compartilhada SMAX Toolkit TJSP.',
+            nameGroups: prefs.nameGroups || {},
+            ausentes: prefs.ausentes || [],
+            enableRealWrites: prefs.enableRealWrites,
+            defaultGlobalChangeId: prefs.defaultGlobalChangeId || '',
+            teams,
+            scripts: existing.scripts || { sol: [], disc: [] },
+          };
+          const content = btoa(unescape(encodeURIComponent(JSON.stringify(newData, null, 2))));
+
+          onStatus('Publicando no GitHub...', null);
+          GM_xmlhttpRequest({
+            method: 'PUT', url: apiUrl, headers,
+            data: JSON.stringify({ message: `chore: atualiza shared-config SMAX Toolkit v${newData._version}`, content, sha, branch }),
+            onload: (r) => {
+              if (r.status === 200 || r.status === 201) {
+                onStatus(`✓ Publicado! v${newData._version} — todos receberão na próxima sincronização.`, true);
+                SharedConfig.refresh(true);
+              } else {
+                let detail = '';
+                try { detail = JSON.parse(r.responseText).message || ''; } catch {}
+                onStatus(`Erro HTTP ${r.status}${detail ? ': ' + detail : ''}.`, false);
+              }
+            },
+            onerror: () => onStatus('Erro de rede ao publicar.', false),
+          });
+        },
+        onerror: () => onStatus('Erro de rede ao buscar arquivo.', false),
+      });
+    };
+
     /* ── Section content renderers ── */
 
     const renderSectionGeral = () => {
@@ -4129,7 +4195,19 @@
           <div id="smax-config-io-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin:8px 0;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:12px;cursor:pointer;">📋 Copiar</button>
-            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar</button>
+            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar localmente</button>
+          </div>
+          <div style="border-top:1px solid var(--sp-border);margin-top:14px;padding-top:14px;">
+            <div class="smax-sp-section-title" style="font-size:12px;margin-bottom:4px;">🚀 Publicar para a equipe (Git)</div>
+            <div class="smax-sp-muted" style="margin-bottom:8px;">Salva a config diretamente no GitHub. Todos os usuários recebem automaticamente na próxima sincronização.</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+              <input type="password" id="smax-github-token-input" placeholder="ghp_••••••••••••••••••••••••"
+                value="${Utils.escapeHtml(prefs.githubToken || '')}"
+                style="flex:1;min-width:180px;padding:7px 10px;border-radius:7px;font-size:11px;box-sizing:border-box;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);">
+              <button type="button" id="smax-github-token-save-btn" style="padding:7px 14px;border:none;border-radius:7px;background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;border:1px solid var(--sp-border);cursor:pointer;white-space:nowrap;">Salvar token</button>
+            </div>
+            <button type="button" id="smax-config-publish-btn" style="width:100%;padding:10px;border-radius:8px;border:none;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(109,40,217,.35);">🚀 Publicar para a equipe</button>
+            <div id="smax-config-publish-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin-top:8px;"></div>
           </div>
         </div>`;
     };
@@ -4412,14 +4490,36 @@
       });
 
       // Exportar / Importar Configuração JSON
-      const cfgTextarea = container.querySelector('#smax-config-io-textarea');
-      const cfgStatusEl = container.querySelector('#smax-config-io-status');
-      const cfgCopyBtn  = container.querySelector('#smax-config-copy-btn');
-      const cfgSaveBtn  = container.querySelector('#smax-config-save-btn');
+      const cfgTextarea   = container.querySelector('#smax-config-io-textarea');
+      const cfgStatusEl   = container.querySelector('#smax-config-io-status');
+      const cfgCopyBtn    = container.querySelector('#smax-config-copy-btn');
+      const cfgSaveBtn    = container.querySelector('#smax-config-save-btn');
+      const pubBtn        = container.querySelector('#smax-config-publish-btn');
+      const pubStatusEl   = container.querySelector('#smax-config-publish-status');
+      const tokenInput    = container.querySelector('#smax-github-token-input');
+      const tokenSaveBtn  = container.querySelector('#smax-github-token-save-btn');
       if (cfgTextarea) cfgTextarea.value = buildConfigJSON();
       const setCfgStatus = (msg, color) => {
         if (cfgStatusEl) { cfgStatusEl.textContent = msg; cfgStatusEl.style.color = color || 'var(--sp-text-muted)'; }
       };
+      const setPubStatus = (msg, ok) => {
+        if (pubStatusEl) { pubStatusEl.textContent = msg; pubStatusEl.style.color = ok === true ? '#4ade80' : ok === false ? '#fca5a5' : 'var(--sp-text-muted)'; }
+      };
+      tokenSaveBtn?.addEventListener('click', () => {
+        prefs.githubToken = (tokenInput?.value || '').trim();
+        savePrefs();
+        setPubStatus('Token salvo. ✓', true);
+      });
+      pubBtn?.addEventListener('click', () => {
+        if (pubBtn.disabled) return;
+        pubBtn.disabled = true;
+        const origLabel = pubBtn.textContent;
+        pubBtn.textContent = '⏳ Publicando...';
+        publishConfigToGit((msg, ok) => {
+          setPubStatus(msg, ok);
+          if (ok !== null) { pubBtn.disabled = false; pubBtn.textContent = origLabel; }
+        });
+      });
       cfgCopyBtn?.addEventListener('click', () => {
         if (!cfgTextarea?.value.trim()) return;
         navigator.clipboard.writeText(cfgTextarea.value)
@@ -10044,6 +10144,17 @@
           Array.isArray(data.scripts.disc) ? data.scripts.disc : []
         );
       }
+      // Auto-aplica chaves de config compartilhada (exceto dados pessoais)
+      const SHARED_KEYS = ['nameGroups', 'ausentes', 'enableRealWrites', 'defaultGlobalChangeId'];
+      let sharedApplied = false;
+      SHARED_KEYS.forEach(key => {
+        if (data[key] !== undefined) { prefs[key] = data[key]; sharedApplied = true; }
+      });
+      if (data.teams !== undefined) {
+        prefs.teamsConfigRaw = typeof data.teams === 'string' ? data.teams : JSON.stringify(data.teams);
+        sharedApplied = true;
+      }
+      if (sharedApplied) { savePrefs(); }
     };
 
     const refresh = (force = false) => {
