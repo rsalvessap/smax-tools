@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.44
+// @version      2.45
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.44';
+  const SMAX_TOOLKIT_VERSION = '2.45';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1215,7 +1215,7 @@
     .smax-tpl-close-btn { background:var(--sp-surface-2); color:var(--sp-text-muted); border:1px solid var(--sp-border); }
 
     /* ── ResponseHUD filter panel — light theme overrides ───────────────── */
-    body:not([data-smax-theme="dark"]) #smax-resp-preset-bar { background:var(--sp-sidebar-bg) !important; border-bottom-color:var(--sp-border) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-preset-bar { background:#f5f8fc !important; border-bottom-color:var(--sp-border) !important; }
     body:not([data-smax-theme="dark"]) #smax-resp-preset-bar > span { color:var(--sp-text-dim) !important; }
     body:not([data-smax-theme="dark"]) .smax-resp-preset-pill { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
     body:not([data-smax-theme="dark"]) #smax-resp-count-bar,
@@ -1242,22 +1242,27 @@
     body:not([data-smax-theme="dark"]) .smax-resp-discussion-item { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; }
 
     /* ── ResponseHUD área central — modo escuro ─────────────────────────
-       Hierarquia: fundo (cromo/chips) > mais claro; campos de texto > mais escuros (embutidos)
+       Hierarquia: fundo/cromo (MAIS ESCURO) → campos de texto (MAIS CLAROS, aparecem como cartões)
     ── */
-    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#161e2c !important; }
-    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#161e2c !important; }
-    body[data-smax-theme="dark"] #smax-resp-desc-panel { background:#060b14 !important; border-color:#1c2e48 !important; }
-    body[data-smax-theme="dark"] #smax-resp-solution-toolbar { background:#0a1220 !important; border-color:#1c2e48 !important; }
-    body[data-smax-theme="dark"] #smax-resp-solution-editor { background:#060b14 !important; border-color:#1c2e48 !important; }
+    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#060a12 !important; }
+    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#060a12 !important; }
+    body[data-smax-theme="dark"] #smax-resp-desc-panel { background:#1c2535 !important; border-color:#2a3a58 !important; }
+    body[data-smax-theme="dark"] #smax-resp-solution-toolbar { background:#162030 !important; border-color:#2a3a58 !important; }
+    body[data-smax-theme="dark"] #smax-resp-solution-editor { background:#1a2840 !important; border-color:#2a3a58 !important; }
 
-    /* ── ResponseHUD área central — modo claro (mesma hierarquia invertida)
-       Hierarquia: fundo (cromo/chips) > azul-cinza claro; campos de texto > branco puro (embutidos claros)
+    /* ── ResponseHUD área central — modo claro (mesma hierarquia)
+       Fundo cromo: azul médio (mais escuro que os painéis brancos)
+       Campos de texto: branco puro (elevados sobre o fundo)
     ── */
-    body:not([data-smax-theme="dark"]) #smax-resp-hud-main { background:#dce8f4 !important; }
-    body:not([data-smax-theme="dark"]) #smax-resp-hud-body { background:#dce8f4 !important; }
-    body:not([data-smax-theme="dark"]) #smax-resp-desc-panel { background:#ffffff !important; border-color:#b8cfe4 !important; }
-    body:not([data-smax-theme="dark"]) #smax-resp-solution-toolbar { background:#f4f8fc !important; border-color:#b8cfe4 !important; }
-    body:not([data-smax-theme="dark"]) #smax-resp-solution-editor { background:#ffffff !important; border-color:#b8cfe4 !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-main { background:#c4d8ec !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-hud-body { background:#c4d8ec !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-desc-panel { background:#ffffff !important; border-color:#8aafc8 !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-solution-toolbar { background:#f0f6fc !important; border-color:#8aafc8 !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-solution-editor { background:#ffffff !important; border-color:#8aafc8 !important; }
+    /* Painel de filtros: bloco branco coeso sobre a sidebar azul */
+    body:not([data-smax-theme="dark"]) #smax-resp-filter-panel { background:#ffffff !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-filter-header { background:#ffffff !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-filter-criteria { background:#ffffff !important; }
   `);
 
 
