@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.38
+// @version      2.39
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.38';
+  const SMAX_TOOLKIT_VERSION = '2.39';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -508,23 +508,23 @@
 
     /* ── Tema base (light): HUD de Triagem ── */
     #smax-triage-hud-backdrop { background:rgba(0,0,0,0.5); }
-    #smax-triage-hud { background:#ffffff; color:#1a202c; box-shadow:0 8px 40px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06) inset; }
-    #smax-triage-hud-body { background:#f7f9fc; border:1px solid #c4ced8; }
-    #smax-triage-hud-footer { color:#1a202c; }
-    #smax-triage-sidebar { background:#eaeff5; border-right:1px solid #c4ced8; }
-    .smax-triage-sidebar-section { color:#4a5568; }
-    .smax-triage-queue-item { background:rgba(0,0,0,.02); border:1px solid #c4ced8; color:#1a202c; }
-    .smax-triage-queue-item:hover { background:rgba(0,100,210,.06); }
-    .smax-triage-queue-item.active { background:rgba(0,100,210,.1); border-color:rgba(0,100,210,.3); }
-    .smax-triage-queue-item .tqi-id { color:#0064d2; }
+    #smax-triage-hud { background:#e8edf4; color:#1a202c; box-shadow:0 8px 40px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.08) inset; }
+    #smax-triage-hud-body { background:#ffffff; border:1px solid #b8c4d4; }
+    #smax-triage-hud-footer { background:#dde4ed; border-top:1px solid #b8c4d4; color:#1a202c; }
+    #smax-triage-sidebar { background:#d4dce8; border-right:2px solid #b0bcd0; }
+    .smax-triage-sidebar-section { color:#374151; font-weight:600; }
+    .smax-triage-queue-item { background:#edf1f7; border:1px solid #b8c4d4; color:#1a202c; }
+    .smax-triage-queue-item:hover { background:#dce8f8; border-color:#90b4e0; }
+    .smax-triage-queue-item.active { background:#cce0f8; border-color:#0064d2; border-left:3px solid #0064d2; }
+    .smax-triage-queue-item .tqi-id { color:#0052b0; font-weight:700; }
     .smax-triage-queue-item .tqi-subject { color:#1a202c; }
     .smax-triage-queue-item .tqi-meta { color:#4a5568; }
-    .smax-triage-field-label { color:#4a5568; }
+    .smax-triage-field-label { color:#374151; font-weight:600; }
     .smax-triage-field-value { color:#1a202c; }
-    .smax-triage-divider { border-color:#c4ced8; }
-    #smax-triage-solution-editor { background:#ffffff; color:#1a202c; border-color:#c4ced8; }
-    .smax-triage-btn-secondary { background:rgba(0,0,0,.04); color:#1a202c; border-color:#c4ced8; }
-    .smax-triage-btn-secondary:hover { background:rgba(0,0,0,.08); }
+    .smax-triage-divider { border-color:#b8c4d4; }
+    #smax-triage-solution-editor { background:#ffffff; color:#1a202c; border-color:#b8c4d4; }
+    .smax-triage-btn-secondary { background:#edf1f7; color:#374151; border:1px solid #b8c4d4; }
+    .smax-triage-btn-secondary:hover { background:#dde4ed; }
 
     /* ── Tema dark: HUD de Triagem ── */
     body[data-smax-theme="dark"] #smax-triage-hud-backdrop { background:rgba(0,0,0,0.7); }
@@ -580,12 +580,12 @@
 
     /* ── Tema dark: ResponseHUD ── */
     body[data-smax-theme="dark"] #smax-resp-hud-backdrop { background:rgba(0,0,0,0.72); }
-    body[data-smax-theme="dark"] #smax-resp-hud { background:#161e2c; color:#e2eaf4; box-shadow:0 25px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06) inset; }
-    body[data-smax-theme="dark"] #smax-resp-hud-list { background:#0c1219; border-right:1px solid #2a3448; }
-    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#161e2c; }
-    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#161e2c; }
-    body[data-smax-theme="dark"] #smax-resp-hud-footer { background:#0c1219; border-top:1px solid #2a3448; }
-    body[data-smax-theme="dark"] #smax-resp-hud-discussions { background:#0f1520; border-left:1px solid #2a3448; }
+    body[data-smax-theme="dark"] #smax-resp-hud { background:#111827; color:#e2eaf4; box-shadow:0 25px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.06) inset; }
+    body[data-smax-theme="dark"] #smax-resp-hud-list { background:#0b1120; border-right:1px solid #1e2d42; }
+    body[data-smax-theme="dark"] #smax-resp-hud-main { background:#111827; }
+    body[data-smax-theme="dark"] #smax-resp-hud-body { background:#111827; }
+    body[data-smax-theme="dark"] #smax-resp-hud-footer { background:#0b1120; border-top:1px solid #1e2d42; }
+    body[data-smax-theme="dark"] #smax-resp-hud-discussions { background:#0d1525; border-left:1px solid #1e2d42; }
     body[data-smax-theme="dark"] #smax-resp-content-area { background:#1a2233; border:1px solid #2a3448; border-radius:8px; }
     body[data-smax-theme="dark"] #smax-resp-detail { color:#e2eaf4; }
     body[data-smax-theme="dark"] .smax-resp-meta-chip { background:rgba(255,255,255,.07); border-color:#2a3448; color:#c9d1d9; }
@@ -4182,7 +4182,7 @@
             <input type="text" id="smax-shared-url-input" value="${Utils.escapeHtml(prefs.sharedConfigUrl || '')}"
               placeholder="https://raw.githubusercontent.com/..."
               style="flex:1;min-width:200px;padding:7px 10px;border-radius:7px;font-size:11px;box-sizing:border-box;">
-            <button type="button" id="smax-shared-save-btn" style="padding:7px 14px;border:none;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">Salvar</button>
+            <button type="button" id="smax-shared-save-btn" style="padding:7px 14px;border:none;border-radius:7px;background:var(--sp-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Salvar</button>
             <button type="button" id="smax-shared-refresh-btn" style="padding:7px 14px;border:1px solid var(--sp-border);border-radius:7px;background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;cursor:pointer;">↺ Atualizar</button>
           </div>
           <div id="smax-shared-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;"></div>
@@ -4195,7 +4195,7 @@
           <div id="smax-config-io-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin:8px 0;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <button type="button" id="smax-config-copy-btn" style="padding:8px 14px;border-radius:8px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:12px;cursor:pointer;">📋 Copiar</button>
-            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);font-weight:500;">💾 Salvar localmente</button>
+            <button type="button" id="smax-config-save-btn" style="padding:8px 14px;border-radius:8px;border:none;background:var(--sp-primary);color:#fff;font-size:12px;cursor:pointer;font-weight:600;">💾 Salvar localmente</button>
           </div>
           <div style="border-top:1px solid var(--sp-border);margin-top:14px;padding-top:14px;">
             <div class="smax-sp-section-title" style="font-size:12px;margin-bottom:4px;">🚀 Publicar para a equipe (Git)</div>
@@ -4206,7 +4206,7 @@
                 style="flex:1;min-width:180px;padding:7px 10px;border-radius:7px;font-size:11px;box-sizing:border-box;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);">
               <button type="button" id="smax-github-token-save-btn" style="padding:7px 14px;border:none;border-radius:7px;background:var(--sp-surface-2);color:var(--sp-text);font-size:11px;border:1px solid var(--sp-border);cursor:pointer;white-space:nowrap;">Salvar token</button>
             </div>
-            <button type="button" id="smax-config-publish-btn" style="width:100%;padding:10px;border-radius:8px;border:none;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(109,40,217,.35);">🚀 Publicar para a equipe</button>
+            <button type="button" id="smax-config-publish-btn" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--sp-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🚀 Publicar para a equipe</button>
             <div id="smax-config-publish-status" style="font-size:11px;color:var(--sp-text-muted);min-height:16px;margin-top:8px;"></div>
           </div>
         </div>`;
@@ -4240,7 +4240,7 @@
             <div class="smax-sp-section-title" style="margin-bottom:2px;">⭐ Usuários Destaque</div>
             <div class="smax-sp-muted">Lista pessoal — não compartilhada com a equipe. A linha inteira do chamado é destacada na fila.</div>
           </div>
-          <button type="button" id="smax-det-add-btn" style="font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:rgba(245,158,11,.12);color:#f59e0b;cursor:pointer;border:1px solid rgba(245,158,11,.3);">+ Adicionar</button>
+          <button type="button" id="smax-det-add-btn" style="font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface-2);color:var(--sp-text);cursor:pointer;">+ Adicionar</button>
         </div>
         <div id="smax-det-list" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;margin-bottom:4px;">
           ${(personal.myDestaque || []).length === 0
@@ -4254,7 +4254,7 @@
         </div>
         <div id="smax-det-input-row" style="display:none;margin-top:8px;gap:6px;">
           <input type="text" id="smax-det-input" placeholder="Nome completo do usuário" style="flex:1;padding:7px 10px;border-radius:6px;font-size:12px;min-width:0;">
-          <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:12px;cursor:pointer;flex-shrink:0;">Salvar</button>
+          <button type="button" id="smax-det-confirm" style="padding:7px 14px;border-radius:6px;border:none;background:var(--sp-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">Salvar</button>
           <button type="button" id="smax-det-cancel" style="padding:7px 10px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>
         </div>
       </div>`;
@@ -4269,7 +4269,7 @@
               <button id="smax-tpl-export-btn" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📤 Exportar JSON</button>
               <button id="smax-tpl-import-btn" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">📥 Importar JSON</button>
               <button id="smax-tpl-sync-btn" title="Importar scripts do Gerenciador de Chamados" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text);font-size:11px;cursor:pointer;">☁️ Do Gerenciador</button>
-              <button id="smax-tpl-new-btn" style="padding:6px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">+ Novo</button>
+              <button id="smax-tpl-new-btn" style="padding:6px 14px;border-radius:6px;border:none;background:var(--sp-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Novo</button>
             </div>
           </div>
           <div style="display:flex;gap:0;border-bottom:1px solid var(--sp-border);margin-bottom:10px;">
@@ -4287,7 +4287,7 @@
           <textarea id="smax-tpl-sp-body" placeholder="Cole o conteúdo aqui ou escreva HTML..." style="min-height:140px;resize:vertical;padding:8px 10px;border-radius:6px;font-size:12px;font-family:'Segoe UI',system-ui,sans-serif;width:100%;box-sizing:border-box;line-height:1.5;"></textarea>
           <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
             <button id="smax-tpl-sp-cancel" style="padding:7px 14px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;">Cancelar</button>
-            <button id="smax-tpl-sp-save" style="padding:7px 18px;border-radius:6px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Salvar script</button>
+            <button id="smax-tpl-sp-save" style="padding:7px 18px;border-radius:6px;border:none;background:var(--sp-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Salvar script</button>
           </div>
         </div>
         <div id="smax-tpl-import-area" class="smax-sp-card" style="display:none;flex-direction:column;gap:8px;">
@@ -4296,7 +4296,7 @@
           <textarea id="smax-tpl-import-json-input" style="min-height:100px;resize:vertical;padding:8px 10px;border-radius:6px;font-size:11px;font-family:monospace;width:100%;box-sizing:border-box;"></textarea>
           <div style="display:flex;gap:8px;justify-content:flex-end;">
             <button id="smax-tpl-import-cancel" style="padding:6px 12px;border-radius:6px;border:1px solid var(--sp-border);background:var(--sp-surface);color:var(--sp-text-muted);font-size:12px;cursor:pointer;">Cancelar</button>
-            <button id="smax-tpl-import-confirm" style="padding:6px 14px;border-radius:6px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Importar</button>
+            <button id="smax-tpl-import-confirm" style="padding:6px 14px;border-radius:6px;border:none;background:var(--sp-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Importar</button>
           </div>
         </div>
       </div>`;
@@ -4309,7 +4309,7 @@
             Abre o painel de triagem sobre a lista de chamados. Navegue pelos chamados, defina urgência, atribua responsável e envie respostas rapidamente.<br>
             <strong style="color:var(--sp-text);font-size:11px;">Dica:</strong> filtre e ordene os chamados no SMAX antes de iniciar.
           </div>
-          <button id="smax-launch-triage-btn" style="padding:12px 32px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);color:#fff;box-shadow:0 6px 20px rgba(59,130,246,.4),0 0 0 1px rgba(255,255,255,.1) inset;transition:transform .15s,box-shadow .15s;">
+          <button id="smax-launch-triage-btn" style="padding:11px 28px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--sp-primary);color:#fff;transition:opacity .15s;">
             🚀 Iniciar Triagem
           </button>
         </div>
@@ -4340,7 +4340,7 @@
           <div class="smax-sp-muted" style="margin-bottom:14px;">
             Abre o painel de respostas em cima da tela atual. Selecione um colaborador, filtre por equipe e status, redija a solução com editor de texto e envie em lote.
           </div>
-          <button id="smax-launch-resp-btn" style="padding:12px 32px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:linear-gradient(135deg,#8b5cf6 0%,#6d28d9 100%);color:#fff;box-shadow:0 6px 20px rgba(139,92,246,.4),0 0 0 1px rgba(255,255,255,.1) inset;transition:transform .15s,box-shadow .15s;">
+          <button id="smax-launch-resp-btn" style="padding:11px 28px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--sp-primary);color:#fff;transition:opacity .15s;">
             📨 Abrir Respostas
           </button>
         </div>
@@ -8267,9 +8267,7 @@
         // Gerar pills de filtro (agora refletem o estado restaurado)
         renderStatusPills(allFetchedEntries);
         renderRequestStatusPills(allFetchedEntries);
-        renderAssigneePills(allFetchedEntries);
-
-        // Re-renderiza pills de especialista após peopleCache carregado (nomes em vez de IDs)
+        // Sempre aguarda peopleCache para garantir nomes em vez de IDs
         DataRepository.ensurePeopleLoaded().then(() => renderAssigneePills(allFetchedEntries));
 
         // Aplicar filtros (vazio = mostrar todos)
@@ -9236,21 +9234,21 @@
           <!-- Right: detail -->
           <div id="smax-resp-hud-main">
             <div id="smax-resp-hud-header">
-              <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;flex-wrap:wrap;">
-                <a id="smax-resp-ticket-id-link" href="#" target="_blank" style="font-size:14px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;opacity:.9;">—</a>
+              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;overflow:hidden;">
+                <a id="smax-resp-ticket-id-link" href="#" target="_blank" style="font-size:16px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;letter-spacing:.01em;">—</a>
                 <span id="smax-resp-detail-global-badge" style="display:none;flex-shrink:0;"></span>
-                <span id="smax-resp-vip-badge" style="display:none;padding:1px 5px;border-radius:999px;background:#facc15;color:#854d0e;font-size:9px;font-weight:700;flex-shrink:0;">VIP</span>
-                <span id="smax-resp-opener" style="font-size:12px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;flex-shrink:0;"></span>
-                <span id="smax-resp-requester-title" style="display:none;font-size:12px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;flex-shrink:0;font-style:italic;"></span>
-                <span id="smax-resp-location-label" style="display:none;font-size:12px;color:rgba(255,255,255,.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px;cursor:pointer;" title="Clique para ver nome completo"></span>
-                <span id="smax-resp-created-label" style="display:none;font-size:12px;color:rgba(255,255,255,.65);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
+                <span id="smax-resp-vip-badge" style="display:none;padding:2px 7px;border-radius:999px;background:#facc15;color:#854d0e;font-size:10px;font-weight:700;flex-shrink:0;">VIP</span>
+                <span id="smax-resp-opener" style="font-size:13px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;max-width:280px;"></span>
+                <span id="smax-resp-requester-title" style="display:none;font-size:13px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;max-width:240px;font-style:italic;"></span>
+                <span id="smax-resp-location-label" style="display:none;font-size:13px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0;max-width:220px;cursor:pointer;" title="Clique para ver nome completo"></span>
+                <span id="smax-resp-created-label" style="display:none;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
               </div>
-              <div style="display:flex;align-items:center;gap:6px;">
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                 <input type="text" id="smax-resp-global-id" placeholder="Global ID" inputmode="numeric" autocomplete="off"
-                  style="width:80px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 8px;color:#fff;font-size:11px;outline:none;">
+                  style="width:90px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:5px 9px;color:#fff;font-size:12px;outline:none;">
                 <button type="button" id="smax-resp-global-link-btn" title="Vincular chamado ativo ao Global informado">🔗 Vincular</button>
-                <button id="smax-theme-toggle-hud" type="button" title="Alternar tema" style="width:30px;height:30px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🌙</button>
-                <button type="button" id="smax-resp-close-btn" title="Fechar" style="border:none;background:rgba(0,0,0,.3);color:rgba(255,255,255,.8);font-size:14px;width:28px;height:28px;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,.2);">✕</button>
+                <button id="smax-theme-toggle-hud" type="button" title="Alternar tema" style="width:32px;height:32px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🌙</button>
+                <button type="button" id="smax-resp-close-btn" title="Fechar" style="border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.3);color:rgba(255,255,255,.85);font-size:15px;width:30px;height:30px;border-radius:6px;cursor:pointer;">✕</button>
               </div>
             </div>
 
@@ -9518,7 +9516,7 @@
         applyFilters();
         renderStatusPills(allFetchedEntries);
         renderRequestStatusPills(allFetchedEntries);
-        renderAssigneePills(allFetchedEntries);
+        DataRepository.ensurePeopleLoaded().then(() => renderAssigneePills(allFetchedEntries));
       });
 
       // Fetch button — carregar e recolher critérios automaticamente
