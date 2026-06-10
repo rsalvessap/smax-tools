@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.32
+// @version      2.33
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.32';
+  const SMAX_TOOLKIT_VERSION = '2.33';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -615,8 +615,8 @@
     .smax-absent-box { width:14px; height:14px; border:1px solid #555; border-radius:2px; background:#fff; box-sizing:border-box; }
     .smax-absent-input:checked + .smax-absent-box { background:#d32f2f; border-color:#d32f2f; box-shadow:0 0 0 1px #d32f2f; }
 
-    #smax-settings-btn { width:50px; height:50px; border-radius:50%; border:none; background:var(--sp-surface-2); color:var(--sp-text); font-size:26px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,.35); cursor:pointer; }
-    #smax-settings-btn:hover { background:#1f2937; }
+    #smax-settings-btn { width:50px; height:50px; border-radius:50%; border:1px solid var(--sp-border); background:var(--sp-surface); color:var(--sp-text); font-size:26px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,.25); cursor:pointer; transition:background .15s,border-color .15s; }
+    #smax-settings-btn:hover { background:var(--sp-primary-hover); border-color:var(--sp-accent); }
 
     #smax-triage-start-btn { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:999999; padding:12px 28px; border-radius:999px; border:none; cursor:pointer; font-size:16px; font-weight:600; background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%); color:#fff; box-shadow:0 8px 24px rgba(59,130,246,.4),0 0 0 1px rgba(255,255,255,.1) inset; transition:transform .15s ease, box-shadow .15s ease; }
     #smax-triage-start-btn:hover { transform:translateX(-50%) translateY(-2px); box-shadow:0 12px 32px rgba(59,130,246,.5),0 0 0 1px rgba(255,255,255,.15) inset; }
@@ -1140,35 +1140,33 @@
     }
 
     /* ── Templates ── */
-    #smax-tpl-btn { position:fixed; right:16px; bottom:80px; z-index:999998; width:46px; height:46px; border-radius:50%; border:none; background:#0f172a; color:#f8fafc; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(0,0,0,.4); cursor:pointer; transition:background .15s; }
-    #smax-tpl-btn:hover { background:#1e293b; }
     #smax-tpl-modal { position:fixed; inset:0; z-index:1000001; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.55); backdrop-filter:blur(4px); }
     #smax-tpl-modal.open { display:flex; }
-    #smax-tpl-box { background:#0f172a; border:1px solid rgba(255,255,255,.1); border-radius:14px; width:680px; max-width:96vw; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 24px 56px rgba(0,0,0,.6); overflow:hidden; font-family:system-ui,sans-serif; }
-    #smax-tpl-box h3 { margin:0; padding:14px 18px; font-size:15px; font-weight:600; color:#f8fafc; background:linear-gradient(90deg,#0ea5e9,#8b5cf6); }
-    .smax-tpl-tabs { display:flex; border-bottom:1px solid rgba(255,255,255,.08); }
-    .smax-tpl-tab { flex:1; padding:9px; text-align:center; font-size:12px; font-weight:600; color:#94a3b8; cursor:pointer; transition:color .15s,background .15s; }
-    .smax-tpl-tab.active { color:#38bdf8; background:rgba(56,189,248,.06); border-bottom:2px solid #38bdf8; }
-    .smax-tpl-list { flex:1; overflow-y:auto; padding:10px; }
-    .smax-tpl-empty { color:#64748b; font-size:13px; text-align:center; padding:30px; }
-    .smax-tpl-item { padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,.07); margin-bottom:7px; background:rgba(255,255,255,.02); cursor:pointer; transition:background .15s,border-color .15s; }
-    .smax-tpl-item:hover { background:rgba(56,189,248,.08); border-color:rgba(56,189,248,.3); }
-    .smax-tpl-item-title { font-size:13px; font-weight:600; color:#e2e8f0; }
-    .smax-tpl-item-preview { font-size:11px; color:#64748b; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #smax-tpl-box { background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:14px; width:680px; max-width:96vw; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 24px 56px rgba(0,0,0,.6); overflow:hidden; font-family:'Metric-Regular','Helvetica Neue',Helvetica,Arial,sans-serif; color:var(--sp-text); }
+    #smax-tpl-box h3 { margin:0; padding:14px 18px; font-size:15px; font-weight:600; color:#fff; background:linear-gradient(90deg,#0073e7 0%,#005bb5 100%); }
+    .smax-tpl-tabs { display:flex; border-bottom:1px solid var(--sp-border); background:var(--sp-surface-2); }
+    .smax-tpl-tab { flex:1; padding:9px; text-align:center; font-size:12px; font-weight:600; color:var(--sp-text-muted); cursor:pointer; transition:color .15s,background .15s; }
+    .smax-tpl-tab.active { color:var(--sp-accent); background:var(--sp-primary-bg); border-bottom:2px solid var(--sp-accent); }
+    .smax-tpl-list { flex:1; overflow-y:auto; padding:10px; background:var(--sp-surface); }
+    .smax-tpl-empty { color:var(--sp-text-muted); font-size:13px; text-align:center; padding:30px; }
+    .smax-tpl-item { padding:10px 12px; border-radius:8px; border:1px solid var(--sp-border); margin-bottom:7px; background:var(--sp-surface-2); cursor:pointer; transition:background .15s,border-color .15s; }
+    .smax-tpl-item:hover { background:var(--sp-primary-bg); border-color:var(--sp-accent); }
+    .smax-tpl-item-title { font-size:13px; font-weight:600; color:var(--sp-text); }
+    .smax-tpl-item-preview { font-size:11px; color:var(--sp-text-muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .smax-tpl-item-actions { display:flex; gap:6px; margin-top:6px; }
     .smax-tpl-item-actions button { font-size:10px; padding:3px 8px; border-radius:4px; border:none; cursor:pointer; }
-    .smax-tpl-edit-btn { background:rgba(56,189,248,.15); color:#38bdf8; }
-    .smax-tpl-del-btn  { background:rgba(239,68,68,.15);  color:#fca5a5; }
-    .smax-tpl-form { padding:12px; border-top:1px solid rgba(255,255,255,.08); display:flex; flex-direction:column; gap:8px; }
-    .smax-tpl-form input, .smax-tpl-form textarea { background:#1e293b; border:1px solid #475569; border-radius:6px; color:#f8fafc; padding:8px 10px; font-size:12px; width:100%; box-sizing:border-box; font-family:system-ui,sans-serif; }
+    .smax-tpl-edit-btn { background:var(--sp-primary-bg); color:var(--sp-accent); border:1px solid var(--sp-accent); }
+    .smax-tpl-del-btn  { background:var(--sp-danger-bg); color:var(--sp-danger-text); border:1px solid var(--sp-danger-border); }
+    .smax-tpl-form { padding:12px; border-top:1px solid var(--sp-border); display:flex; flex-direction:column; gap:8px; background:var(--sp-surface-2); }
+    .smax-tpl-form input, .smax-tpl-form textarea { background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:6px; color:var(--sp-text); padding:8px 10px; font-size:12px; width:100%; box-sizing:border-box; font-family:inherit; }
     .smax-tpl-form textarea { min-height:80px; resize:vertical; }
     .smax-tpl-form-actions { display:flex; gap:8px; justify-content:flex-end; }
-    .smax-tpl-save-btn { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; padding:7px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
-    .smax-tpl-cancel-btn { background:rgba(255,255,255,.06); color:#94a3b8; border:1px solid rgba(255,255,255,.1); padding:7px 14px; border-radius:6px; font-size:12px; cursor:pointer; }
-    .smax-tpl-add-btn { display:block; width:100%; padding:8px; text-align:center; font-size:12px; color:#38bdf8; background:rgba(56,189,248,.06); border:1px dashed rgba(56,189,248,.3); border-radius:6px; cursor:pointer; margin-top:4px; }
-    .smax-tpl-footer { display:flex; gap:8px; padding:10px 12px; border-top:1px solid rgba(255,255,255,.08); justify-content:flex-end; }
+    .smax-tpl-save-btn { background:var(--sp-success); color:#fff; border:none; padding:7px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .smax-tpl-cancel-btn { background:var(--sp-surface-2); color:var(--sp-text-muted); border:1px solid var(--sp-border); padding:7px 14px; border-radius:6px; font-size:12px; cursor:pointer; }
+    .smax-tpl-add-btn { display:block; width:100%; padding:8px; text-align:center; font-size:12px; color:var(--sp-accent); background:var(--sp-primary-bg); border:1px dashed var(--sp-accent); border-radius:6px; cursor:pointer; margin-top:4px; }
+    .smax-tpl-footer { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--sp-border); justify-content:flex-end; background:var(--sp-surface-2); }
     .smax-tpl-footer button { font-size:12px; padding:7px 16px; border-radius:6px; cursor:pointer; }
-    .smax-tpl-close-btn { background:rgba(255,255,255,.06); color:#94a3b8; border:1px solid rgba(255,255,255,.1); }
+    .smax-tpl-close-btn { background:var(--sp-surface-2); color:var(--sp-text-muted); border:1px solid var(--sp-border); }
   `);
 
 
@@ -3541,10 +3539,10 @@
       }).join('');
 
       return `
-        <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,.1);padding-top:12px;">
+        <div style="margin-top:16px;border-top:1px solid var(--sp-border);padding-top:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-weight:600;color:#e5e7eb;font-size:14px;">Equipes e Regras</span>
-            <button id="smax-add-team-btn" style="font-size:12px;padding:6px 14px;cursor:pointer;background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);color:#fff;border:none;border-radius:8px;transition:transform .15s ease,box-shadow .15s ease;box-shadow:0 4px 12px rgba(59,130,246,.35);">+ Nova Equipe</button>
+            <span style="font-weight:600;color:var(--sp-text);font-size:14px;">Equipes e Regras</span>
+            <button id="smax-add-team-btn" style="font-size:12px;padding:6px 14px;cursor:pointer;background:var(--sp-accent);color:#fff;border:none;border-radius:8px;">+ Nova Equipe</button>
           </div>
           <div id="smax-teams-list-container">${listHtml}</div>
         </div>
@@ -3560,8 +3558,8 @@
       const gseHtml = (team.gseRules || []).map((r, idx) => `
         <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
           <input type="hidden" class="smax-gse-id" value="${Utils.escapeHtml(r.id)}">
-          <input type="text" class="smax-gse-name" value="${Utils.escapeHtml(r.name || r.id)}" disabled style="flex:1;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:rgba(15,23,42,0.6);color:#94a3b8;">
-          <button class="smax-gse-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
+          <input type="text" class="smax-gse-name" value="${Utils.escapeHtml(r.name || r.id)}" disabled style="flex:1;font-size:11px;padding:6px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-surface-2);color:var(--sp-text-muted);opacity:.8;">
+          <button class="smax-gse-del-btn" style="color:var(--sp-danger-text);border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>
         </div>
       `).join('');
 
@@ -3569,11 +3567,11 @@
         const displayText = m._displayText || m.pattern || '';
         const scope = m.scope || 'location';
         return `
-          <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:6px 8px;border-radius:8px;">
+          <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:var(--sp-surface-2);border:1px solid var(--sp-border);padding:6px 8px;border-radius:8px;">
             <input type="hidden" class="smax-matcher-pattern" value="${Utils.escapeHtml(m.pattern || '')}">
             <input type="hidden" class="smax-matcher-scope" value="${Utils.escapeHtml(scope)}">
-            <span style="flex:1;font-size:11px;color:#94a3b8;">contém: <strong style="color:#e5e7eb;">${Utils.escapeHtml(displayText)}</strong></span>
-            <button class="smax-matcher-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
+            <span style="flex:1;font-size:11px;color:var(--sp-text-muted);">contém: <strong style="color:var(--sp-text);">${Utils.escapeHtml(displayText)}</strong></span>
+            <button class="smax-matcher-del-btn" style="color:var(--sp-danger-text);border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>
           </div>`;
       };
       const locationMatchersHtml = (team.matchers || []).filter(m => m.type === 'regex' && (m.scope || 'location') === 'location').map(matcherRowHtml).join('');
@@ -3582,104 +3580,93 @@
       const workersHtml = (team.workers || []).map((w, idx) => {
         const normName = Utils.normalizeText(w.name || '');
         return `
-        <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:8px;border-radius:8px;flex-wrap:wrap;">
-          <input type="text" class="smax-worker-name" data-idx="${idx}" value="${Utils.escapeHtml(w.name || '')}" style="flex:1;min-width:120px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Nome do Responsável">
-          <input type="text" class="smax-worker-digits" data-idx="${idx}" value="${Utils.escapeHtml(w.digits || '')}" style="width:80px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Dígitos (ex: 0-9)">
+        <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:var(--sp-surface-2);border:1px solid var(--sp-border);padding:8px;border-radius:8px;flex-wrap:wrap;">
+          <input type="text" class="smax-worker-name" data-idx="${idx}" value="${Utils.escapeHtml(w.name || '')}" style="flex:1;min-width:120px;font-size:11px;padding:6px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);" placeholder="Nome do Responsável">
+          <input type="text" class="smax-worker-digits" data-idx="${idx}" value="${Utils.escapeHtml(w.digits || '')}" style="width:80px;font-size:11px;padding:6px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);" placeholder="Dígitos (ex: 0-9)">
           <div class="smax-worker-absent-wrapper" style="display:flex;align-items:center;cursor:pointer;user-select:none;">
              <input type="checkbox" class="smax-worker-absent" data-idx="${idx}" ${w.isAbsent ? 'checked' : ''} style="display:none;">
-             <div class="smax-absent-fake" style="width:14px;height:14px;border:1px solid ${w.isAbsent ? '#d32f2f' : '#64748b'};margin-right:4px;background:${w.isAbsent ? '#d32f2f' : 'transparent'};border-radius:2px;display:flex;align-items:center;justify-content:center;"></div>
-             <span style="font-size:10px;color:#fca5a5;">Ausente</span>
+             <div class="smax-absent-fake" style="width:14px;height:14px;border:1px solid ${w.isAbsent ? '#d32f2f' : 'var(--sp-border)'};margin-right:4px;background:${w.isAbsent ? '#d32f2f' : 'transparent'};border-radius:2px;display:flex;align-items:center;justify-content:center;"></div>
+             <span style="font-size:10px;color:var(--sp-danger-text);">Ausente</span>
           </div>
-
-          <button class="smax-worker-del-btn" data-idx="${idx}" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
+          <button class="smax-worker-del-btn" data-idx="${idx}" style="color:var(--sp-danger-text);border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>
         </div>
       `; }).join('');
 
       return `
-        <div style="margin-top:16px;border:1px solid rgba(56,189,248,.3);padding:14px;border-radius:12px;background:rgba(2,6,23,0.85);backdrop-filter:blur(12px);box-shadow:0 4px 16px rgba(0,0,0,.3);">
-          <div style="font-weight:600;margin-bottom:12px;color:#38bdf8;font-size:15px;">${isNew ? '✨ Criar Nova Equipe' : '✏️ Editar Equipe ' + team.id}</div>
-          
+        <div style="margin-top:16px;border:1px solid var(--sp-border);padding:14px;border-radius:12px;background:var(--sp-surface);">
+          <div style="font-weight:600;margin-bottom:12px;color:var(--sp-accent);font-size:15px;">${isNew ? '✨ Criar Nova Equipe' : '✏️ Editar Equipe ' + team.id}</div>
+
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
-              <label style="display:block;font-size:12px;font-weight:600;color:#cbd5e1;margin-bottom:4px;">Qual o nome da equipe?</label>
-              <input type="text" id="smax-edit-id" value="${Utils.escapeHtml(team.name || team.id || '')}" ${isGeneralTeam ? 'disabled' : ''} placeholder="Ex: JEC, Cível, Criminal..." style="width:100%;padding:8px 12px;border:1px solid #475569;border-radius:8px;background:${isGeneralTeam ? 'rgba(15,23,42,0.6)' : '#1e293b'};color:${isGeneralTeam ? '#94a3b8' : '#f8fafc'};font-size:13px;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;${isGeneralTeam ? 'cursor:not-allowed;' : ''}">
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--sp-text-muted);margin-bottom:4px;">Qual o nome da equipe?</label>
+              <input type="text" id="smax-edit-id" value="${Utils.escapeHtml(team.name || team.id || '')}" ${isGeneralTeam ? 'disabled' : ''} placeholder="Ex: JEC, Cível, Criminal..." style="width:100%;padding:8px 12px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-input-bg);color:var(--sp-text);font-size:13px;box-sizing:border-box;${isGeneralTeam ? 'opacity:.6;cursor:not-allowed;' : ''}">
             </div>
             <div>
-              <label style="display:block;font-size:12px;font-weight:600;color:#cbd5e1;margin-bottom:2px;">Prioridade
-                <span title="Define a ordem de verificação na triagem automática. A equipe com maior prioridade é verificada primeiro. Use valores altos (ex: 10) para equipes específicas e baixos (ex: 1) para a equipe geral (fallback). Assim, chamados de um GSE específico vão para a equipe certa antes de cair no grupo geral." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--sp-text-muted);margin-bottom:2px;">Prioridade
+                <span title="Define a ordem de verificação na triagem automática. A equipe com maior prioridade é verificada primeiro. Use valores altos (ex: 10) para equipes específicas e baixos (ex: 1) para a equipe geral (fallback). Assim, chamados de um GSE específico vão para a equipe certa antes de cair no grupo geral." style="cursor:help;margin-left:4px;font-size:11px;color:var(--sp-text-dim);font-weight:400;">ℹ️</span>
               </label>
-              <input type="number" id="smax-edit-prio" value="${team.priority || 0}" style="width:100%;padding:8px 12px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f8fafc;font-size:13px;transition:border-color .15s ease,box-shadow .15s ease;box-sizing:border-box;">
+              <input type="number" id="smax-edit-prio" value="${team.priority || 0}" style="width:100%;padding:8px 12px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-input-bg);color:var(--sp-text);font-size:13px;box-sizing:border-box;">
             </div>
           </div>
 
-
           <div style="margin-bottom:12px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#e5e7eb;">Quais GSE a equipe atende?
-              <span title="GSE = Grupo de Suporte Especializado (ExpertGroup no SMAX). Chamados atribuídos a esses grupos serão roteados automaticamente para esta equipe na triagem. Também são usados como filtro na janela de Consulta de Chamados." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--sp-text);">Quais GSE a equipe atende?
+              <span title="GSE = Grupo de Suporte Especializado (ExpertGroup no SMAX). Chamados atribuídos a esses grupos serão roteados automaticamente para esta equipe na triagem. Também são usados como filtro na janela de Consulta de Chamados." style="cursor:help;margin-left:4px;font-size:11px;color:var(--sp-text-dim);font-weight:400;">ℹ️</span>
             </div>
-            ${isGeneralTeam ? '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">⚠️ A equipe GERAL não permite edição de GSEs (aceita todos os grupos).</div>' : `
-             <!-- GSE Search -->
-            <div style="margin-bottom:8px;border:1px solid #475569;background:#1e293b;border-radius:8px;padding:8px;">
-              <input type="text" id="smax-team-gse-search" placeholder="🔍 Buscar GSE para adicionar..." 
-                     style="width:100%;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;margin-bottom:4px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
-              <div id="smax-team-gse-results" style="max-height:100px;overflow-y:auto;border-top:1px solid #475569;display:none;background:#0f172a;"></div>
+            ${isGeneralTeam ? '<div style="font-size:11px;color:var(--sp-text-muted);margin-bottom:8px;">⚠️ A equipe GERAL não permite edição de GSEs (aceita todos os grupos).</div>' : `
+            <div style="margin-bottom:8px;border:1px solid var(--sp-border);background:var(--sp-surface-2);border-radius:8px;padding:8px;">
+              <input type="text" id="smax-team-gse-search" placeholder="🔍 Buscar GSE para adicionar..."
+                     style="width:100%;padding:6px 10px;border:1px solid var(--sp-border);border-radius:6px;font-size:12px;margin-bottom:4px;background:var(--sp-input-bg);color:var(--sp-text);box-sizing:border-box;">
+              <div id="smax-team-gse-results" style="max-height:100px;overflow-y:auto;border-top:1px solid var(--sp-border);display:none;background:var(--sp-surface);"></div>
             </div>
-
             <div id="smax-gse-list">${gseHtml}</div>`}
           </div>
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#e5e7eb;">Palavras-chave para roteamento
-              <span title="Rota alternativa ao GSE: quando o chamado não bate com nenhum GSE configurado, o sistema verifica essas palavras-chave. Usado APENAS na triagem — não serve para o filtro de Consulta de Chamados." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--sp-text);">Palavras-chave para roteamento
+              <span title="Rota alternativa ao GSE: quando o chamado não bate com nenhum GSE configurado, o sistema verifica essas palavras-chave. Usado APENAS na triagem — não serve para o filtro de Consulta de Chamados." style="cursor:help;margin-left:4px;font-size:11px;color:var(--sp-text-dim);font-weight:400;">ℹ️</span>
             </div>
-            ${isGeneralTeam ? '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">⚠️ A equipe GERAL não utiliza palavras-chave (é o fallback para tudo que não bateu em nenhuma regra).</div>' : `
-            <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">A equipe será sugerida quando o chamado contiver a palavra-chave no campo correspondente (insensível a maiúsculas/minúsculas).</div>
-
-            <!-- Local de Registro -->
-            <div style="margin-bottom:10px;border:1px solid #334155;border-radius:8px;padding:10px;background:rgba(15,23,42,0.5);">
-              <div style="font-size:11px;font-weight:600;color:#38bdf8;margin-bottom:6px;">📍 Local de Registro
-                <span style="font-weight:400;color:#64748b;margin-left:4px;">(campo RegisteredForLocation do chamado)</span>
+            ${isGeneralTeam ? '<div style="font-size:12px;color:var(--sp-text-muted);margin-bottom:8px;">⚠️ A equipe GERAL não utiliza palavras-chave (é o fallback para tudo que não bateu em nenhuma regra).</div>' : `
+            <div style="font-size:11px;color:var(--sp-text-muted);margin-bottom:10px;">A equipe será sugerida quando o chamado contiver a palavra-chave no campo correspondente (insensível a maiúsculas/minúsculas).</div>
+            <div style="margin-bottom:10px;border:1px solid var(--sp-border);border-radius:8px;padding:10px;background:var(--sp-surface-2);">
+              <div style="font-size:11px;font-weight:600;color:var(--sp-accent);margin-bottom:6px;">📍 Local de Registro
+                <span style="font-weight:400;color:var(--sp-text-dim);margin-left:4px;">(campo RegisteredForLocation do chamado)</span>
               </div>
               <div style="display:flex;gap:6px;margin-bottom:6px;">
                 <input type="text" id="smax-team-location-input" placeholder="Ex: CAMPINAS, SANTOS, CAPITAL..."
-                       style="flex:1;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
-                <button id="smax-add-location-matcher-btn" style="padding:6px 12px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Adicionar</button>
+                       style="flex:1;padding:6px 10px;border:1px solid var(--sp-border);border-radius:6px;font-size:12px;background:var(--sp-input-bg);color:var(--sp-text);box-sizing:border-box;">
+                <button id="smax-add-location-matcher-btn" style="padding:6px 12px;background:var(--sp-primary-bg);color:var(--sp-accent);border:1px solid var(--sp-accent);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Adicionar</button>
               </div>
               <div id="smax-matchers-list-location">${locationMatchersHtml}</div>
             </div>
-
-            <!-- Assunto / Descrição -->
-            <div style="border:1px solid #334155;border-radius:8px;padding:10px;background:rgba(15,23,42,0.5);">
-              <div style="font-size:11px;font-weight:600;color:#a78bfa;margin-bottom:6px;">📝 Assunto / Descrição
-                <span style="font-weight:400;color:#64748b;margin-left:4px;">(título e corpo do chamado)</span>
+            <div style="border:1px solid var(--sp-border);border-radius:8px;padding:10px;background:var(--sp-surface-2);">
+              <div style="font-size:11px;font-weight:600;color:var(--sp-text-muted);margin-bottom:6px;">📝 Assunto / Descrição
+                <span style="font-weight:400;color:var(--sp-text-dim);margin-left:4px;">(título e corpo do chamado)</span>
               </div>
               <div style="display:flex;gap:6px;margin-bottom:6px;">
                 <input type="text" id="smax-team-text-input" placeholder="Ex: IMPRESSORA, VPN, SENHA..."
-                       style="flex:1;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
-                <button id="smax-add-text-matcher-btn" style="padding:6px 12px;background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid rgba(167,139,250,.3);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Adicionar</button>
+                       style="flex:1;padding:6px 10px;border:1px solid var(--sp-border);border-radius:6px;font-size:12px;background:var(--sp-input-bg);color:var(--sp-text);box-sizing:border-box;">
+                <button id="smax-add-text-matcher-btn" style="padding:6px 12px;background:var(--sp-primary-bg);color:var(--sp-accent);border:1px solid var(--sp-accent);border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Adicionar</button>
               </div>
               <div id="smax-matchers-list-text">${textMatchersHtml}</div>
             </div>`}
           </div>
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#e5e7eb;">Membros e Distribuição
-              <span title="Cada membro recebe um intervalo de dígitos finais do ID do chamado (ex: '0-9' significa que chamados terminados em 0 a 9 são desse membro). A triagem usa isso para sugerir automaticamente quem deve atender. Marque 'Ausente' para que o sistema pule para o próximo par de dígitos ao sugerir responsável." style="cursor:help;margin-left:4px;font-size:11px;color:#64748b;font-weight:400;">ℹ️</span>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--sp-text);">Membros e Distribuição
+              <span title="Cada membro recebe um intervalo de dígitos finais do ID do chamado (ex: '0-9' significa que chamados terminados em 0 a 9 são desse membro). A triagem usa isso para sugerir automaticamente quem deve atender. Marque 'Ausente' para que o sistema pule para o próximo par de dígitos ao sugerir responsável." style="cursor:help;margin-left:4px;font-size:11px;color:var(--sp-text-dim);font-weight:400;">ℹ️</span>
             </div>
-            
-            <!-- Person Search for Adding Workers -->
-            <div style="margin-bottom:8px;border:1px solid #475569;background:#1e293b;border-radius:8px;padding:8px;">
-              <input type="text" id="smax-team-person-search" placeholder="🔍 Buscar pessoa para adicionar..." 
-                     style="width:100%;padding:6px 10px;border:1px solid #475569;border-radius:6px;font-size:12px;margin-bottom:4px;background:#0f172a;color:#e5e7eb;box-sizing:border-box;">
-              <div id="smax-team-person-results" style="max-height:100px;overflow-y:auto;border-top:1px solid #475569;display:none;background:#0f172a;"></div>
+            <div style="margin-bottom:8px;border:1px solid var(--sp-border);background:var(--sp-surface-2);border-radius:8px;padding:8px;">
+              <input type="text" id="smax-team-person-search" placeholder="🔍 Buscar pessoa para adicionar..."
+                     style="width:100%;padding:6px 10px;border:1px solid var(--sp-border);border-radius:6px;font-size:12px;margin-bottom:4px;background:var(--sp-input-bg);color:var(--sp-text);box-sizing:border-box;">
+              <div id="smax-team-person-results" style="max-height:100px;overflow-y:auto;border-top:1px solid var(--sp-border);display:none;background:var(--sp-surface);"></div>
             </div>
-
             <div id="smax-workers-list">${workersHtml}</div>
           </div>
 
           <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
-            <button class="smax-cancel-edit" style="padding:8px 14px;cursor:pointer;background:rgba(255,255,255,.05);color:#e5e7eb;border:1px solid rgba(255,255,255,.15);border-radius:8px;font-size:12px;transition:all .15s ease;">Cancelar</button>
-            <button id="smax-save-team-btn" style="padding:8px 16px;cursor:pointer;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 4px 16px rgba(34,197,94,.35);transition:transform .15s ease,box-shadow .15s ease;">Salvar Equipe</button>
+            <button class="smax-cancel-edit" style="padding:8px 14px;cursor:pointer;background:var(--sp-surface-2);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:8px;font-size:12px;">Cancelar</button>
+            <button id="smax-save-team-btn" style="padding:8px 16px;cursor:pointer;background:var(--sp-accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;">Salvar Equipe</button>
           </div>
         </div>
       `;
@@ -3822,8 +3809,8 @@
           tempDiv.style.alignItems = 'center';
           tempDiv.innerHTML = `
             <input type="hidden" class="smax-gse-id" value="${Utils.escapeHtml(id)}">
-            <input type="text" class="smax-gse-name" value="${Utils.escapeHtml(name)}" disabled style="flex:1;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:rgba(15,23,42,0.6);color:#94a3b8;">
-            <button class="smax-gse-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
+            <input type="text" class="smax-gse-name" value="${Utils.escapeHtml(name)}" disabled style="flex:1;font-size:11px;padding:6px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-surface-2);color:var(--sp-text-muted);opacity:.8;">
+            <button class="smax-gse-del-btn" style="color:var(--sp-danger-text);border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>
           `;
           tempDiv.querySelector('.smax-gse-del-btn').addEventListener('click', (e) => e.target.closest('div').remove());
           if (list) list.appendChild(tempDiv);
@@ -3857,9 +3844,9 @@
               gseResultsEl.innerHTML = '<div style="padding:4px;color:#999;font-size:10px;">Nenhum resultado.</div>';
             } else {
               gseResultsEl.innerHTML = matches.map(g => `
-                  <div class="smax-gse-pick" data-id="${g.id}" data-name="${Utils.escapeHtml(g.name)}" style="padding:3px 6px;cursor:pointer;font-size:10px;border-bottom:1px solid #f5f5f5;">
+                  <div class="smax-gse-pick" data-id="${g.id}" data-name="${Utils.escapeHtml(g.name)}" style="padding:5px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--sp-border);color:var(--sp-text);">
                     <div><strong>${Utils.escapeHtml(g.name)}</strong></div>
-                    <div style="color:#666;font-size:9px;">ID: ${g.id}</div>
+                    <div style="color:var(--sp-text-muted);font-size:10px;">ID: ${g.id}</div>
                   </div>
                `).join('');
 
@@ -3889,12 +3876,12 @@
             if (!text) return;
             const escapedPattern = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const row = document.createElement('div');
-            row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:6px 8px;border-radius:8px;';
+            row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;background:var(--sp-surface-2);border:1px solid var(--sp-border);padding:6px 8px;border-radius:8px;';
             row.innerHTML = `
               <input type="hidden" class="smax-matcher-pattern" value="${Utils.escapeHtml(escapedPattern)}">
               <input type="hidden" class="smax-matcher-scope" value="${Utils.escapeHtml(scope)}">
-              <span style="flex:1;font-size:11px;color:#94a3b8;">contém: <strong style="color:#e5e7eb;">${Utils.escapeHtml(text)}</strong></span>
-              <button class="smax-matcher-del-btn" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>`;
+              <span style="flex:1;font-size:11px;color:var(--sp-text-muted);">contém: <strong style="color:var(--sp-text);">${Utils.escapeHtml(text)}</strong></span>
+              <button class="smax-matcher-del-btn" style="color:var(--sp-danger-text);border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>`;
             row.querySelector('.smax-matcher-del-btn').addEventListener('click', () => row.remove());
             list.appendChild(row);
             input.value = '';
@@ -3918,15 +3905,15 @@
           const list = container.querySelector('#smax-workers-list');
           const tempDiv = document.createElement('div');
           tempDiv.innerHTML = `
-            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:rgba(15,23,42,0.6);border:1px solid #475569;padding:8px;border-radius:8px;">
-              <input type="text" class="smax-worker-name" value="${Utils.escapeHtml(name)}" style="flex:1;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Nome do Responsável">
-              <input type="text" class="smax-worker-digits" value="" style="width:80px;font-size:11px;padding:6px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#f8fafc;" placeholder="Digitos (ex: 0-9)">
+            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;background:var(--sp-surface-2);border:1px solid var(--sp-border);padding:8px;border-radius:8px;">
+              <input type="text" class="smax-worker-name" value="${Utils.escapeHtml(name)}" style="flex:1;font-size:11px;padding:6px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);" placeholder="Nome do Responsável">
+              <input type="text" class="smax-worker-digits" value="" style="width:80px;font-size:11px;padding:6px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);" placeholder="Digitos (ex: 0-9)">
               <div class="smax-worker-absent-wrapper" style="display:flex;align-items:center;cursor:pointer;user-select:none;">
                 <input type="checkbox" class="smax-worker-absent" style="display:none;">
-                <div class="smax-absent-fake" style="width:14px;height:14px;border:1px solid #64748b;margin-right:4px;background:transparent;border-radius:2px;display:flex;align-items:center;justify-content:center;"></div>
-                <span style="font-size:10px;color:#fca5a5;">Ausente</span>
+                <div class="smax-absent-fake" style="width:14px;height:14px;border:1px solid var(--sp-border);margin-right:4px;background:transparent;border-radius:2px;display:flex;align-items:center;justify-content:center;"></div>
+                <span style="font-size:10px;color:var(--sp-danger-text);">Ausente</span>
               </div>
-              <button class="smax-remove-temp-row" style="color:#fca5a5;border:none;background:rgba(220,38,38,.1);padding:4px 8px;border-radius:4px;cursor:pointer;transition:all .15s ease;">✕</button>
+              <button class="smax-remove-temp-row" style="color:var(--sp-danger-text);border:1px solid var(--sp-danger-border);background:var(--sp-danger-bg);padding:4px 8px;border-radius:4px;cursor:pointer;">✕</button>
             </div>`;
           const row = tempDiv.firstElementChild;
           row.querySelector('.smax-remove-temp-row').addEventListener('click', () => row.remove());
@@ -3981,8 +3968,8 @@
               resultsEl.innerHTML = '<div style="padding:4px;color:#999;font-size:10px;">Nenhum resultado.</div>';
             } else {
               resultsEl.innerHTML = matches.map(p => `
-                   <div class="smax-person-pick" data-name="${Utils.escapeHtml(p.name)}" style="padding:3px 6px;cursor:pointer;font-size:10px;border-bottom:1px solid #f5f5f5;">
-                     <strong>${p.name}</strong> ${p.upn ? `<span>(${p.upn})</span>` : ''}
+                   <div class="smax-person-pick" data-name="${Utils.escapeHtml(p.name)}" style="padding:5px 8px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--sp-border);color:var(--sp-text);">
+                     <strong>${p.name}</strong> ${p.upn ? `<span style="color:var(--sp-text-muted);font-size:10px;">(${p.upn})</span>` : ''}
                    </div>
                  `).join('');
               attachPickHandlers();
@@ -6686,6 +6673,8 @@
       ensureSupportGroupsReady();
       refreshPersonalFinalsSet(); // garante sincronismo se prefs mudou via JSON import
       if (startBtn) startBtn.style.display = 'none';
+      const settingsBtn = document.getElementById('smax-settings-btn');
+      if (settingsBtn) settingsBtn.style.display = 'none';
       backdrop.style.display = 'flex';
       const finalsInput = backdrop.querySelector('#smax-personal-finals-input');
       if (finalsInput) finalsInput.value = prefs.personalFinalsRaw || '';
@@ -6716,6 +6705,8 @@
         startBtn.style.display = 'block';
         updateStartBtnText();
       }
+      const settingsBtn = document.getElementById('smax-settings-btn');
+      if (settingsBtn) settingsBtn.style.display = '';
       closeGseDropdown();
     };
 
@@ -6977,7 +6968,7 @@
     let activeTicketId = '';
     let realChildCountMap = new Map(); // parentId -> contagem real de filhos (via API)
     let personSearchTimeout = null;
-    let scriptsCache = null;
+    let scriptsCache = null; // apenas resultados do DB/SharedConfig — local sempre fresh
     // Alterações pendentes compartilhadas — aplicadas a TODOS os tickets selecionados ao enviar
     let batchPending = {}; // { gse?: {id,name}, assignee?: {id,name} }
     let pendingStatusByTicket = {}; // { [ticketId]: {key, label} } — por ticket, fora do batchPending
@@ -7011,7 +7002,11 @@
       'RequestStatusPending',
     ];
 
-    const close = () => { if (backdrop) backdrop.style.display = 'none'; };
+    const close = () => {
+      if (backdrop) backdrop.style.display = 'none';
+      const settingsBtn = document.getElementById('smax-settings-btn');
+      if (settingsBtn) settingsBtn.style.display = '';
+    };
 
     const setStatusMsg = (msg, color) => {
       const el = backdrop?.querySelector('#smax-resp-status-msg');
@@ -8075,29 +8070,31 @@
     };
 
     const loadScripts = async () => {
-      if (scriptsCache) return scriptsCache;
-      try {
-        const equipeId = GM_getValue('smax_gerenciador_equipe_id', null);
-        let url = `${SMAX_SB_URL}/rest/v1/scripts_customizados?select=id,nome,conteudo_bruto&deletado=eq.false&order=nome`;
-        if (equipeId) url += `&equipe_id=eq.${equipeId}`;
-        const resp = await fetch(url, {
-          headers: {
-            apikey: SMAX_SB_KEY,
-            Authorization: `Bearer ${SMAX_SB_KEY}`,
-            'Accept-Profile': 'public'
-          }
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const fromDB = await resp.json();
-        // Mescla scripts compartilhados (GitHub) — precedem os do Supabase
-        const shared = SharedConfig.getScripts(false);
-        scriptsCache = [...shared, ...fromDB];
-        return scriptsCache;
-      } catch (e) {
-        console.warn('[SMAX] ResponseHUD: falha ao carregar scripts:', e);
-        // Fallback: apenas os scripts compartilhados
-        return SharedConfig.getScripts(false);
+      // Scripts locais (configurações) são sempre frescos — sem cache
+      const local = Templates.loadAll(false).map(t => ({ nome: t.title, conteudo_bruto: t.html, _local: true }));
+
+      if (!scriptsCache) {
+        try {
+          const equipeId = GM_getValue('smax_gerenciador_equipe_id', null);
+          let url = `${SMAX_SB_URL}/rest/v1/scripts_customizados?select=id,nome,conteudo_bruto&deletado=eq.false&order=nome`;
+          if (equipeId) url += `&equipe_id=eq.${equipeId}`;
+          const resp = await fetch(url, {
+            headers: { apikey: SMAX_SB_KEY, Authorization: `Bearer ${SMAX_SB_KEY}`, 'Accept-Profile': 'public' }
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const fromDB = await resp.json();
+          const shared = SharedConfig.getScripts(false);
+          scriptsCache = [...shared, ...fromDB];
+        } catch (e) {
+          console.warn('[SMAX] ResponseHUD: falha ao carregar scripts:', e);
+          scriptsCache = SharedConfig.getScripts(false);
+        }
       }
+
+      // Mescla: locais primeiro (precedência), depois DB/shared — sem duplicar por nome
+      const seen = new Set(local.map(s => (s.nome || '').trim().toLowerCase()));
+      const remote = scriptsCache.filter(s => !seen.has((s.nome || '').trim().toLowerCase()));
+      return [...local, ...remote];
     };
 
     const openScriptPicker = async () => {
@@ -8113,12 +8110,21 @@
         return;
       }
       picker.innerHTML = `
-        <div style="padding:8px;border-bottom:1px solid rgba(255,255,255,.08);">
-          <input id="smax-resp-script-search" type="text" placeholder="Buscar script..." autocomplete="off"
-            style="width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:5px 8px;color:#e5e7eb;font-size:12px;outline:none;">
+        <div style="padding:7px 8px;border-bottom:1px solid var(--sp-border);">
+          <input id="smax-resp-script-search" type="text" placeholder="Buscar por título ou conteúdo..." autocomplete="off"
+            style="width:100%;box-sizing:border-box;background:var(--sp-input-bg);border:1px solid var(--sp-border);border-radius:6px;padding:5px 8px;color:var(--sp-text);font-size:12px;outline:none;">
         </div>
-        <div id="smax-resp-script-list" style="max-height:220px;overflow-y:auto;">
-          ${scripts.map(s => `<div class="smax-resp-script-item" data-content="${Utils.escapeHtml(s.conteudo_bruto || '')}">${Utils.escapeHtml(s.nome)}${s._shared ? ' <span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);">☁️</span>' : ''}</div>`).join('')}
+        <div id="smax-resp-script-list" style="max-height:260px;overflow-y:auto;">
+          ${scripts.map(s => {
+            const stripped = (s.conteudo_bruto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const preview = stripped.slice(0, 90) + (stripped.length > 90 ? '…' : '');
+            const badge = s._local ? '<span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(0,115,231,.15);color:#0073e7;border:1px solid rgba(0,115,231,.3);">local</span>'
+              : s._shared ? '<span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);">☁️</span>' : '';
+            return `<div class="smax-resp-script-item" data-content="${Utils.escapeHtml(s.conteudo_bruto || '')}" data-name="${Utils.escapeHtml(s.nome || '')}" data-body="${Utils.escapeHtml(stripped)}">
+              <div style="display:flex;align-items:center;gap:5px;">${Utils.escapeHtml(s.nome)} ${badge}</div>
+              ${preview ? `<div style="font-size:10px;color:var(--sp-text-muted);margin-top:2px;line-height:1.35;">${Utils.escapeHtml(preview)}</div>` : ''}
+            </div>`;
+          }).join('')}
         </div>`;
 
       picker.querySelectorAll('.smax-resp-script-item').forEach(item => {
@@ -8136,7 +8142,9 @@
         search.addEventListener('input', () => {
           const q = search.value.toLowerCase();
           list.querySelectorAll('.smax-resp-script-item').forEach(item => {
-            item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+            const inName = (item.dataset.name || '').toLowerCase().includes(q);
+            const inBody = (item.dataset.body || '').toLowerCase().includes(q);
+            item.style.display = (!q || inName || inBody) ? '' : 'none';
           });
         });
       }
@@ -8883,6 +8891,8 @@
     const open = () => {
       if (!backdrop) return;
       DataRepository.ensurePeopleLoaded();
+      const settingsBtn = document.getElementById('smax-settings-btn');
+      if (settingsBtn) settingsBtn.style.display = 'none';
       backdrop.style.display = 'flex';
       if (prefs.myPersonId && !selectedPersonId) {
         selectedPersonId = prefs.myPersonId;
@@ -9704,8 +9714,24 @@
       _shared: t._shared || false,
     }));
 
+    // Migra dados do localStorage para GM_storage (evita quota exceeded)
+    (() => {
+      for (const key of [KEY_SOL, KEY_DISC]) {
+        try {
+          const lsVal = localStorage.getItem(key);
+          if (lsVal) {
+            const parsed = JSON.parse(lsVal);
+            if (Array.isArray(parsed) && parsed.length > 0 && !GM_getValue(key, null)) {
+              GM_setValue(key, lsVal);
+            }
+            localStorage.removeItem(key);
+          }
+        } catch {}
+      }
+    })();
+
     const load = (disc) => {
-      try { const r = JSON.parse(localStorage.getItem(disc ? KEY_DISC : KEY_SOL)); return normalize(Array.isArray(r) ? r : []); }
+      try { const r = JSON.parse(GM_getValue(disc ? KEY_DISC : KEY_SOL, '[]')); return normalize(Array.isArray(r) ? r : []); }
       catch { return []; }
     };
 
@@ -9715,8 +9741,8 @@
       const shared = normalize(disc ? _sharedDisc : _sharedSol).map(s => ({ ...s, _shared: true }));
       return [...local, ...shared];
     };
-    // Salva sempre no formato { title, html } para compatibilidade com os dois scripts
-    const save = (disc, arr) => localStorage.setItem(disc ? KEY_DISC : KEY_SOL, JSON.stringify(normalize(arr)));
+    // Salva sempre no formato { title, html } — usa GM_storage para evitar quota do localStorage
+    const save = (disc, arr) => GM_setValue(disc ? KEY_DISC : KEY_SOL, JSON.stringify(normalize(arr)));
 
     const insertIntoEditor = (html) => {
       const ck = getPageCKEditor();
