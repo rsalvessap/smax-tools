@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.40
+// @version      2.41
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.40';
+  const SMAX_TOOLKIT_VERSION = '2.41';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -530,7 +530,7 @@
     body[data-smax-theme="dark"] #smax-triage-hud-backdrop { background:rgba(0,0,0,0.7); }
     body[data-smax-theme="dark"] #smax-triage-hud { background:#161e2c; color:#e2eaf4; box-shadow:0 25px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06) inset; }
     body[data-smax-theme="dark"] #smax-triage-hud-body { background:rgba(15,21,32,.85); border:1px solid #2a3448; }
-    body[data-smax-theme="dark"] #smax-triage-hud-footer { color:#e2eaf4; }
+    body[data-smax-theme="dark"] #smax-triage-hud-footer { background:#0c1219; border-top:2px solid #2a3448; color:#e2eaf4; }
     body[data-smax-theme="dark"] #smax-triage-sidebar { background:#0c1219; border-right:1px solid #2a3448; }
     body[data-smax-theme="dark"] .smax-triage-sidebar-section { color:#9faaba; }
     body[data-smax-theme="dark"] .smax-triage-queue-item { background:rgba(255,255,255,.03); border:1px solid #2a3448; color:#e2eaf4; }
@@ -1213,6 +1213,25 @@
     .smax-tpl-footer { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--sp-border); justify-content:flex-end; background:var(--sp-surface-2); }
     .smax-tpl-footer button { font-size:12px; padding:7px 16px; border-radius:6px; cursor:pointer; }
     .smax-tpl-close-btn { background:var(--sp-surface-2); color:var(--sp-text-muted); border:1px solid var(--sp-border); }
+
+    /* ── ResponseHUD filter panel — light theme overrides ───────────────── */
+    body:not([data-smax-theme="dark"]) #smax-resp-preset-bar { background:var(--sp-surface-2) !important; border-bottom-color:var(--sp-border) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-preset-bar > span { color:var(--sp-text-dim) !important; }
+    body:not([data-smax-theme="dark"]) .smax-resp-preset-pill { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-count-bar,
+    body:not([data-smax-theme="dark"]) #smax-resp-num-search-bar,
+    body:not([data-smax-theme="dark"]) #smax-resp-text-filter-bar,
+    body:not([data-smax-theme="dark"]) #smax-resp-sort-bar { background:var(--sp-surface) !important; border-bottom-color:var(--sp-border) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-num-search-input,
+    body:not([data-smax-theme="dark"]) #smax-resp-text-filter { background:var(--sp-input-bg) !important; border-color:var(--sp-input-border) !important; color:var(--sp-input-text) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-ticket-count { color:var(--sp-primary) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-select-all-btn { color:var(--sp-text-muted) !important; border-color:var(--sp-border) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-select-all-btn:hover { background:var(--sp-surface-2) !important; }
+    body:not([data-smax-theme="dark"]) #smax-sort-dir-btn { color:var(--sp-text-muted) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
+    body:not([data-smax-theme="dark"]) #smax-resp-search-info { background:var(--sp-surface-2) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
+    body:not([data-smax-theme="dark"]) .smax-sort-btn.active { background:rgba(0,100,210,.15); border-color:#0064d2; color:#003e8a; }
+    body:not([data-smax-theme="dark"]) .smax-resp-ticket-item.active { background:rgba(0,100,210,.1); border-left-color:#0064d2; }
   `);
 
 
@@ -7833,6 +7852,25 @@
       fetchRespAttachments(id);
     };
 
+    // Returns border/bg/color/dotBg/dotBorder for filter pills, theme-aware
+    const getPillStyle = (type, active) => {
+      const dark = document.body.getAttribute('data-smax-theme') === 'dark';
+      if (active) {
+        const c = {
+          team:      dark ? ['#3b82f6','rgba(59,130,246,.25)','#93c5fd']   : ['#0064d2','rgba(0,100,210,.14)','#003e8a'],
+          opStatus:  dark ? ['#3b82f6','rgba(59,130,246,.25)','#93c5fd']   : ['#0064d2','rgba(0,100,210,.14)','#003e8a'],
+          reqStatus: dark ? ['#34d399','rgba(52,211,153,.2)','#6ee7b7']    : ['#059669','rgba(5,150,105,.12)','#064e3b'],
+          assignee:  dark ? ['#a78bfa','rgba(167,139,250,.2)','#c4b5fd']   : ['#7c3aed','rgba(124,58,237,.12)','#4c1d95'],
+        };
+        const [brd, bg, clr] = c[type] || c.team;
+        return { border:`1px solid ${brd}`, bg, color:clr, dotBg:brd, dotBorder:`1.5px solid ${brd}` };
+      }
+      const dark_border = dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.18)';
+      const dark_color  = dark ? '#9ca3af' : '#4a5568';
+      const dark_dot    = dark ? '#6b7280' : '#a0aec0';
+      return { border:`1px solid ${dark_border}`, bg:'transparent', color:dark_color, dotBg:'transparent', dotBorder:`1.5px solid ${dark_dot}` };
+    };
+
     const renderStatusPills = (entries) => {
       const statusSection = backdrop?.querySelector('#smax-resp-status-section');
       const filterEl = backdrop?.querySelector('#smax-resp-status-filters');
@@ -7845,9 +7883,10 @@
       if (statusSection) statusSection.style.display = '';
       filterEl.innerHTML = statusesPresentes.map(s => {
         const active = selectedStatuses.has(s);
+        const ps = getPillStyle('opStatus', active);
         return `<button class="smax-resp-status-pill" data-status="${Utils.escapeHtml(s)}"
-          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
-          <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:${ps.border};background:${ps.bg};color:${ps.color};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${ps.dotBg};border:${ps.dotBorder};flex-shrink:0;"></span>
           ${Utils.escapeHtml(s)}
         </button>`;
       }).join('');
@@ -7857,11 +7896,10 @@
           if (selectedStatuses.has(s)) selectedStatuses.delete(s);
           else selectedStatuses.add(s);
           const active = selectedStatuses.has(s);
-          pill.style.border = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
-          pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
-          pill.style.color = active ? '#93c5fd' : '#9ca3af';
+          const ps = getPillStyle('opStatus', active);
+          pill.style.border = ps.border; pill.style.background = ps.bg; pill.style.color = ps.color;
           const dot = pill.querySelector('span');
-          if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+          if (dot) { dot.style.background = ps.dotBg; dot.style.border = ps.dotBorder; }
           applyFilters();
         });
       });
@@ -7881,9 +7919,10 @@
       filterEl.innerHTML = statuses.map(s => {
         const label = REQUEST_STATUS_LABELS[s] || s;
         const active = selectedRequestStatuses.has(s);
+        const ps = getPillStyle('reqStatus', active);
         return `<button class="smax-resp-req-status-pill" data-status="${Utils.escapeHtml(s)}"
-          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#34d399' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(52,211,153,.2)' : 'transparent'};color:${active ? '#6ee7b7' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
-          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${active ? '#34d399' : 'transparent'};border:1.5px solid ${active ? '#34d399' : '#6b7280'};"></span>
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:${ps.border};background:${ps.bg};color:${ps.color};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${ps.dotBg};border:${ps.dotBorder};"></span>
           ${Utils.escapeHtml(label)}
         </button>`;
       }).join('');
@@ -7893,11 +7932,10 @@
           if (selectedRequestStatuses.has(s)) selectedRequestStatuses.delete(s);
           else selectedRequestStatuses.add(s);
           const active = selectedRequestStatuses.has(s);
-          pill.style.border = `1px solid ${active ? '#34d399' : 'rgba(255,255,255,.12)'}`;
-          pill.style.background = active ? 'rgba(52,211,153,.2)' : 'transparent';
-          pill.style.color = active ? '#6ee7b7' : '#9ca3af';
+          const ps = getPillStyle('reqStatus', active);
+          pill.style.border = ps.border; pill.style.background = ps.bg; pill.style.color = ps.color;
           const dot = pill.querySelector('span');
-          if (dot) { dot.style.background = active ? '#34d399' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#34d399' : '#6b7280'}`; }
+          if (dot) { dot.style.background = ps.dotBg; dot.style.border = ps.dotBorder; }
           applyFilters();
         });
       });
@@ -7920,9 +7958,10 @@
       const pillHtml = (id) => {
         const label = id === '' ? 'Nenhum' : (DataRepository.peopleCache.get(id)?.name || id);
         const active = selectedAssignees.has(id);
+        const ps = getPillStyle('assignee', active);
         return `<button class="smax-resp-assignee-pill" data-assignee="${Utils.escapeHtml(id)}"
-          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#a78bfa' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(167,139,250,.2)' : 'transparent'};color:${active ? '#c4b5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${active ? '#a78bfa' : 'transparent'};border:1.5px solid ${active ? '#a78bfa' : '#6b7280'};"></span>
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:${ps.border};background:${ps.bg};color:${ps.color};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${ps.dotBg};border:${ps.dotBorder};"></span>
           ${Utils.escapeHtml(label)}
         </button>`;
       };
@@ -7933,11 +7972,10 @@
           if (selectedAssignees.has(id)) selectedAssignees.delete(id);
           else selectedAssignees.add(id);
           const active = selectedAssignees.has(id);
-          pill.style.border = `1px solid ${active ? '#a78bfa' : 'rgba(255,255,255,.12)'}`;
-          pill.style.background = active ? 'rgba(167,139,250,.2)' : 'transparent';
-          pill.style.color = active ? '#c4b5fd' : '#9ca3af';
+          const ps = getPillStyle('assignee', active);
+          pill.style.border = ps.border; pill.style.background = ps.bg; pill.style.color = ps.color;
           const dot = pill.querySelector('span');
-          if (dot) { dot.style.background = active ? '#a78bfa' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#a78bfa' : '#6b7280'}`; }
+          if (dot) { dot.style.background = ps.dotBg; dot.style.border = ps.dotBorder; }
           applyFilters();
         });
       });
@@ -7956,11 +7994,10 @@
       backdrop?.querySelectorAll('.smax-resp-team-pill').forEach(pill => {
         const id = pill.dataset.teamId;
         const active = selectedTeamIds.has(id);
-        pill.style.border     = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
-        pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
-        pill.style.color      = active ? '#93c5fd' : '#9ca3af';
+        const ps = getPillStyle('team', active);
+        pill.style.border = ps.border; pill.style.background = ps.bg; pill.style.color = ps.color;
         const dot = pill.querySelector('span');
-        if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+        if (dot) { dot.style.background = ps.dotBg; dot.style.border = ps.dotBorder; }
       });
       // Status e designados
       selectedStatuses.clear();
@@ -9111,10 +9148,11 @@
           const hasGSE = (t.gseRules && t.gseRules.some(r => r.id)) || (t.gseIds && t.gseIds.length > 0);
           const srcHint = hasGSE ? '🔵' : '🟡';
           const srcTitle = hasGSE ? 'Busca por GSE na API' : 'Busca via fila local (sem GSE IDs configurados)';
+          const ps = getPillStyle('team', active);
           return `<button class="smax-resp-team-pill" data-team-id="${Utils.escapeHtml(t.id)}"
             title="${Utils.escapeHtml(srcTitle)}"
-            style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'};background:${active ? 'rgba(59,130,246,.25)' : 'transparent'};color:${active ? '#93c5fd' : '#9ca3af'};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
-            <span style="width:8px;height:8px;border-radius:50%;background:${active ? '#3b82f6' : 'transparent'};border:1.5px solid ${active ? '#3b82f6' : '#6b7280'};flex-shrink:0;"></span>
+            style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:${ps.border};background:${ps.bg};color:${ps.color};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${ps.dotBg};border:${ps.dotBorder};flex-shrink:0;"></span>
             <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.escapeHtml(t.name || t.id)}</span>
             <span style="font-size:9px;opacity:.7;">${srcHint}</span>
           </button>`;
@@ -9125,11 +9163,10 @@
             if (selectedTeamIds.has(id)) selectedTeamIds.delete(id);
             else selectedTeamIds.add(id);
             const active = selectedTeamIds.has(id);
-            pill.style.border = `1px solid ${active ? '#3b82f6' : 'rgba(255,255,255,.12)'}`;
-            pill.style.background = active ? 'rgba(59,130,246,.25)' : 'transparent';
-            pill.style.color = active ? '#93c5fd' : '#9ca3af';
+            const ps = getPillStyle('team', active);
+            pill.style.border = ps.border; pill.style.background = ps.bg; pill.style.color = ps.color;
             const dot = pill.querySelector('span');
-            if (dot) { dot.style.background = active ? '#3b82f6' : 'transparent'; dot.style.border = `1.5px solid ${active ? '#3b82f6' : '#6b7280'}`; }
+            if (dot) { dot.style.background = ps.dotBg; dot.style.border = ps.dotBorder; }
           });
         });
       } else {
@@ -9202,7 +9239,7 @@
                 <div id="smax-resp-search-info" style="display:none;padding:8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.07);"></div>
               </div>
             </div>
-            <div style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
+            <div id="smax-resp-count-bar" style="padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(2,6,23,.4);">
               <span id="smax-resp-ticket-count" style="font-size:12px;font-weight:700;color:#60a5fa;"></span>
               <span id="smax-resp-status-msg" style="font-size:10px;"></span>
               <div id="smax-resp-select-all-btn" style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#9ca3af;padding:2px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.1);transition:background .12s;" title="Selecionar/desmarcar todos">
@@ -9247,7 +9284,7 @@
                 <span id="smax-resp-vip-badge" style="display:none;padding:2px 7px;border-radius:999px;background:#facc15;color:#854d0e;font-size:10px;font-weight:700;flex-shrink:0;">VIP</span>
                 <span id="smax-resp-opener" style="font-size:13px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;max-width:280px;"></span>
                 <span id="smax-resp-requester-title" style="display:none;font-size:13px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;max-width:240px;font-style:italic;"></span>
-                <span id="smax-resp-location-label" style="display:none;font-size:13px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0;max-width:220px;cursor:pointer;" title="Clique para ver nome completo"></span>
+                <span id="smax-resp-location-label" style="display:none;font-size:13px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0;max-width:400px;cursor:pointer;" title="Clique para ver nome completo"></span>
                 <span id="smax-resp-created-label" style="display:none;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;flex-shrink:0;margin-left:auto;"></span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
