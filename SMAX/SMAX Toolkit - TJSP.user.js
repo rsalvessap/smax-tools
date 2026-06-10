@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.33
+// @version      2.34
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -44,7 +44,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.33';
+  const SMAX_TOOLKIT_VERSION = '2.34';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -510,14 +510,14 @@
     #smax-triage-hud-body { background:#f5f5f5; border:1px solid #cccccc; }
     #smax-triage-hud-footer { color:#333333; }
     #smax-triage-sidebar { background:#e5e5e5; border-right:1px solid #cccccc; }
-    .smax-triage-sidebar-section { color:#757575; }
+    .smax-triage-sidebar-section { color:#444444; }
     .smax-triage-queue-item { background:rgba(0,0,0,.02); border:1px solid #cccccc; color:#333333; }
     .smax-triage-queue-item:hover { background:rgba(0,115,231,.06); }
     .smax-triage-queue-item.active { background:rgba(0,115,231,.1); border-color:rgba(0,115,231,.3); }
     .smax-triage-queue-item .tqi-id { color:#0073e7; }
     .smax-triage-queue-item .tqi-subject { color:#333333; }
-    .smax-triage-queue-item .tqi-meta { color:#888888; }
-    .smax-triage-field-label { color:#757575; }
+    .smax-triage-queue-item .tqi-meta { color:#555555; }
+    .smax-triage-field-label { color:#444444; }
     .smax-triage-field-value { color:#333333; }
     .smax-triage-divider { border-color:#cccccc; }
     #smax-triage-solution-editor { background:#ffffff; color:#333333; border-color:#cccccc; }
@@ -573,7 +573,7 @@
     .smax-resp-field-picker-item.active { color:#0073e7; }
     #smax-resp-search { background:#ffffff; border-color:#cccccc; color:#333333; }
     #smax-resp-global-id { background:#ffffff; border-color:#cccccc; color:#333333; }
-    #smax-resp-status-msg { color:#757575; }
+    #smax-resp-status-msg { color:#555555; }
     #smax-resp-no-ticket { color:#888888; }
 
     /* ── Tema dark: ResponseHUD ── */
@@ -730,6 +730,16 @@
     body .cke_colorauto .cke_colorbox_color { background-color:#000 !important; }
     body .cke_colorauto .cke_colorbox { border-color:#000 !important; }
     body .cke_colorauto { color:#f5f5f5 !important; }
+    body:not([data-smax-theme="dark"]) #smax-triage-hud .cke_button__icon,
+    body:not([data-smax-theme="dark"]) #smax-resp-hud .cke_button__icon { filter:brightness(0) !important; opacity:0.55 !important; }
+    body:not([data-smax-theme="dark"]) #smax-triage-hud .cke_toolbar_separator,
+    body:not([data-smax-theme="dark"]) #smax-resp-hud .cke_toolbar_separator { background:#999 !important; }
+    body:not([data-smax-theme="dark"]) #smax-triage-hud .cke_combo_text,
+    body:not([data-smax-theme="dark"]) #smax-resp-hud .cke_combo_text { color:#333333 !important; }
+    body:not([data-smax-theme="dark"]) #smax-triage-hud .cke_button:hover,
+    body:not([data-smax-theme="dark"]) #smax-resp-hud .cke_button:hover { background:rgba(0,115,231,.08) !important; }
+    body[data-smax-theme="dark"] #smax-triage-hud .cke_button__icon,
+    body[data-smax-theme="dark"] #smax-resp-hud .cke_button__icon { filter:brightness(10) !important; opacity:0.65 !important; }
     #smax-triage-status-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; padding:8px 0 0; border-top:1px solid var(--sp-border); }
     #smax-triage-status { font-size:12px; color:var(--sp-text); }
     #smax-triage-status-row[data-empty="true"] #smax-triage-status { color:var(--sp-text-muted); }
@@ -759,7 +769,8 @@
     .smax-resp-ticket-item.active { background:rgba(59,130,246,.12); border-left:3px solid #3b82f6; }
     .smax-resp-ticket-cb { margin-top:2px; flex-shrink:0; accent-color:#3b82f6; cursor:pointer; }
     .smax-resp-ticket-info { flex:1; min-width:0; }
-    .smax-resp-ticket-id { font-size:12px; font-weight:700; color:#60a5fa; }
+    .smax-resp-ticket-id { font-size:12px; font-weight:700; color:#0073e7; }
+    body[data-smax-theme="dark"] .smax-resp-ticket-id { color:#60a5fa; }
     .smax-resp-ticket-subject { font-size:12px; color:var(--sp-text); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .smax-resp-ticket-status { font-size:11px; color:var(--sp-text-muted); margin-top:2px; }
     #smax-resp-hud-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
@@ -781,7 +792,7 @@
     #smax-resp-solution-editor ul, #smax-resp-solution-editor ol { margin:4px 0 4px 20px; }
     .smax-resp-list-desc { font-size:10px; color:var(--sp-text-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-style:italic; }
     .smax-sort-btn { font-size:10px; padding:2px 6px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; white-space:nowrap; line-height:1.4; }
-    .smax-sort-btn:hover { color:var(--sp-text-muted); border-color:rgba(255,255,255,.2); }
+    .smax-sort-btn:hover { color:var(--sp-text); border-color:var(--sp-border); }
     .smax-sort-btn.active { background:rgba(59,130,246,.2); border-color:#3b82f6; color:#93c5fd; }
     .smax-resp-disc-recent { border-color:rgba(59,130,246,.35) !important; background:rgba(59,130,246,.08) !important; }
     #smax-gse-fwd-editor { min-height:72px; max-height:200px; overflow-y:auto; background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:6px; color:var(--sp-text); font-size:11px; padding:6px; outline:none; line-height:1.5; font-family:inherit; }
@@ -789,7 +800,7 @@
     #smax-gse-fwd-editor img { max-width:100%; height:auto; border-radius:4px; vertical-align:middle; }
     .smax-resp-disc-footer { display:flex; justify-content:flex-end; margin-top:5px; padding-top:4px; border-top:1px solid var(--sp-border); }
     .smax-resp-disc-replicate-btn { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; }
-    .smax-resp-disc-replicate-btn:hover:not(:disabled) { border-color:rgba(59,130,246,.5); color:#93c5fd; background:rgba(59,130,246,.1); }
+    .smax-resp-disc-replicate-btn:hover:not(:disabled) { border-color:var(--sp-accent); color:var(--sp-accent); background:var(--sp-primary-bg); }
     .smax-resp-disc-replicate-btn:disabled { opacity:.5; cursor:default; }
     #smax-resp-completion-bar { display:flex; align-items:center; gap:6px; padding:5px 0 3px; flex-wrap:wrap; flex-shrink:0; }
     .smax-resp-completion-btn { font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--sp-border); background:var(--sp-surface-2); color:var(--sp-text-muted); cursor:pointer; transition:all .15s; white-space:nowrap; }
@@ -805,11 +816,11 @@
     #smax-resp-discussions-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:8px; }
     .smax-resp-discussion-item { border:1px solid var(--sp-border); border-radius:8px; padding:8px 10px; background:var(--sp-surface); font-size:12px; }
     .smax-resp-disc-meta { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; font-size:12px; color:var(--sp-text-muted); }
-    .smax-resp-disc-author { color:var(--sp-text-muted); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
-    .smax-resp-disc-body { color:var(--sp-text); line-height:1.45; font-size:11px; max-height:80px; overflow-y:auto; }
+    .smax-resp-disc-author { color:var(--sp-text); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px; }
+    .smax-resp-disc-body { color:var(--sp-text); line-height:1.45; font-size:12px; max-height:80px; overflow-y:auto; }
     .smax-resp-disc-body p { margin:0 0 4px; }
     .smax-resp-disc-expand-btn { font-size:10px; padding:2px 7px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; }
-    .smax-resp-disc-expand-btn:hover { border-color:rgba(148,163,184,.4); color:#94a3b8; background:rgba(148,163,184,.08); }
+    .smax-resp-disc-expand-btn:hover { border-color:var(--sp-accent); color:var(--sp-accent); background:var(--sp-primary-bg); }
     #smax-resp-new-disc-panel { flex-shrink:0; border-top:1px solid var(--sp-border); padding:8px; display:flex; flex-direction:column; gap:5px; }
     #smax-resp-new-disc-label { font-size:11px; font-weight:600; color:var(--sp-text); text-transform:uppercase; letter-spacing:.06em; }
     #smax-resp-new-disc-editor { min-height:56px; max-height:110px; overflow-y:auto; background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:6px; color:var(--sp-text); font-size:11px; padding:5px 8px; outline:none; line-height:1.5; font-family:inherit; }
@@ -865,7 +876,33 @@
     body[data-smax-theme="dark"] #smax-disc-modal-replicate:hover:not(:disabled) { border-color:rgba(88,166,255,.5); color:#58a6ff; background:rgba(88,166,255,.1); }
     #smax-resp-hud-footer { padding:10px 16px; border-top:1px solid #cccccc; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; background:#f5f5f5; }
     body[data-smax-theme="dark"] #smax-resp-hud-footer { border-top-color:rgba(255,255,255,.07); background:rgba(13,17,23,.4); }
-    #smax-resp-script-picker { display:none; position:absolute; left:0; right:0; bottom:100%; z-index:20; background:var(--sp-bg); border:1px solid var(--sp-border); border-radius:10px; margin-bottom:6px; box-shadow:0 8px 28px rgba(0,0,0,.55); overflow:hidden; }
+    #smax-resp-script-picker { display:none; }
+    .smax-resp-action-btn { font-size:11px; padding:4px 12px; border:1px solid var(--sp-border); border-radius:6px; background:var(--sp-surface-2); color:var(--sp-text); cursor:pointer; transition:background .12s,border-color .12s; white-space:nowrap; }
+    .smax-resp-action-btn:hover { background:var(--sp-primary-hover); border-color:var(--sp-accent); color:var(--sp-accent); }
+    /* Script picker modal */
+    #smax-resp-script-modal { display:none; position:absolute; inset:0; z-index:30; background:rgba(0,0,0,0.45); align-items:center; justify-content:center; }
+    #smax-resp-script-modal[data-open="true"] { display:flex; }
+    #smax-resp-script-box { background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:12px; width:90%; max-width:900px; height:82%; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 56px rgba(0,0,0,.5); font-family:inherit; }
+    #smax-resp-script-box-header { display:flex; align-items:center; gap:10px; padding:10px 16px; background:linear-gradient(90deg,#0073e7 0%,#005bb5 100%); flex-shrink:0; }
+    #smax-resp-script-box-header h4 { margin:0; font-size:14px; font-weight:700; color:#fff; flex:1; }
+    #smax-resp-script-search-wrap { padding:8px 12px; border-bottom:1px solid var(--sp-border); flex-shrink:0; background:var(--sp-surface-2); }
+    #smax-resp-script-search-inp { width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:6px; padding:6px 10px; color:var(--sp-text); font-size:13px; outline:none; }
+    #smax-resp-script-search-inp:focus { border-color:var(--sp-accent); }
+    #smax-resp-script-split { flex:1; display:flex; min-height:0; overflow:hidden; }
+    #smax-resp-script-list-col { width:300px; flex-shrink:0; overflow-y:auto; border-right:1px solid var(--sp-border); background:var(--sp-surface-2); display:flex; flex-direction:column; gap:0; }
+    .smax-resp-script-row { padding:10px 12px; cursor:pointer; border-bottom:1px solid var(--sp-border); transition:background .1s; }
+    .smax-resp-script-row:hover { background:var(--sp-primary-hover); }
+    .smax-resp-script-row.selected { background:var(--sp-primary-bg); border-left:3px solid var(--sp-accent); }
+    .smax-resp-script-row-title { font-size:13px; font-weight:600; color:var(--sp-text); }
+    .smax-resp-script-row-preview { font-size:11px; color:var(--sp-text-muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #smax-resp-script-preview-col { flex:1; overflow-y:auto; padding:16px 20px; color:var(--sp-text); font-size:13px; line-height:1.65; }
+    #smax-resp-script-preview-col img { max-width:100%; height:auto; border-radius:6px; margin:4px 0; display:block; }
+    #smax-resp-script-preview-col p { margin:0 0 8px; }
+    #smax-resp-script-preview-empty { color:var(--sp-text-muted); font-style:italic; padding:20px; }
+    #smax-resp-script-box-footer { padding:10px 16px; border-top:1px solid var(--sp-border); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; background:var(--sp-surface-2); }
+    #smax-resp-script-count { font-size:12px; color:var(--sp-text-muted); }
+    #smax-resp-script-use-btn { padding:8px 24px; border:none; border-radius:8px; background:var(--sp-accent); color:#fff; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .12s; }
+    #smax-resp-script-use-btn:disabled { opacity:.4; cursor:default; }
     .smax-resp-script-item { padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--sp-border); font-size:12px; color:var(--sp-text); transition:background .1s; }
     .smax-resp-script-item:hover { background:rgba(59,130,246,.15); color:#93c5fd; }
     .smax-resp-person-pick { transition:background .1s; }
@@ -8098,65 +8135,91 @@
     };
 
     const openScriptPicker = async () => {
-      const picker = backdrop?.querySelector('#smax-resp-script-picker');
-      if (!picker) return;
-      const isOpen = picker.style.display !== 'none';
-      if (isOpen) { picker.style.display = 'none'; return; }
-      picker.innerHTML = '<div style="padding:10px 12px;color:#9ca3af;font-size:12px;">Carregando scripts...</div>';
-      picker.style.display = 'block';
-      const scripts = await loadScripts();
-      if (!scripts.length) {
-        picker.innerHTML = '<div style="padding:10px 12px;color:#9ca3af;font-size:12px;">Nenhum script disponível.</div>';
-        return;
-      }
-      picker.innerHTML = `
-        <div style="padding:7px 8px;border-bottom:1px solid var(--sp-border);">
-          <input id="smax-resp-script-search" type="text" placeholder="Buscar por título ou conteúdo..." autocomplete="off"
-            style="width:100%;box-sizing:border-box;background:var(--sp-input-bg);border:1px solid var(--sp-border);border-radius:6px;padding:5px 8px;color:var(--sp-text);font-size:12px;outline:none;">
-        </div>
-        <div id="smax-resp-script-list" style="max-height:260px;overflow-y:auto;">
-          ${scripts.map(s => {
-            const stripped = (s.conteudo_bruto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-            const preview = stripped.slice(0, 90) + (stripped.length > 90 ? '…' : '');
-            const badge = s._local ? '<span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(0,115,231,.15);color:#0073e7;border:1px solid rgba(0,115,231,.3);">local</span>'
-              : s._shared ? '<span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);">☁️</span>' : '';
-            return `<div class="smax-resp-script-item" data-content="${Utils.escapeHtml(s.conteudo_bruto || '')}" data-name="${Utils.escapeHtml(s.nome || '')}" data-body="${Utils.escapeHtml(stripped)}">
-              <div style="display:flex;align-items:center;gap:5px;">${Utils.escapeHtml(s.nome)} ${badge}</div>
-              ${preview ? `<div style="font-size:10px;color:var(--sp-text-muted);margin-top:2px;line-height:1.35;">${Utils.escapeHtml(preview)}</div>` : ''}
-            </div>`;
-          }).join('')}
-        </div>`;
+      const modal = backdrop?.querySelector('#smax-resp-script-modal');
+      if (!modal) return;
 
-      picker.querySelectorAll('.smax-resp-script-item').forEach(item => {
-        item.addEventListener('click', () => {
-          const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
-          if (solEl) { solEl.innerHTML = item.dataset.content; solEl.focus(); updateSendButton(); }
-          picker.style.display = 'none';
+      // Toggle
+      if (modal.dataset.open === 'true') { modal.dataset.open = 'false'; return; }
+
+      modal.dataset.open = 'true';
+
+      const listCol      = modal.querySelector('#smax-resp-script-list-col');
+      const previewCol   = modal.querySelector('#smax-resp-script-preview-col');
+      const searchInp    = modal.querySelector('#smax-resp-script-search-inp');
+      const countEl      = modal.querySelector('#smax-resp-script-count');
+      const useBtn       = modal.querySelector('#smax-resp-script-use-btn');
+      const closeBtn     = modal.querySelector('#smax-resp-script-modal-close');
+
+      let selectedScript = null;
+      let allScripts     = [];
+
+      const selectScript = (s) => {
+        selectedScript = s;
+        useBtn.disabled = false;
+        previewCol.innerHTML = s.conteudo_bruto || '<em>Sem conteúdo.</em>';
+        listCol.querySelectorAll('.smax-resp-script-row').forEach(r => {
+          r.classList.toggle('selected', r.dataset.idx === String(allScripts.indexOf(s)));
         });
-      });
-
-      const search = picker.querySelector('#smax-resp-script-search');
-      const list = picker.querySelector('#smax-resp-script-list');
-      if (search && list) {
-        search.focus();
-        search.addEventListener('input', () => {
-          const q = search.value.toLowerCase();
-          list.querySelectorAll('.smax-resp-script-item').forEach(item => {
-            const inName = (item.dataset.name || '').toLowerCase().includes(q);
-            const inBody = (item.dataset.body || '').toLowerCase().includes(q);
-            item.style.display = (!q || inName || inBody) ? '' : 'none';
-          });
-        });
-      }
-
-      const closeOnOutside = (e) => {
-        const scriptsBtn = backdrop?.querySelector('#smax-resp-scripts-btn');
-        if (!picker.contains(e.target) && e.target !== scriptsBtn) {
-          picker.style.display = 'none';
-          document.removeEventListener('mousedown', closeOnOutside);
-        }
       };
-      setTimeout(() => document.addEventListener('mousedown', closeOnOutside), 0);
+
+      const renderList = (filtered) => {
+        if (!filtered.length) {
+          listCol.innerHTML = '<div style="padding:16px;color:var(--sp-text-muted);font-size:12px;text-align:center;">Nenhum script encontrado.</div>';
+          return;
+        }
+        listCol.innerHTML = filtered.map((s, i) => {
+          const stripped = (s.conteudo_bruto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          const badge = s._local
+            ? `<span style="font-size:9px;padding:1px 4px;border-radius:999px;background:var(--sp-primary-bg);color:var(--sp-accent);border:1px solid var(--sp-accent);">local</span>`
+            : s._shared ? `<span style="font-size:9px;padding:1px 4px;border-radius:999px;background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.3);">☁️</span>` : '';
+          const origIdx = allScripts.indexOf(s);
+          return `<div class="smax-resp-script-row${selectedScript === s ? ' selected' : ''}" data-idx="${origIdx}">
+            <div class="smax-resp-script-row-title">${Utils.escapeHtml(s.nome)} ${badge}</div>
+            <div class="smax-resp-script-row-preview">${Utils.escapeHtml(stripped.slice(0, 80))}</div>
+          </div>`;
+        }).join('');
+        listCol.querySelectorAll('.smax-resp-script-row').forEach((row, rowI) => {
+          row.addEventListener('click', () => selectScript(filtered[rowI]));
+        });
+      };
+
+      const applyFilter = (q) => {
+        if (!q) { countEl.textContent = `${allScripts.length} scripts`; renderList(allScripts); return; }
+        const ql = q.toLowerCase();
+        const filtered = allScripts.filter(s =>
+          (s.nome || '').toLowerCase().includes(ql) ||
+          (s.conteudo_bruto || '').replace(/<[^>]+>/g, ' ').toLowerCase().includes(ql)
+        );
+        countEl.textContent = `${filtered.length} de ${allScripts.length}`;
+        renderList(filtered);
+      };
+
+      // Load
+      listCol.innerHTML = '<div style="padding:16px;color:var(--sp-text-muted);font-size:12px;">Carregando scripts...</div>';
+      previewCol.innerHTML = '<div id="smax-resp-script-preview-empty">Selecione um script para ver o conteúdo.</div>';
+      useBtn.disabled = true;
+      selectedScript = null;
+      searchInp.value = '';
+
+      allScripts = await loadScripts();
+      countEl.textContent = `${allScripts.length} scripts`;
+      renderList(allScripts);
+      searchInp.focus();
+
+      searchInp.addEventListener('input', () => applyFilter(searchInp.value.trim()));
+
+      useBtn.onclick = () => {
+        if (!selectedScript) return;
+        const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
+        if (solEl) { solEl.innerHTML = selectedScript.conteudo_bruto || ''; solEl.focus(); updateSendButton(); }
+        modal.dataset.open = 'false';
+      };
+
+      closeBtn.onclick = () => { modal.dataset.open = 'false'; };
+      modal.addEventListener('mousedown', (e) => {
+        const box = modal.querySelector('#smax-resp-script-box');
+        if (box && !box.contains(e.target)) modal.dataset.open = 'false';
+      }, { once: true });
     };
 
     // Analisa o que vai mudar por ticket (para confirmação e smart-skip)
@@ -9033,13 +9096,13 @@
                   <div id="smax-resp-status-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-statussccd-picker" class="smax-resp-field-picker" style="max-height:320px;overflow-y:auto;"></div>
                   <div id="smax-resp-desc-panel">
-                    <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
+                    <div style="font-size:10px;font-weight:600;color:var(--sp-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
                     <div id="smax-resp-desc-content"></div>
                   </div>
                   <div id="smax-resp-solution-panel">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                      <span style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;">✏️ Solução</span>
-                      <button id="smax-resp-scripts-btn" type="button" style="font-size:11px;padding:3px 10px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.06);color:#d1d5db;cursor:pointer;transition:background .15s;">📋 Scripts de Respostas</button>
+                      <span style="font-size:10px;font-weight:600;color:var(--sp-text-muted);text-transform:uppercase;letter-spacing:.07em;">✏️ Solução</span>
+                      <button id="smax-resp-scripts-btn" type="button" class="smax-resp-action-btn">📋 Scripts</button>
                     </div>
                     <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;">
                       <div id="smax-resp-solution-toolbar">
@@ -9105,10 +9168,32 @@
             </div>
 
             <div id="smax-resp-hud-footer">
-              <div style="font-size:11px;color:#6b7280;">Escritas reais: <span style="color:${prefs.enableRealWrites ? '#4ade80' : '#f87171'}">${prefs.enableRealWrites ? 'ativadas' : 'desativadas'}</span></div>
+              <div style="font-size:11px;color:var(--sp-text-muted);">Escritas reais: <span style="color:${prefs.enableRealWrites ? 'var(--sp-success)' : 'var(--sp-danger)'};font-weight:600;">${prefs.enableRealWrites ? 'ativadas' : 'desativadas'}</span></div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <button id="smax-resp-report-btn" type="button" style="padding:6px 14px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.06);color:#d1d5db;font-size:12px;cursor:pointer;">📊 Relatório</button>
+                <button id="smax-resp-report-btn" type="button" class="smax-resp-action-btn">📊 Relatório</button>
                 <button id="smax-resp-send-btn" type="button" style="padding:8px 28px;border:none;border-radius:8px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.35);transition:transform .12s,box-shadow .12s;">ENVIAR</button>
+              </div>
+            </div>
+          </div>
+          <!-- Script Picker Modal -->
+          <div id="smax-resp-script-modal">
+            <div id="smax-resp-script-box">
+              <div id="smax-resp-script-box-header">
+                <h4>📋 Scripts de Respostas</h4>
+                <button id="smax-resp-script-modal-close" style="border:none;background:rgba(255,255,255,.18);color:#fff;font-size:16px;width:30px;height:30px;border-radius:6px;cursor:pointer;flex-shrink:0;">✕</button>
+              </div>
+              <div id="smax-resp-script-search-wrap">
+                <input id="smax-resp-script-search-inp" type="text" placeholder="Buscar por título ou conteúdo..." autocomplete="off">
+              </div>
+              <div id="smax-resp-script-split">
+                <div id="smax-resp-script-list-col"></div>
+                <div id="smax-resp-script-preview-col">
+                  <div id="smax-resp-script-preview-empty">Selecione um script para ver o conteúdo.</div>
+                </div>
+              </div>
+              <div id="smax-resp-script-box-footer">
+                <span id="smax-resp-script-count"></span>
+                <button id="smax-resp-script-use-btn" disabled>Usar script</button>
               </div>
             </div>
           </div>
