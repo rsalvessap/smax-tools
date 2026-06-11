@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.47
+// @version      2.48
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.47';
+  const SMAX_TOOLKIT_VERSION = '2.48';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1362,9 +1362,9 @@
     /* ── ResponseHUD filter panel — light theme overrides ───────────────── */
     body[data-smax-theme="light"] #smax-resp-preset-bar { background:#f5f8fc !important; border-bottom-color:var(--sp-border) !important; }
     body[data-smax-theme="gray"] #smax-resp-preset-bar { background:#2e2e2e !important; border-bottom-color:var(--sp-border) !important; }
-    body[data-smax-theme="light"] #smax-resp-preset-bar > span { color:var(--sp-text-dim) !important; }
-    body[data-smax-theme="dark"] #smax-resp-preset-bar > span { color:var(--sp-text-muted) !important; }
-    body[data-smax-theme="gray"] #smax-resp-preset-bar > span { color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="light"] #smax-resp-preset-bar > span { color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="dark"]  #smax-resp-preset-bar > span { color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="gray"]  #smax-resp-preset-bar > span { color:var(--sp-text-muted) !important; }
     body[data-smax-theme="light"] .smax-resp-preset-pill { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
     body[data-smax-theme="gray"] .smax-resp-preset-pill { background:var(--sp-surface) !important; border-color:var(--sp-border) !important; color:var(--sp-text) !important; }
     body[data-smax-theme="light"] #smax-resp-count-bar,
@@ -1434,24 +1434,31 @@
     body[data-smax-theme="light"] #smax-resp-filter-criteria { background:#ffffff !important; }
     body[data-smax-theme="gray"] #smax-resp-filter-criteria { background:#2e2e2e !important; }
 
-    /* ── Filtros — texto claro em modos escuros ─────────────────────────── */
+    /* ── Filtros — cores de texto por tema ──────────────────────────────── */
     /* Label "Filtros" no header */
-    body[data-smax-theme="dark"] #smax-resp-filter-header > span,
-    body[data-smax-theme="gray"] #smax-resp-filter-header > span { color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="light"] #smax-resp-filter-header > span { color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="dark"]  #smax-resp-filter-header > span,
+    body[data-smax-theme="gray"]  #smax-resp-filter-header > span { color:var(--sp-text-muted) !important; }
     /* Label "Ord." na sort-bar */
-    body[data-smax-theme="dark"] #smax-resp-sort-bar > span,
-    body[data-smax-theme="gray"] #smax-resp-sort-bar > span { color:var(--sp-text-muted) !important; }
-    /* Labels de seção dentro dos filtros: Equipes, Status, Status Operacional, Designado */
-    body[data-smax-theme="dark"] #smax-resp-filter-criteria > div:first-child,
+    body[data-smax-theme="light"] #smax-resp-sort-bar > span { color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="dark"]  #smax-resp-sort-bar > span,
+    body[data-smax-theme="gray"]  #smax-resp-sort-bar > span { color:var(--sp-text-muted) !important; }
+    /* Labels de seção: Equipes, Status, Status Operacional, Designado */
+    body[data-smax-theme="light"] #smax-resp-filter-criteria > div:first-child,
+    body[data-smax-theme="dark"]  #smax-resp-filter-criteria > div:first-child,
     body[data-smax-theme="gray"]  #smax-resp-filter-criteria > div:first-child,
-    body[data-smax-theme="dark"] #smax-resp-req-status-section > div:first-child,
+    body[data-smax-theme="light"] #smax-resp-req-status-section > div:first-child,
+    body[data-smax-theme="dark"]  #smax-resp-req-status-section > div:first-child,
     body[data-smax-theme="gray"]  #smax-resp-req-status-section > div:first-child,
-    body[data-smax-theme="dark"] #smax-resp-status-section > div:first-child,
+    body[data-smax-theme="light"] #smax-resp-status-section > div:first-child,
+    body[data-smax-theme="dark"]  #smax-resp-status-section > div:first-child,
     body[data-smax-theme="gray"]  #smax-resp-status-section > div:first-child,
-    body[data-smax-theme="dark"] #smax-resp-assignee-section > div:first-child,
+    body[data-smax-theme="light"] #smax-resp-assignee-section > div:first-child,
+    body[data-smax-theme="dark"]  #smax-resp-assignee-section > div:first-child,
     body[data-smax-theme="gray"]  #smax-resp-assignee-section > div:first-child { color:var(--sp-text-muted) !important; }
     /* Botão toggle de critérios */
-    body[data-smax-theme="dark"] #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="light"] #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
+    body[data-smax-theme="dark"]  #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
 
 `);
 
