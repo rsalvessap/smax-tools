@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.48
+// @version      2.49
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.48';
+  const SMAX_TOOLKIT_VERSION = '2.49';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -8245,7 +8245,20 @@
       if (allFetchedEntries.length) {
         renderStatusPills(allFetchedEntries);
         renderRequestStatusPills(allFetchedEntries);
-        DataRepository.ensurePeopleLoaded().then(() => renderAssigneePills(allFetchedEntries));
+        (async () => {
+          await DataRepository.ensurePeopleLoaded();
+          // Buscar especialistas não resolvidos pelo cache padrão (pessoas de outros grupos)
+          const missingIds = [...new Set(allFetchedEntries.map(e => e.assignee).filter(id => id && !DataRepository.peopleCache.has(id)))];
+          if (missingIds.length) {
+            try {
+              const _tid = ApiClient.getTenantId() || '213963628';
+              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName&size=200&TENANTID=${_tid}`;
+              const _r = await fetch(_url, { credentials: 'include' });
+              if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
+            } catch (_e) { console.warn('[SMAX ResponseHUD] fetchMissingAssignees:', _e); }
+          }
+          renderAssigneePills(allFetchedEntries);
+        })();
       }
     };
 
@@ -8390,7 +8403,7 @@
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 300));
 
       // Layout do v1.99 — sem RequestedForDisplayLabel (adicionado em v2.12, pode causar 0 resultados)
-      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
+      const layout = 'Id,Subject,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
 
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
@@ -8462,11 +8475,11 @@
           const locationName = cached?.locationName || '';
           return {
             id: rawId,
-            subject: rawId,
+            subject: (p.Subject || '').trim() || rawId,
             descSnippet,
             status: p.Status || '',
             statusSCCD,
-            gse: p.AssignedToGroup || '',
+            gse: p.AssignedToGroup != null ? String(p.AssignedToGroup) : '',
             assignee: p.ExpertAssignee
               ? String(p.ExpertAssignee)
               : (rel.ExpertAssignee?.Id || rel.ExpertAssignee?.id)
@@ -8540,7 +8553,20 @@
         renderStatusPills(allFetchedEntries);
         renderRequestStatusPills(allFetchedEntries);
         // Sempre aguarda peopleCache para garantir nomes em vez de IDs
-        DataRepository.ensurePeopleLoaded().then(() => renderAssigneePills(allFetchedEntries));
+        (async () => {
+          await DataRepository.ensurePeopleLoaded();
+          // Buscar especialistas não resolvidos pelo cache padrão (pessoas de outros grupos)
+          const missingIds = [...new Set(allFetchedEntries.map(e => e.assignee).filter(id => id && !DataRepository.peopleCache.has(id)))];
+          if (missingIds.length) {
+            try {
+              const _tid = ApiClient.getTenantId() || '213963628';
+              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName&size=200&TENANTID=${_tid}`;
+              const _r = await fetch(_url, { credentials: 'include' });
+              if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
+            } catch (_e) { console.warn('[SMAX ResponseHUD] fetchMissingAssignees:', _e); }
+          }
+          renderAssigneePills(allFetchedEntries);
+        })();
 
         // Aplicar filtros (vazio = mostrar todos)
         applyFilters();
@@ -8734,7 +8760,7 @@
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
         ActivityLog.log({
           ticketId:         id,
-          ticketSubject:    DataRepository.triageCache.get(id)?.subjectText || '',
+          ticketSubject:    allFetchedEntries.find(e => e.id === id)?.subject || DataRepository.triageCache.get(id)?.subjectText || '',
           answered:         hasSolution,
           assigned:         assigneeWillChange,
           assignedTo:       hasSolution       ? (prefs.myPersonName || '')
@@ -8915,7 +8941,7 @@
     };
 
     const commitAll = async () => {
-      const targets = selectedTicketIds.size > 1
+      const targets = selectedTicketIds.size > 0
         ? [...selectedTicketIds]
         : (activeTicketId ? [activeTicketId] : []);
       if (!targets.length) { setStatusMsg('Nenhum chamado selecionado.', '#fca5a5'); return; }
@@ -9207,11 +9233,20 @@
     const CHANGEABLE_STATUSES = [
       'RequestStatusActive',
       'RequestStatusInProgress',
-      'RequestStatusPendingCustomer',
       'RequestStatusPending',
+      'RequestStatusPendingCustomer',
+      'RequestStatusPendingApproval',
+      'RequestStatusPendingVendor',
+      'RequestStatusPendingExternalServiceDesk',
+      'RequestStatusPendingSpecialOperation',
+      'RequestStatusPendingParent',
+      'RequestStatusPendingChange',
       'RequestStatusSuspended',
       'RequestStatusClassify',
+      'RequestStatusReady',
+      'RequestStatusAccepted',
       'RequestStatusReject',
+      'RequestStatusAbandon',
     ];
 
     const openStatusPicker = () => {
@@ -9788,7 +9823,20 @@
         applyFilters();
         renderStatusPills(allFetchedEntries);
         renderRequestStatusPills(allFetchedEntries);
-        DataRepository.ensurePeopleLoaded().then(() => renderAssigneePills(allFetchedEntries));
+        (async () => {
+          await DataRepository.ensurePeopleLoaded();
+          // Buscar especialistas não resolvidos pelo cache padrão (pessoas de outros grupos)
+          const missingIds = [...new Set(allFetchedEntries.map(e => e.assignee).filter(id => id && !DataRepository.peopleCache.has(id)))];
+          if (missingIds.length) {
+            try {
+              const _tid = ApiClient.getTenantId() || '213963628';
+              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName&size=200&TENANTID=${_tid}`;
+              const _r = await fetch(_url, { credentials: 'include' });
+              if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
+            } catch (_e) { console.warn('[SMAX ResponseHUD] fetchMissingAssignees:', _e); }
+          }
+          renderAssigneePills(allFetchedEntries);
+        })();
       });
 
       // Fetch button — carregar e recolher critérios automaticamente
@@ -10108,7 +10156,7 @@
               <th style="padding:5px 8px;text-align:left;color:#9ca3af;font-weight:600;">Usuário</th>
             </tr></thead>
             <tbody>${entries.slice().reverse().map((e, i) => {
-              const desc = (e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '').slice(0, 60);
+              const desc = e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
               const detalhe = e.globalChangeId ? `→ Global #${Utils.escapeHtml(e.globalChangeId)}` : e.statusSCCDTo ? `→ ${Utils.escapeHtml(STATUS_SCCD_LABELS?.[e.statusSCCDTo] || e.statusSCCDTo)}` : e.transferredTo ? `→ ${Utils.escapeHtml(e.transferredTo)}` : e.assignedTo ? `→ ${Utils.escapeHtml(e.assignedTo)}` : '';
               return `<tr style="background:${i%2===0?'transparent':'rgba(255,255,255,.02)'};border-bottom:1px solid rgba(255,255,255,.04);">
                 <td style="padding:4px 8px;color:#e5e7eb;font-weight:600;white-space:nowrap;">${fmtTime(e.ts)}</td>
