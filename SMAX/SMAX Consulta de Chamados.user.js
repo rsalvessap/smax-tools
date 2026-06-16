@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.22
+// @version      2.23
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -896,6 +896,13 @@
     .sqc-list-act-btn:hover{border-color:rgba(255,255,255,.3);color:#e2e8f0;}
     .sqc-list-act-btn.danger:hover{border-color:#f87171;color:#f87171;}
     #sqc-list-snapshot-info{font-size:10px;color:#4b5563;margin-top:6px;min-height:14px;}
+    #sqc-list-diff{margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 10px;font-size:10px;}
+    .sqc-diff-header{font-size:11px;font-weight:600;color:#93c5fd;margin-bottom:6px;}
+    .sqc-diff-row{margin:4px 0;line-height:1.4;word-break:break-all;}
+    .sqc-diff-row.new{color:#4ade80;}
+    .sqc-diff-row.dup{color:#facc15;}
+    .sqc-diff-row.saved{color:#9ca3af;}
+    .sqc-diff-actions{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
 
     /* IDs textarea */
     #sqc-ids{width:100%;box-sizing:border-box;min-height:110px;max-height:200px;resize:vertical;background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:11px;font-family:monospace;padding:7px 9px;outline:none;}
@@ -1130,6 +1137,7 @@
               <button class="sqc-list-act-btn danger" id="sqc-btn-delete-list">🗑️</button>
             </div>
             <div id="sqc-list-snapshot-info"></div>
+            <div id="sqc-list-diff" style="display:none;"></div>
           </div>
 
           <div class="sqc-sb-section">
@@ -1147,6 +1155,7 @@
             <button class="sqc-btn-primary" id="sqc-btn-fetch">🔍 Consultar</button>
             <button class="sqc-btn-secondary" id="sqc-btn-save-list" style="display:none;">💾 Salvar como nova lista</button>
             <button class="sqc-btn-secondary" id="sqc-btn-update-list" style="display:none;">✏️ Atualizar lista selecionada</button>
+            <button class="sqc-btn-secondary" id="sqc-btn-compare-add" style="display:none;">🔀 Adicionar / Comparar</button>
             <div id="sqc-progress"></div>
 
             <div id="sqc-autorefresh-section" style="display:none;">
@@ -1612,8 +1621,9 @@
           panel.querySelector('#sqc-list-section').style.display = mode==='list' ? 'block' : 'none';
           panel.querySelector('#sqc-btn-save-list').style.display = mode==='simple' ? 'block' : 'none';
           panel.querySelector('#sqc-btn-update-list').style.display = mode==='list' ? 'block' : 'none';
+          panel.querySelector('#sqc-btn-compare-add').style.display = mode==='list' ? 'block' : 'none';
           if (mode==='list') { refreshListSelect(); refreshSnapshotInfo(); }
-          if (mode==='simple') { activeListId=null; }
+          if (mode==='simple') { activeListId=null; panel.querySelector('#sqc-list-diff').style.display='none'; }
         });
       });
 
@@ -1638,6 +1648,7 @@
         refreshSnapshotInfo();
         lastChanges = null;
         panel.querySelector('#sqc-summary').classList.remove('visible');
+        panel.querySelector('#sqc-list-diff').style.display = 'none';
       });
 
       // Filtro de listas
@@ -1655,6 +1666,70 @@
         list.fields = [...fields];
         saveLists(lists);
         refreshListSelect();
+      });
+
+      // Comparar / Adicionar à lista
+      panel.querySelector('#sqc-btn-compare-add').addEventListener('click', () => {
+        if (!activeListId) { alert('Selecione uma lista primeiro.'); return; }
+        const list = lists.find(l=>l.id===activeListId);
+        if (!list) return;
+        const textIds = parseIds(panel.querySelector('#sqc-ids').value);
+        if (!textIds.length) { alert('Cole os IDs no campo antes de comparar.'); return; }
+
+        const listSet    = new Set(list.ids);
+        const textSet    = new Set(textIds);
+        const duplicates = textIds.filter(id => listSet.has(id));
+        const onlyNew    = textIds.filter(id => !listSet.has(id));
+        const onlyInSaved = list.ids.filter(id => !textSet.has(id));
+
+        const diffEl = panel.querySelector('#sqc-list-diff');
+        const fmtIds = (arr) => arr.length <= 10
+          ? arr.join(', ')
+          : arr.slice(0,10).join(', ') + ` … (+${arr.length-10})`;
+
+        diffEl.innerHTML = `
+          <div class="sqc-diff-header">🔀 Comparação — ${esc(list.name)}</div>
+          ${onlyNew.length    ? `<div class="sqc-diff-row new"><b>🆕 Novos (${onlyNew.length}):</b><br>${fmtIds(onlyNew)}</div>`        : ''}
+          ${duplicates.length ? `<div class="sqc-diff-row dup"><b>🔁 Já na lista (${duplicates.length}):</b><br>${fmtIds(duplicates)}</div>` : ''}
+          ${onlyInSaved.length? `<div class="sqc-diff-row saved"><b>📌 Só na lista salva (${onlyInSaved.length}):</b><br>${fmtIds(onlyInSaved)}</div>` : ''}
+          <div class="sqc-diff-actions">
+            ${onlyNew.length
+              ? `<button class="sqc-btn-secondary" id="sqc-diff-add-new" style="color:#4ade80;border-color:rgba(74,222,128,.4);">➕ Adicionar ${onlyNew.length} novo${onlyNew.length!==1?'s':''} à lista</button>`
+              : `<span style="color:#6b7280;font-size:10px;display:block;text-align:center;">Nenhum ID novo para adicionar.</span>`}
+            <button class="sqc-btn-secondary" id="sqc-diff-merge-all">🔀 Mesclar todos (dedup)</button>
+            <button class="sqc-btn-secondary" id="sqc-diff-close" style="color:#f87171;border-color:rgba(248,113,113,.3);">✕ Fechar</button>
+          </div>`;
+        diffEl.style.display = 'block';
+
+        diffEl.querySelector('#sqc-diff-add-new')?.addEventListener('click', () => {
+          if (!onlyNew.length) return;
+          const merged = [...list.ids, ...onlyNew];
+          list.ids = merged;
+          list.fields = [...fields];
+          saveLists(lists);
+          panel.querySelector('#sqc-ids').value = merged.join('\n');
+          updateIdsCount();
+          refreshListSelect();
+          diffEl.style.display = 'none';
+          alert(`✅ ${onlyNew.length} chamado${onlyNew.length!==1?'s':''} adicionado${onlyNew.length!==1?'s':''} à lista "${list.name}".\nTotal: ${merged.length} chamados.`);
+        });
+
+        diffEl.querySelector('#sqc-diff-merge-all')?.addEventListener('click', () => {
+          const merged = [...new Set([...list.ids, ...textIds])];
+          const added  = merged.length - list.ids.length;
+          if (!confirm(`Mesclar com "${list.name}"?\n• ${textIds.length} IDs no campo\n• ${duplicates.length} já estavam na lista\n• ${added} serão adicionados\n• Total final: ${merged.length} IDs únicos`)) return;
+          list.ids = merged;
+          list.fields = [...fields];
+          saveLists(lists);
+          panel.querySelector('#sqc-ids').value = merged.join('\n');
+          updateIdsCount();
+          refreshListSelect();
+          diffEl.style.display = 'none';
+        });
+
+        diffEl.querySelector('#sqc-diff-close')?.addEventListener('click', () => {
+          diffEl.style.display = 'none';
+        });
       });
 
       // Nova lista
