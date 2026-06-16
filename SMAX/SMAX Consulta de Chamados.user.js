@@ -4,6 +4,8 @@
 // @version      2.23
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
+// @updateURL    https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
+// @downloadURL  https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
 // @match        https://suporte.tjsp.jus.br/saw/*
 // @run-at       document-idle
 // @grant        GM_addStyle
