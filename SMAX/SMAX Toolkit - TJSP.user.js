@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.50
+// @version      2.51
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.50';
+  const SMAX_TOOLKIT_VERSION = '2.51';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -8706,23 +8706,33 @@
       const cache   = DataRepository.triageCache.get(id) || {};
 
       const hasSolution   = !!htmlToText(solutionRaw);
-      const curGseId      = fetched.gse || cache.assignmentGroupId || '';
-      const gseWillChange = !!(pending.gse?.id) && pending.gse.id !== curGseId;
-      const curAssigneeId       = fetched.assignee || cache.expertAssigneeId || '';
-      const assigneeWillChange  = !!(pending.assignee?.id) && pending.assignee.id !== curAssigneeId;
-      const pendingStatus   = pendingStatusByTicket[id];
-      const statusWillChange = !!(pendingStatus?.key) && pendingStatus.key !== (cache.status || '');
-      const pendingStatusSCCD = pendingStatusSCCDByTicket[id];
-      const statusSCCDWillChange = !!(pendingStatusSCCD?.key) && pendingStatusSCCD.key !== (cache.statusSCCD || '');
+      const curGseId      = String(fetched.gse || cache.assignmentGroupId || '');
+      const gseWillChange = !!(pending.gse?.id) && String(pending.gse.id) !== curGseId;
+      const curAssigneeId       = String(fetched.assignee || cache.expertAssigneeId || '');
+      const assigneeWillChange  = !!(pending.assignee?.id) && String(pending.assignee.id) !== curAssigneeId;
 
-      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange, statusWillChange, statusSCCDWillChange,
+      // Em modo lote (>1 selecionado) propaga o status/SCCD do ticket ativo para todos os demais
+      const isBatch = selectedTicketIds.size > 1;
+      const effectivePendingStatus = pendingStatusByTicket[id]
+        ?? (isBatch && id !== activeTicketId ? pendingStatusByTicket[activeTicketId] : undefined);
+      const statusWillChange = !!(effectivePendingStatus?.key)
+        && effectivePendingStatus.key !== (fetched.status || cache.status || '');
+
+      const effectivePendingSccd = pendingStatusSCCDByTicket[id]
+        ?? (isBatch && id !== activeTicketId ? pendingStatusSCCDByTicket[activeTicketId] : undefined);
+      const statusSCCDWillChange = !!(effectivePendingSccd?.key)
+        && effectivePendingSccd.key !== (cache.statusSCCD || '');
+
+      return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange,
+               statusWillChange, statusSCCDWillChange, effectivePendingStatus, effectivePendingSccd,
                willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange };
     };
 
     const commitTicket = async (id, solutionRaw, completionCode) => {
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const pending = getBatchPending();
-      const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, statusSCCDWillChange, willAct } = analyzeTicket(id, solutionRaw);
+      const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, statusSCCDWillChange,
+              effectivePendingStatus, effectivePendingSccd, willAct } = analyzeTicket(id, solutionRaw);
       if (!willAct) return { skipped: true, msg: 'Sem alterações para este chamado.' };
 
       const props = { Id: id };
@@ -8732,8 +8742,8 @@
       }
       if (gseWillChange) props.ExpertGroup = pending.gse.id;
       if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
-      if (statusWillChange) props.Status = pendingStatusByTicket[id].key;
-      if (statusSCCDWillChange) props.StatusSCCDSMAX_c = pendingStatusSCCDByTicket[id].key;
+      if (statusWillChange && effectivePendingStatus?.key) props.Status = effectivePendingStatus.key;
+      if (statusSCCDWillChange && effectivePendingSccd?.key) props.StatusSCCDSMAX_c = effectivePendingSccd.key;
 
       const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
       try {
@@ -8747,8 +8757,8 @@
               assignmentGroupId:   gseWillChange        ? pending.gse.id                         : entry.assignmentGroupId,
               assignmentGroupName: gseWillChange        ? pending.gse.name                       : entry.assignmentGroupName,
               expertAssigneeId:    assigneeWillChange   ? pending.assignee.id                    : entry.expertAssigneeId,
-              status:              statusWillChange     ? pendingStatusByTicket[id].key          : entry.status,
-              statusSCCD:          statusSCCDWillChange ? pendingStatusSCCDByTicket[id].key      : entry.statusSCCD,
+              status:              statusWillChange     ? (effectivePendingStatus?.key ?? entry.status)  : entry.status,
+              statusSCCD:          statusSCCDWillChange ? (effectivePendingSccd?.key  ?? entry.statusSCCD) : entry.statusSCCD,
             }));
           }
           // Postar texto de encaminhamento como discussão (quando GSE muda com forwarding)
@@ -8853,8 +8863,10 @@
 
       const tagHtml = (row) => {
         if (!row.willAct) return '<span class="smax-bc-tag skip">Ignorar</span>';
-        if (row.hasSolution && row.gseWillChange && row.assigneeWillChange) return '<span class="smax-bc-tag ok">Tudo</span>';
-        if (!row.gseWillChange && !row.assigneeWillChange) return '<span class="smax-bc-tag partial">Só solução</span>';
+        const allBatch = row.gseWillChange || row.assigneeWillChange;
+        const hasStatus = row.statusWillChange || row.statusSCCDWillChange;
+        if (row.hasSolution && allBatch && !hasStatus) return '<span class="smax-bc-tag ok">Tudo</span>';
+        if (!allBatch && !row.hasSolution) return `<span class="smax-bc-tag partial">${hasStatus ? 'Só status' : 'Ignorar'}</span>`;
         return '<span class="smax-bc-tag partial">Parcial</span>';
       };
 
