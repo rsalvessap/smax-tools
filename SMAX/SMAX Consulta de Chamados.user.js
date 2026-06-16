@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.23
+// @version      2.25
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @updateURL    https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
@@ -896,15 +896,35 @@
     .sqc-list-actions{display:flex;gap:4px;}
     .sqc-list-act-btn{flex:1;padding:5px 0;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:transparent;color:#9ca3af;font-size:10px;cursor:pointer;transition:all .12s;}
     .sqc-list-act-btn:hover{border-color:rgba(255,255,255,.3);color:#e2e8f0;}
-    .sqc-list-act-btn.danger:hover{border-color:#f87171;color:#f87171;}
+    .sqc-list-act-btn.danger{color:#f87171;}
+    .sqc-list-act-btn.danger:hover{border-color:#f87171;}
     #sqc-list-snapshot-info{font-size:10px;color:#4b5563;margin-top:6px;min-height:14px;}
-    #sqc-list-diff{margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 10px;font-size:10px;}
-    .sqc-diff-header{font-size:11px;font-weight:600;color:#93c5fd;margin-bottom:6px;}
-    .sqc-diff-row{margin:4px 0;line-height:1.4;word-break:break-all;}
-    .sqc-diff-row.new{color:#4ade80;}
-    .sqc-diff-row.dup{color:#facc15;}
-    .sqc-diff-row.saved{color:#9ca3af;}
-    .sqc-diff-actions{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
+    /* Modal */
+    #sqc-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100001;display:flex;align-items:center;justify-content:center;}
+    #sqc-modal{background:#0f1729;border:1px solid rgba(255,255,255,.15);border-radius:12px;width:540px;max-width:92vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.7);}
+    #sqc-modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;}
+    #sqc-modal-title{font-size:13px;font-weight:600;color:#e2e8f0;}
+    #sqc-modal-close{background:none;border:none;color:#6b7280;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;}
+    #sqc-modal-close:hover{color:#e2e8f0;background:rgba(255,255,255,.08);}
+    #sqc-modal-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;}
+    #sqc-modal-body::-webkit-scrollbar{width:5px;}
+    #sqc-modal-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:4px;}
+    .sqc-modal-label{font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;display:block;}
+    #sqc-modal-name{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e2e8f0;font-size:13px;padding:7px 10px;outline:none;}
+    #sqc-modal-name:focus{border-color:#3b82f6;}
+    #sqc-modal-ids,#sqc-modal-new-ids{width:100%;box-sizing:border-box;background:#0a0f1e;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e2e8f0;font-size:11px;padding:7px 10px;outline:none;resize:vertical;font-family:monospace;line-height:1.5;}
+    #sqc-modal-ids{min-height:100px;max-height:200px;}
+    #sqc-modal-new-ids{min-height:72px;max-height:140px;}
+    #sqc-modal-ids:focus,#sqc-modal-new-ids:focus{border-color:#3b82f6;}
+    #sqc-modal-new-ids::placeholder{color:#374151;}
+    #sqc-modal-diff{display:flex;flex-direction:column;gap:6px;}
+    .sqc-mdiff-result{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 12px;font-size:11px;display:flex;flex-direction:column;gap:5px;}
+    .sqc-mdiff-row{line-height:1.4;word-break:break-all;}
+    .sqc-mdiff-row.new{color:#4ade80;}.sqc-mdiff-row.dup{color:#facc15;}.sqc-mdiff-row.saved{color:#9ca3af;}
+    .sqc-mdiff-actions{display:flex;flex-direction:column;gap:4px;margin-top:6px;}
+    .sqc-modal-divider{height:1px;background:rgba(255,255,255,.08);}
+    #sqc-modal-footer{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid rgba(255,255,255,.1);flex-shrink:0;}
+    #sqc-modal-footer-right{display:flex;gap:8px;margin-left:auto;}
 
     /* IDs textarea */
     #sqc-ids{width:100%;box-sizing:border-box;min-height:110px;max-height:200px;resize:vertical;background:#0a0f1e;border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#e2e8f0;font-size:11px;font-family:monospace;padding:7px 9px;outline:none;}
@@ -1135,11 +1155,9 @@
             <div id="sqc-list-box"><div class="sqc-list-item-empty">Nenhuma lista salva</div></div>
             <div class="sqc-list-actions">
               <button class="sqc-list-act-btn" id="sqc-btn-new-list">+ Nova</button>
-              <button class="sqc-list-act-btn" id="sqc-btn-rename-list">✏️</button>
-              <button class="sqc-list-act-btn danger" id="sqc-btn-delete-list">🗑️</button>
+              <button class="sqc-list-act-btn" id="sqc-btn-manage-list">✏️ Gerenciar</button>
             </div>
             <div id="sqc-list-snapshot-info"></div>
-            <div id="sqc-list-diff" style="display:none;"></div>
           </div>
 
           <div class="sqc-sb-section">
@@ -1156,8 +1174,6 @@
           <div class="sqc-sb-section">
             <button class="sqc-btn-primary" id="sqc-btn-fetch">🔍 Consultar</button>
             <button class="sqc-btn-secondary" id="sqc-btn-save-list" style="display:none;">💾 Salvar como nova lista</button>
-            <button class="sqc-btn-secondary" id="sqc-btn-update-list" style="display:none;">✏️ Atualizar lista selecionada</button>
-            <button class="sqc-btn-secondary" id="sqc-btn-compare-add" style="display:none;">🔀 Adicionar / Comparar</button>
             <div id="sqc-progress"></div>
 
             <div id="sqc-autorefresh-section" style="display:none;">
@@ -1207,6 +1223,39 @@
           </div>
           <div id="sqc-results-area">
             <div id="sqc-placeholder">Cole os IDs dos chamados ao lado e clique em <b>Consultar</b>.<br><span style="font-size:11px;color:#4b5563;">Atalho: Ctrl+Shift+Q para abrir/fechar · Ctrl+Enter para consultar</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="sqc-modal-overlay" style="display:none;">
+        <div id="sqc-modal">
+          <div id="sqc-modal-header">
+            <span id="sqc-modal-title">📋 Gerenciar Lista</span>
+            <button id="sqc-modal-close" title="Fechar">✕</button>
+          </div>
+          <div id="sqc-modal-body">
+            <div>
+              <label class="sqc-modal-label">Nome da lista</label>
+              <input id="sqc-modal-name" type="text" placeholder="Nome da lista…">
+            </div>
+            <div>
+              <label class="sqc-modal-label">IDs na lista — <span id="sqc-modal-count">0</span> chamados</label>
+              <textarea id="sqc-modal-ids" placeholder="Um ID por linha…"></textarea>
+            </div>
+            <div class="sqc-modal-divider"></div>
+            <div>
+              <label class="sqc-modal-label">Adicionar / Comparar — cole nova lista de IDs</label>
+              <textarea id="sqc-modal-new-ids" placeholder="Cole aqui os IDs para comparar com a lista acima…"></textarea>
+              <button class="sqc-btn-secondary" id="sqc-modal-btn-compare" style="margin-top:6px;">🔀 Comparar</button>
+              <div id="sqc-modal-diff"></div>
+            </div>
+          </div>
+          <div id="sqc-modal-footer">
+            <button class="sqc-list-act-btn danger" id="sqc-modal-btn-delete">🗑️ Excluir lista</button>
+            <div id="sqc-modal-footer-right">
+              <button class="sqc-btn-secondary" id="sqc-modal-btn-cancel">Cancelar</button>
+              <button class="sqc-btn-primary" id="sqc-modal-btn-save">💾 Salvar</button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -1622,10 +1671,8 @@
           panel.querySelectorAll('.sqc-mode-tab').forEach(b=>b.classList.toggle('active',b===btn));
           panel.querySelector('#sqc-list-section').style.display = mode==='list' ? 'block' : 'none';
           panel.querySelector('#sqc-btn-save-list').style.display = mode==='simple' ? 'block' : 'none';
-          panel.querySelector('#sqc-btn-update-list').style.display = mode==='list' ? 'block' : 'none';
-          panel.querySelector('#sqc-btn-compare-add').style.display = mode==='list' ? 'block' : 'none';
           if (mode==='list') { refreshListSelect(); refreshSnapshotInfo(); }
-          if (mode==='simple') { activeListId=null; panel.querySelector('#sqc-list-diff').style.display='none'; }
+          if (mode==='simple') { activeListId=null; }
         });
       });
 
@@ -1650,89 +1697,10 @@
         refreshSnapshotInfo();
         lastChanges = null;
         panel.querySelector('#sqc-summary').classList.remove('visible');
-        panel.querySelector('#sqc-list-diff').style.display = 'none';
       });
 
       // Filtro de listas
       panel.querySelector('#sqc-list-filter').addEventListener('input', () => refreshListSelect());
-
-      // Atualizar lista existente
-      panel.querySelector('#sqc-btn-update-list').addEventListener('click', () => {
-        if (!activeListId) { alert('Selecione uma lista primeiro.'); return; }
-        const ids = parseIds(panel.querySelector('#sqc-ids').value);
-        if (!ids.length) { alert('Nenhum ID válido.'); return; }
-        const list = lists.find(l=>l.id===activeListId);
-        if (!list) return;
-        if (!confirm(`Atualizar a lista "${list.name}" com ${ids.length} IDs?`)) return;
-        list.ids = ids;
-        list.fields = [...fields];
-        saveLists(lists);
-        refreshListSelect();
-      });
-
-      // Comparar / Adicionar à lista
-      panel.querySelector('#sqc-btn-compare-add').addEventListener('click', () => {
-        if (!activeListId) { alert('Selecione uma lista primeiro.'); return; }
-        const list = lists.find(l=>l.id===activeListId);
-        if (!list) return;
-        const textIds = parseIds(panel.querySelector('#sqc-ids').value);
-        if (!textIds.length) { alert('Cole os IDs no campo antes de comparar.'); return; }
-
-        const listSet    = new Set(list.ids);
-        const textSet    = new Set(textIds);
-        const duplicates = textIds.filter(id => listSet.has(id));
-        const onlyNew    = textIds.filter(id => !listSet.has(id));
-        const onlyInSaved = list.ids.filter(id => !textSet.has(id));
-
-        const diffEl = panel.querySelector('#sqc-list-diff');
-        const fmtIds = (arr) => arr.length <= 10
-          ? arr.join(', ')
-          : arr.slice(0,10).join(', ') + ` … (+${arr.length-10})`;
-
-        diffEl.innerHTML = `
-          <div class="sqc-diff-header">🔀 Comparação — ${esc(list.name)}</div>
-          ${onlyNew.length    ? `<div class="sqc-diff-row new"><b>🆕 Novos (${onlyNew.length}):</b><br>${fmtIds(onlyNew)}</div>`        : ''}
-          ${duplicates.length ? `<div class="sqc-diff-row dup"><b>🔁 Já na lista (${duplicates.length}):</b><br>${fmtIds(duplicates)}</div>` : ''}
-          ${onlyInSaved.length? `<div class="sqc-diff-row saved"><b>📌 Só na lista salva (${onlyInSaved.length}):</b><br>${fmtIds(onlyInSaved)}</div>` : ''}
-          <div class="sqc-diff-actions">
-            ${onlyNew.length
-              ? `<button class="sqc-btn-secondary" id="sqc-diff-add-new" style="color:#4ade80;border-color:rgba(74,222,128,.4);">➕ Adicionar ${onlyNew.length} novo${onlyNew.length!==1?'s':''} à lista</button>`
-              : `<span style="color:#6b7280;font-size:10px;display:block;text-align:center;">Nenhum ID novo para adicionar.</span>`}
-            <button class="sqc-btn-secondary" id="sqc-diff-merge-all">🔀 Mesclar todos (dedup)</button>
-            <button class="sqc-btn-secondary" id="sqc-diff-close" style="color:#f87171;border-color:rgba(248,113,113,.3);">✕ Fechar</button>
-          </div>`;
-        diffEl.style.display = 'block';
-
-        diffEl.querySelector('#sqc-diff-add-new')?.addEventListener('click', () => {
-          if (!onlyNew.length) return;
-          const merged = [...list.ids, ...onlyNew];
-          list.ids = merged;
-          list.fields = [...fields];
-          saveLists(lists);
-          panel.querySelector('#sqc-ids').value = merged.join('\n');
-          updateIdsCount();
-          refreshListSelect();
-          diffEl.style.display = 'none';
-          alert(`✅ ${onlyNew.length} chamado${onlyNew.length!==1?'s':''} adicionado${onlyNew.length!==1?'s':''} à lista "${list.name}".\nTotal: ${merged.length} chamados.`);
-        });
-
-        diffEl.querySelector('#sqc-diff-merge-all')?.addEventListener('click', () => {
-          const merged = [...new Set([...list.ids, ...textIds])];
-          const added  = merged.length - list.ids.length;
-          if (!confirm(`Mesclar com "${list.name}"?\n• ${textIds.length} IDs no campo\n• ${duplicates.length} já estavam na lista\n• ${added} serão adicionados\n• Total final: ${merged.length} IDs únicos`)) return;
-          list.ids = merged;
-          list.fields = [...fields];
-          saveLists(lists);
-          panel.querySelector('#sqc-ids').value = merged.join('\n');
-          updateIdsCount();
-          refreshListSelect();
-          diffEl.style.display = 'none';
-        });
-
-        diffEl.querySelector('#sqc-diff-close')?.addEventListener('click', () => {
-          diffEl.style.display = 'none';
-        });
-      });
 
       // Nova lista
       panel.querySelector('#sqc-btn-new-list').addEventListener('click', () => {
@@ -1747,27 +1715,111 @@
         refreshSnapshotInfo();
       });
 
-      // Renomear lista
-      panel.querySelector('#sqc-btn-rename-list').addEventListener('click', () => {
-        if (!activeListId) { alert('Selecione uma lista primeiro.'); return; }
-        const list = lists.find(l=>l.id===activeListId);
-        const name = prompt('Novo nome:', list?.name||'');
-        if (!name?.trim()) return;
-        list.name = name.trim();
-        saveLists(lists);
-        refreshListSelect();
-      });
+      // Gerenciar lista — abre modal
+      const openManageModal = (listId) => {
+        const list = lists.find(l=>l.id===listId);
+        if (!list) return;
+        const overlay   = panel.querySelector('#sqc-modal-overlay');
+        const nameInput = panel.querySelector('#sqc-modal-name');
+        const idsTA     = panel.querySelector('#sqc-modal-ids');
+        const countEl   = panel.querySelector('#sqc-modal-count');
+        const newIdsTA  = panel.querySelector('#sqc-modal-new-ids');
+        const diffEl    = panel.querySelector('#sqc-modal-diff');
 
-      // Excluir lista
-      panel.querySelector('#sqc-btn-delete-list').addEventListener('click', () => {
+        nameInput.value     = list.name;
+        idsTA.value         = list.ids.join('\n');
+        countEl.textContent = list.ids.length;
+        newIdsTA.value      = '';
+        diffEl.innerHTML    = '';
+        overlay.style.display = 'flex';
+        nameInput.focus();
+
+        // Atualiza contagem ao editar os IDs
+        idsTA.oninput = () => { countEl.textContent = parseIds(idsTA.value).length; };
+
+        // Fechar modal
+        const closeModal = () => { overlay.style.display = 'none'; };
+        panel.querySelector('#sqc-modal-close').onclick      = closeModal;
+        panel.querySelector('#sqc-modal-btn-cancel').onclick = closeModal;
+        overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+
+        // Comparar
+        panel.querySelector('#sqc-modal-btn-compare').onclick = () => {
+          const currentIds    = parseIds(idsTA.value);
+          const newIds        = parseIds(newIdsTA.value);
+          if (!newIds.length) { newIdsTA.focus(); return; }
+
+          const currentSet    = new Set(currentIds);
+          const newSet        = new Set(newIds);
+          const onlyNew       = newIds.filter(id => !currentSet.has(id));
+          const duplicates    = newIds.filter(id =>  currentSet.has(id));
+          const onlyInCurrent = currentIds.filter(id => !newSet.has(id));
+          const fmtIds = (arr) => arr.length <= 8
+            ? arr.join(', ')
+            : arr.slice(0,8).join(', ') + ` … (+${arr.length-8})`;
+
+          diffEl.innerHTML = `
+            <div class="sqc-mdiff-result">
+              ${onlyNew.length    ? `<div class="sqc-mdiff-row new"><b>🆕 Novos (${onlyNew.length}):</b> ${fmtIds(onlyNew)}</div>` : '<div class="sqc-mdiff-row new">🆕 Nenhum ID novo</div>'}
+              ${duplicates.length ? `<div class="sqc-mdiff-row dup"><b>🔁 Já na lista (${duplicates.length}):</b> ${fmtIds(duplicates)}</div>` : ''}
+              ${onlyInCurrent.length ? `<div class="sqc-mdiff-row saved"><b>📌 Só na lista atual (${onlyInCurrent.length}):</b> ${fmtIds(onlyInCurrent)}</div>` : ''}
+              <div class="sqc-mdiff-actions">
+                ${onlyNew.length ? `<button class="sqc-btn-secondary" id="sqc-mdiff-add" style="color:#4ade80;border-color:rgba(74,222,128,.4);" title="Acrescenta os IDs novos à lista acima. O que já estava é preservado.">➕ Acrescentar ${onlyNew.length} novo${onlyNew.length!==1?'s':''} (preserva lista atual)</button>` : ''}
+                <button class="sqc-btn-secondary" id="sqc-mdiff-replace" style="color:#fb923c;border-color:rgba(251,146,60,.4);" title="Substitui a lista pelos IDs do campo acima. ${onlyInCurrent.length} chamado${onlyInCurrent.length!==1?'s':''} da lista atual ${onlyInCurrent.length!==1?'serão removidos':'será removido'}.">🔄 Substituir lista pelos IDs do campo${onlyInCurrent.length ? ` (remove ${onlyInCurrent.length})` : ''}</button>
+              </div>
+            </div>`;
+
+          diffEl.querySelector('#sqc-mdiff-add')?.addEventListener('click', () => {
+            const merged = [...parseIds(idsTA.value), ...onlyNew];
+            idsTA.value = merged.join('\n');
+            countEl.textContent = merged.length;
+            newIdsTA.value = '';
+            diffEl.innerHTML = '';
+          });
+
+          diffEl.querySelector('#sqc-mdiff-replace')?.addEventListener('click', () => {
+            const replaced = [...new Set(newIds)];
+            if (onlyInCurrent.length && !confirm(`Substituir a lista?\n${onlyInCurrent.length} chamado${onlyInCurrent.length!==1?'s':''} serão removidos:\n${fmtIds(onlyInCurrent)}`)) return;
+            idsTA.value = replaced.join('\n');
+            countEl.textContent = replaced.length;
+            newIdsTA.value = '';
+            diffEl.innerHTML = '';
+          });
+        };
+
+        // Salvar (nome + IDs editados diretamente)
+        panel.querySelector('#sqc-modal-btn-save').onclick = () => {
+          const newName = nameInput.value.trim();
+          if (!newName) { nameInput.focus(); return; }
+          const newIds = parseIds(idsTA.value);
+          list.name   = newName;
+          list.ids    = newIds;
+          list.fields = [...fields];
+          saveLists(lists);
+          panel.querySelector('#sqc-ids').value = newIds.join('\n');
+          updateIdsCount();
+          refreshListSelect();
+          refreshSnapshotInfo();
+          closeModal();
+        };
+
+        // Excluir
+        panel.querySelector('#sqc-modal-btn-delete').onclick = () => {
+          if (!confirm(`Excluir a lista "${list.name}"?`)) return;
+          lists = lists.filter(l=>l.id!==listId);
+          saveLists(lists);
+          activeListId = null;
+          panel.querySelector('#sqc-ids').value = '';
+          updateIdsCount();
+          refreshListSelect();
+          panel.querySelector('#sqc-list-snapshot-info').textContent = '';
+          closeModal();
+        };
+      };
+
+      panel.querySelector('#sqc-btn-manage-list').addEventListener('click', () => {
         if (!activeListId) { alert('Selecione uma lista primeiro.'); return; }
-        const list = lists.find(l=>l.id===activeListId);
-        if (!confirm(`Excluir a lista "${list?.name}"?`)) return;
-        lists = lists.filter(l=>l.id!==activeListId);
-        saveLists(lists);
-        activeListId = null;
-        refreshListSelect();
-        panel.querySelector('#sqc-list-snapshot-info').textContent = '';
+        openManageModal(activeListId);
       });
 
       // Salvar como lista (modo simples)
