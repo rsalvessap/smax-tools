@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.49
+// @version      2.50
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -45,7 +45,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.49';
+  const SMAX_TOOLKIT_VERSION = '2.50';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -8402,8 +8402,8 @@
       const filter = `(Active='true' and (PhaseId!='Close' and PhaseId!='Accept' or PhaseId=null) and ${gseFilter} and (StatusSCCDSMAX_c!='Fechado_c' or StatusSCCDSMAX_c=null))`;
       console.log('[SMAX ResponseHUD] filter:', filter.slice(0, 300));
 
-      // Layout do v1.99 — sem RequestedForDisplayLabel (adicionado em v2.12, pode causar 0 resultados)
-      const layout = 'Id,Subject,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
+      // Layout do v1.99 — sem RequestedForDisplayLabel nem Subject (campos extras causam 0 resultados silenciosamente)
+      const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
 
       try {
         const tenantId = ApiClient.getTenantId() || '213963628';
@@ -8475,7 +8475,7 @@
           const locationName = cached?.locationName || '';
           return {
             id: rawId,
-            subject: (p.Subject || '').trim() || rawId,
+            subject: descSnippet || DataRepository.triageCache.get(rawId)?.subjectText || rawId,
             descSnippet,
             status: p.Status || '',
             statusSCCD,
