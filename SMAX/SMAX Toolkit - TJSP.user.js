@@ -2591,10 +2591,15 @@
           ? String(rel.ExpertAssignee.Id || rel.ExpertAssignee.id)
           : (existing.expertAssigneeId || '');
 
-      // Extrai chamado global (pai) via rel.GlobalId_c — campo customizado TJSP
+      // Extrai chamado global (pai) via rel.GlobalId_c ou props.GlobalId_c — campo customizado TJSP
+      // Em consultas em lote, o valor vem em props como ID simples; em FULL_LAYOUT, vem em rel como objeto
       let globalChangeId = existing.globalChangeId || '';
       if (!globalChangeId && rel && rel.GlobalId_c) {
         const rawId = String(rel.GlobalId_c.Id || rel.GlobalId_c.id || '').trim();
+        if (rawId && rawId !== id) globalChangeId = rawId;
+      }
+      if (!globalChangeId && props.GlobalId_c) {
+        const rawId = String(props.GlobalId_c).replace(/^IMRfc:/i, '').trim();
         if (rawId && rawId !== id) globalChangeId = rawId;
       }
 
@@ -3294,7 +3299,37 @@
       });
     };
 
-    return { postUpdateRequest, postCreateRequestCausesRequest, postDiscussion, extractBulkErrorMessages, summarizeBulkOutcome };
+    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship bulk. */
+    const postAddFollower = (ticketId, personId) => {
+      if (!prefs.enableRealWrites) {
+        console.warn('[SMAX] Real writes disabled.');
+        return Promise.resolve({ skipped: true, reason: 'real-writes-disabled' });
+      }
+      const ticket = String(ticketId || '').trim();
+      const person = String(personId || '').trim();
+      if (!ticket || !person) {
+        console.warn('[SMAX] Missing ids for addFollower.');
+        return Promise.resolve(null);
+      }
+      const body = {
+        entities: [{
+          entity_type: 'Follow',
+          properties: {
+            FollowedEntityType: 'Request',
+            FollowedEntityId: ticket,
+            FollowedByPerson: person,
+            IsSystem: false
+          }
+        }],
+        operation: 'CREATE'
+      };
+      return ApiClient.ems.bulk(body).catch((err) => {
+        console.warn('[SMAX] postAddFollower failed:', err);
+        return null;
+      });
+    };
+
+    return { postUpdateRequest, postCreateRequestCausesRequest, postDiscussion, postAddFollower, extractBulkErrorMessages, summarizeBulkOutcome };
   })();
 
   /* =========================================================
@@ -5402,6 +5437,7 @@
    * Shared status maps (TriageHUD + ResponseHUD + SettingsPanel)
    * =======================================================*/
   const REQUEST_STATUS_LABELS = {
+    RequestStatusNew:                         'Novo',
     RequestStatusReady:                       'Pronto',
     RequestStatusInProgress:                  'Em Andamento',
     RequestStatusPending:                     'Usuário Final Pendente',
@@ -5409,6 +5445,7 @@
     RequestStatusComplete:                    'Concluído',
     RequestStatusPendingParent:               'Elemento Primário Pendente',
     RequestStatusRejected:                    'Rejeitado',
+    RequestStatusCancelled:                   'Cancelado',
     RequestStatusPendingVendor:               'Fornecedor Pendente',
     RequestStatusPendingExternalServiceDesk:  'Central de Serviços Externa Pendente',
     RequestStatusPendingSpecialOperation:     'Operação Especial Pendente',
@@ -7449,7 +7486,7 @@
       const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
       const hasSolution = !!(solEl?.textContent || '').trim() && !!getSelectedCompletionCode();
       const pending = getBatchPending();
-      const hasPending = !!(pending.gse || pending.assignee || pendingStatusByTicket[activeTicketId] || pendingStatusSCCDByTicket[activeTicketId]);
+      const hasPending = !!(pending.gse || pending.assignee || pending.follower || pendingStatusByTicket[activeTicketId] || pendingStatusSCCDByTicket[activeTicketId]);
       if (count > 1) {
         btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
         btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
@@ -8000,6 +8037,21 @@
         solEl.innerHTML = entry.solutionHtml || '';
       }
 
+      // Meta-bar: Seguidor chip (mostra pendente ou estado padrão)
+      const followerChipName = backdrop.querySelector('#smax-resp-follower-chip-name');
+      const followerBtn = backdrop.querySelector('#smax-resp-follower-btn');
+      if (followerChipName && followerBtn) {
+        if (pending.follower) {
+          followerChipName.textContent = pending.follower.name || pending.follower.id;
+          followerBtn.classList.add('dirty');
+          followerBtn.title = `Seguidor pendente: ${pending.follower.name}`;
+        } else {
+          followerChipName.textContent = 'Seguidor';
+          followerBtn.classList.remove('dirty');
+          followerBtn.title = 'Adicionar seguidor';
+        }
+      }
+
       // Preencher input Global ID com valor do ticket ativo
       const globalIdInput = backdrop.querySelector('#smax-resp-global-id');
       if (globalIdInput) {
@@ -8137,21 +8189,28 @@
       const section = backdrop?.querySelector('#smax-resp-req-status-section');
       const filterEl = backdrop?.querySelector('#smax-resp-req-status-filters');
       if (!filterEl) return;
-      const statuses = [...new Set(entries.map(e => e.status).filter(Boolean))].sort((a, b) => {
+      // Contar ocorrências por status nos dados
+      const countMap = {};
+      entries.forEach(e => { if (e.status) countMap[e.status] = (countMap[e.status] || 0) + 1; });
+      // Incluir status dos dados que não estejam no mapa (fallback)
+      const dataOnlyStatuses = Object.keys(countMap).filter(s => !REQUEST_STATUS_LABELS[s]);
+      // Montar lista completa: todos do mapa + extras dos dados, ordenados pelo label
+      const allStatuses = [...Object.keys(REQUEST_STATUS_LABELS), ...dataOnlyStatuses].sort((a, b) => {
         const la = REQUEST_STATUS_LABELS[a] || a;
         const lb = REQUEST_STATUS_LABELS[b] || b;
         return la.localeCompare(lb, 'pt');
       });
-      if (!statuses.length) { if (section) section.style.display = 'none'; return; }
       if (section) section.style.display = '';
-      filterEl.innerHTML = statuses.map(s => {
+      filterEl.innerHTML = allStatuses.map(s => {
         const label = REQUEST_STATUS_LABELS[s] || s;
+        const count = countMap[s] || 0;
         const active = selectedRequestStatuses.has(s);
         const ps = getPillStyle('reqStatus', active);
+        const opacity = count > 0 || active ? '1' : '0.4';
         return `<button class="smax-resp-req-status-pill" data-status="${Utils.escapeHtml(s)}"
-          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:${ps.border};background:${ps.bg};color:${ps.color};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;">
+          style="display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:6px;border:${ps.border};background:${ps.bg};color:${ps.color};font-size:11px;cursor:pointer;text-align:left;transition:all .15s;opacity:${opacity};">
           <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${ps.dotBg};border:${ps.dotBorder};"></span>
-          ${Utils.escapeHtml(label)}
+          ${Utils.escapeHtml(label)}${count > 0 ? ` <span style="color:inherit;opacity:.6;font-size:10px;">(${count})</span>` : ''}
         </button>`;
       }).join('');
       filterEl.querySelectorAll('.smax-resp-req-status-pill').forEach(pill => {
@@ -8161,7 +8220,9 @@
           else selectedRequestStatuses.add(s);
           const active = selectedRequestStatuses.has(s);
           const ps = getPillStyle('reqStatus', active);
+          const count = countMap[s] || 0;
           pill.style.border = ps.border; pill.style.background = ps.bg; pill.style.color = ps.color;
+          pill.style.opacity = count > 0 || active ? '1' : '0.4';
           const dot = pill.querySelector('span');
           if (dot) { dot.style.background = ps.dotBg; dot.style.border = ps.dotBorder; }
           applyFilters();
@@ -8252,7 +8313,7 @@
           if (missingIds.length) {
             try {
               const _tid = ApiClient.getTenantId() || '213963628';
-              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName&size=200&TENANTID=${_tid}`;
+              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName,Upn,Email&size=200&TENANTID=${_tid}`;
               const _r = await fetch(_url, { credentials: 'include' });
               if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
             } catch (_e) { console.warn('[SMAX ResponseHUD] fetchMissingAssignees:', _e); }
@@ -8560,7 +8621,7 @@
           if (missingIds.length) {
             try {
               const _tid = ApiClient.getTenantId() || '213963628';
-              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName&size=200&TENANTID=${_tid}`;
+              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName,Upn,Email&size=200&TENANTID=${_tid}`;
               const _r = await fetch(_url, { credentials: 'include' });
               if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
             } catch (_e) { console.warn('[SMAX ResponseHUD] fetchMissingAssignees:', _e); }
@@ -8723,17 +8784,22 @@
       const statusSCCDWillChange = !!(effectivePendingSccd?.key)
         && effectivePendingSccd.key !== (cache.statusSCCD || '');
 
+      const followerWillChange = !!(pending.follower?.id);
+
       return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange,
-               statusWillChange, statusSCCDWillChange, effectivePendingStatus, effectivePendingSccd,
-               willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange };
+               statusWillChange, statusSCCDWillChange, followerWillChange, effectivePendingStatus, effectivePendingSccd,
+               willAct: hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange || followerWillChange };
     };
 
     const commitTicket = async (id, solutionRaw, completionCode) => {
       if (!prefs.enableRealWrites) return { ok: false, msg: 'Escritas reais desativadas.' };
       const pending = getBatchPending();
       const { hasSolution, gseWillChange, assigneeWillChange, statusWillChange, statusSCCDWillChange,
-              effectivePendingStatus, effectivePendingSccd, willAct } = analyzeTicket(id, solutionRaw);
+              followerWillChange, effectivePendingStatus, effectivePendingSccd, willAct } = analyzeTicket(id, solutionRaw);
       if (!willAct) return { skipped: true, msg: 'Sem alterações para este chamado.' };
+
+      // Determinar se há alterações de propriedades (excluindo seguidor, que é relationship)
+      const hasPropertyChanges = hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange;
 
       const props = { Id: id };
       if (hasSolution) {
@@ -8745,10 +8811,14 @@
       if (statusWillChange && effectivePendingStatus?.key) props.Status = effectivePendingStatus.key;
       if (statusSCCDWillChange && effectivePendingSccd?.key) props.StatusSCCDSMAX_c = effectivePendingSccd.key;
 
-      const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
       try {
-        const result  = await ApiClient.ems.bulk(body);
-        const outcome = Api.summarizeBulkOutcome(result);
+        let outcome = { ok: true };
+        // Atualizar propriedades do chamado (se houver)
+        if (hasPropertyChanges) {
+          const body = { entities: [{ entity_type: 'Request', properties: props }], operation: 'UPDATE' };
+          const result = await ApiClient.ems.bulk(body);
+          outcome = Api.summarizeBulkOutcome(result);
+        }
         const success = outcome?.ok !== false;
         if (success) {
           const entry = DataRepository.triageCache.get(id);
@@ -8766,6 +8836,12 @@
           if (gseWillChange && fwdHtml) {
             await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'INTERNAL' });
           }
+          // Adicionar seguidor (relationship separada do update de propriedades)
+          if (followerWillChange) {
+            try {
+              await Api.postAddFollower(id, pending.follower.id);
+            } catch (fe) { console.warn('[SMAX ResponseHUD] addFollower:', fe); }
+          }
         }
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
         ActivityLog.log({
@@ -8778,6 +8854,8 @@
                           : '',
           transferred:      gseWillChange,
           transferredTo:    gseWillChange ? (pending.gse.name || pending.gse.id) : '',
+          followerAdded:    followerWillChange,
+          followerName:     followerWillChange ? (pending.follower.name || pending.follower.id) : '',
           statusSCCDChanged: statusSCCDWillChange,
           statusSCCDTo:     statusSCCDWillChange ? pendingStatusSCCDByTicket[id].key : '',
           usedScript:       false,
@@ -8841,6 +8919,10 @@
         if (chipAssBtn)  chipAssBtn.classList.remove('dirty');
         if (chipSccdName && entry) chipSccdName.textContent = STATUS_SCCD_LABELS[entry.statusSCCD] || entry.statusSCCD || '—';
         if (chipSccdBtn)  chipSccdBtn.classList.remove('dirty');
+        const chipFollName = backdrop?.querySelector('#smax-resp-follower-chip-name');
+        const chipFollBtn  = backdrop?.querySelector('#smax-resp-follower-btn');
+        if (chipFollName) chipFollName.textContent = 'Seguidor';
+        if (chipFollBtn)  chipFollBtn.classList.remove('dirty');
         setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
       }
       updateSendButton();
@@ -8863,7 +8945,7 @@
 
       const tagHtml = (row) => {
         if (!row.willAct) return '<span class="smax-bc-tag skip">Ignorar</span>';
-        const allBatch = row.gseWillChange || row.assigneeWillChange;
+        const allBatch = row.gseWillChange || row.assigneeWillChange || row.followerWillChange;
         const hasStatus = row.statusWillChange || row.statusSCCDWillChange;
         if (row.hasSolution && allBatch && !hasStatus) return '<span class="smax-bc-tag ok">Tudo</span>';
         if (!allBatch && !row.hasSolution) return `<span class="smax-bc-tag partial">${hasStatus ? 'Só status' : 'Ignorar'}</span>`;
@@ -8898,8 +8980,9 @@
               <div class="smax-bc-changes">
                 ${pending.gse?.id      ? `<span class="smax-bc-change-pill gse">🏢 GSE → ${Utils.escapeHtml(pending.gse.name)}</span>` : ''}
                 ${pending.assignee?.id ? `<span class="smax-bc-change-pill assignee">👤 Especialista → ${Utils.escapeHtml(pending.assignee.name)}</span>` : ''}
+                ${pending.follower?.id ? `<span class="smax-bc-change-pill assignee">👁️ Seguidor → ${Utils.escapeHtml(pending.follower.name)}</span>` : ''}
                 ${solutionPlain   ? `<span class="smax-bc-change-pill solution">📋 Solução: "${Utils.escapeHtml(solutionPreview)}"</span>` : ''}
-                ${!pending.gse?.id && !pending.assignee?.id && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
+                ${!pending.gse?.id && !pending.assignee?.id && !pending.follower?.id && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
               </div>
             </div>
             <div>
@@ -8910,6 +8993,7 @@
                     <th>Chamado</th>
                     ${pending.gse?.id      ? '<th>GSE</th>'         : ''}
                     ${pending.assignee?.id ? '<th>Especialista</th>' : ''}
+                    ${pending.follower?.id ? '<th>Seguidor</th>'    : ''}
                     ${solutionPlain   ? '<th>Solução</th>'      : ''}
                     <th>Ação</th>
                   </tr>
@@ -8920,6 +9004,7 @@
                       <td style="font-weight:700;color:#60a5fa;">#${Utils.escapeHtml(r.id)}</td>
                       ${pending.gse?.id      ? `<td>${gseColHtml(r)}</td>`      : ''}
                       ${pending.assignee?.id ? `<td>${assigneeColHtml(r)}</td>` : ''}
+                      ${pending.follower?.id ? `<td><span style="color:#86efac;">✓ ${Utils.escapeHtml(pending.follower.name)}</span></td>` : ''}
                       ${solutionPlain   ? `<td><span style="color:${r.hasSolution ? '#86efac' : '#6b7280'};">${r.hasSolution ? '✓' : '—'}</span></td>` : ''}
                       <td>${tagHtml(r)}</td>
                     </tr>`).join('')}
@@ -9408,6 +9493,101 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
+    // ── Follower (Seguidor) picker ─────────────────────────────────
+    const openFollowerPicker = async () => {
+      if (!backdrop || !activeTicketId) return;
+      const picker = backdrop.querySelector('#smax-resp-follower-picker');
+      const btn = backdrop.querySelector('#smax-resp-follower-btn');
+      if (!picker || !btn) return;
+      if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+      closeAllPickers();
+      picker.innerHTML = '<div class="smax-resp-field-picker-empty">Carregando pessoas...</div>';
+      positionPicker(picker, btn);
+
+      await DataRepository.ensurePeopleLoaded();
+      const pending = getBatchPending();
+      const currentFollowerId = pending.follower?.id || '';
+      const people = Array.from(DataRepository.peopleCache.values()).sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '', 'pt'));
+
+      const renderPeople = (filter) => {
+        const q = (filter || '').toLowerCase();
+        const filtered = q ? people.filter(p => (p.name || '').toLowerCase().includes(q)) : people.slice(0, 80);
+        const listEl = picker.querySelector('.smax-resp-field-picker-list');
+        if (!listEl) return;
+        if (!filtered.length) {
+          listEl.innerHTML = '<div class="smax-resp-field-picker-empty">Nenhuma pessoa encontrada.</div>';
+          return;
+        }
+        listEl.innerHTML = filtered.map(p => {
+          const isActive = p.id === currentFollowerId;
+          const label = p.name || p.fullName || p.id;
+          return `<div class="smax-resp-field-picker-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(label)}">
+            ${isActive ? '✓ ' : ''}<span>${Utils.escapeHtml(label)}</span>
+          </div>`;
+        }).join('');
+        listEl.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const pid = item.dataset.id;
+            const pname = item.dataset.name;
+            const chipEl = backdrop.querySelector('#smax-resp-follower-chip-name');
+            const chipBtn = backdrop.querySelector('#smax-resp-follower-btn');
+            const curPending = getBatchPending();
+            const alreadySet = curPending.follower?.id === pid;
+            setBatchPending('follower', alreadySet ? null : { id: pid, name: pname });
+            if (chipEl) chipEl.textContent = alreadySet ? 'Seguidor' : pname;
+            if (chipBtn) {
+              chipBtn.classList.toggle('dirty', !alreadySet);
+              chipBtn.title = alreadySet ? 'Adicionar seguidor' : `Seguidor pendente: ${pname}`;
+            }
+            updateSendButton();
+            picker.style.display = 'none';
+          });
+        });
+      };
+
+      // Opção para limpar seguidor pendente
+      const cancelHtml = currentFollowerId
+        ? `<div class="smax-resp-field-picker-item" data-id="__clear__" style="color:#f87171;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:8px;margin-bottom:4px;">× Cancelar seguidor pendente</div>`
+        : '';
+
+      picker.innerHTML = cancelHtml + `
+        <input class="smax-resp-field-picker-search" type="text" placeholder="Buscar pessoa..." autocomplete="off">
+        <div class="smax-resp-field-picker-list"></div>`;
+
+      // Bind cancel option
+      const clearItem = picker.querySelector('[data-id="__clear__"]');
+      if (clearItem) {
+        clearItem.addEventListener('click', () => {
+          setBatchPending('follower', null);
+          const chipEl = backdrop.querySelector('#smax-resp-follower-chip-name');
+          const chipBtn = backdrop.querySelector('#smax-resp-follower-btn');
+          if (chipEl) chipEl.textContent = 'Seguidor';
+          if (chipBtn) { chipBtn.classList.remove('dirty'); chipBtn.title = 'Adicionar seguidor'; }
+          updateSendButton();
+          picker.style.display = 'none';
+        });
+      }
+
+      renderPeople('');
+      positionPicker(picker, btn);
+
+      const search = picker.querySelector('.smax-resp-field-picker-search');
+      search?.addEventListener('input', () => renderPeople(search.value));
+      search?.focus();
+
+      const closeOnOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== btn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside, true);
+          picker._closeHandler = null;
+        }
+      };
+      if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+      picker._closeHandler = closeOnOutside;
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+    };
+
     // Renderiza (ou re-renderiza) as pills de equipe — chamado no open() para garantir
     // que as equipes do SharedConfig (carregado assincronamente) já estejam disponíveis
     const renderTeamPills = () => {
@@ -9591,12 +9771,16 @@
                     <button id="smax-resp-statussccd-btn" class="smax-resp-meta-chip" title="Alterar status operacional">
                       🏷️ <span id="smax-resp-statussccd-chip-name">—</span><span class="chip-edit">✎</span>
                     </button>
+                    <button id="smax-resp-follower-btn" class="smax-resp-meta-chip" title="Adicionar seguidor">
+                      👁️ <span id="smax-resp-follower-chip-name">Seguidor</span><span class="chip-edit">✎</span>
+                    </button>
                   </div>
                   <!-- Pickers fixos (posicionados via JS) -->
                   <div id="smax-resp-gse-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-assignee-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-status-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-statussccd-picker" class="smax-resp-field-picker" style="max-height:320px;overflow-y:auto;"></div>
+                  <div id="smax-resp-follower-picker" class="smax-resp-field-picker"></div>
                   <div id="smax-resp-desc-panel">
                     <div style="font-size:10px;font-weight:600;color:var(--sp-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">📋 Descrição</div>
                     <div id="smax-resp-desc-content"></div>
@@ -9842,7 +10026,7 @@
           if (missingIds.length) {
             try {
               const _tid = ApiClient.getTenantId() || '213963628';
-              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName&size=200&TENANTID=${_tid}`;
+              const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName,Upn,Email&size=200&TENANTID=${_tid}`;
               const _r = await fetch(_url, { credentials: 'include' });
               if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
             } catch (_e) { console.warn('[SMAX ResponseHUD] fetchMissingAssignees:', _e); }
@@ -9906,6 +10090,8 @@
       backdrop.querySelector('#smax-resp-status-btn')?.addEventListener('click', openStatusPicker);
       // Status Operacional picker
       backdrop.querySelector('#smax-resp-statussccd-btn')?.addEventListener('click', openStatusSCCDPicker);
+      // Seguidor picker
+      backdrop.querySelector('#smax-resp-follower-btn')?.addEventListener('click', openFollowerPicker);
 
       // Botão Vincular Global — suporte a lote, auto-designar, detectar duplicata
       backdrop.querySelector('#smax-resp-global-link-btn')?.addEventListener('click', async () => {
@@ -9987,6 +10173,15 @@
           setStatusMsg(`✓ ${ok} chamado(s) vinculado(s) ao Global #${globalId}.`, '#4ade80');
         } else {
           setStatusMsg(`${ok} vinculado(s), ${fail} erro(s).`, '#fca5a5');
+        }
+
+        // Limpar editor de solução e CompletionCode após vincular global,
+        // impedindo reenvio acidental da solução existente via "Enviar"
+        if (ok > 0) {
+          const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
+          if (solEl) solEl.innerHTML = '';
+          backdrop?.querySelectorAll('.smax-resp-completion-btn').forEach(b => b.classList.remove('active'));
+          updateSendButton();
         }
       });
 
