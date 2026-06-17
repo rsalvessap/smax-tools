@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.26
+// @version      2.27
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @updateURL    https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
@@ -639,8 +639,36 @@
     </table>`;
 
     // Build TOC
-    let tocHtml = '<div style="margin:0 0 18pt;"><h2 style="color:#1e3a5f;font-size:13pt;margin:0 0 8pt;">📑 Índice</h2>';
+    const tocEntry = (id) => {
+      const idx = ids.indexOf(id);
+      const r = results[idx];
+      if (!r?.ok) return `<tr><td colspan="2" style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a> — <span style="color:#dc2626;">Erro</span></td></tr>`;
+      const d = r.data;
+      const subj = d.subject ? ` — ${esc(truncate(d.subject, 55))}` : '';
+      let detail = '';
+      if (changes) {
+        const chg = changes[id];
+        if (chg?.isNew) {
+          detail = '<span style="color:#059669;font-weight:bold;">NOVO</span>';
+        } else if (chg?.hasChanges) {
+          const parts = [];
+          chg.changes.filter(c=>!c.newComments&&!c.isLinkedChange).forEach(c => parts.push(`${c.label}: ${esc(c.from)} → ${esc(c.to)}`));
+          if (chg.changes.some(c=>c.newComments)) parts.push('Novo comentário');
+          const lc = chg.changes.find(c=>c.isLinkedChange);
+          if (lc) parts.push(`Vinculados: ${esc(lc.from)} → ${esc(lc.to)}`);
+          detail = parts.length ? `<span style="color:#78350f;">${parts.join('; ')}</span>` : '';
+        } else {
+          detail = '<span style="color:#9ca3af;">Sem mudanças</span>';
+        }
+      }
+      return `<tr>
+        <td style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj}</td>
+        ${detail ? `<td style="padding:2pt 8pt 2pt 6pt;font-size:8pt;text-align:right;white-space:nowrap;border-bottom:1pt dotted #e2e8f0;vertical-align:top;">${detail}</td>` : '<td style="border-bottom:1pt dotted #e2e8f0;"></td>'}
+      </tr>`;
+    };
 
+    let tocHtml = '<div style="page-break-after:always;"><h2 style="color:#1e3a5f;font-size:14pt;margin:0 0 12pt;">📑 Índice</h2>';
+    tocHtml += '<table style="width:100%;border-collapse:collapse;">';
     if (changes) {
       const tocSections = [
         { label:'✅ Encerrado', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; }) },
@@ -649,23 +677,18 @@
       ];
       tocSections.forEach(s => {
         if (!s.items.length) return;
-        tocHtml += `<p style="margin:8pt 0 2pt;font-size:10pt;font-weight:bold;color:#374151;">${s.label} (${s.items.length})</p>`;
-        s.items.forEach(id => {
-          const idx = ids.indexOf(id);
-          const r = results[idx];
-          const subj = r?.ok ? r.data.subject : '';
-          tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;padding-left:12pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
-        });
+        tocHtml += `<tr><td colspan="2" style="padding:10pt 0 3pt;font-size:11pt;font-weight:bold;color:#1e3a5f;border-bottom:2pt solid #e2e8f0;">${s.label} (${s.items.length})</td></tr>`;
+        s.items.forEach(id => { tocHtml += tocEntry(id); });
       });
     } else {
       ids.forEach((id,i) => {
         const r = results[i];
-        const subj = r?.ok ? r.data.subject : '';
         const emoji = r?.ok ? r.data.statusEmoji : '❌';
-        tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
+        const subj = r?.ok && r.data.subject ? ` — ${esc(truncate(r.data.subject, 55))}` : '';
+        tocHtml += `<tr><td colspan="2" style="padding:2pt 0;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj}</td></tr>`;
       });
     }
-    tocHtml += '</div>';
+    tocHtml += '</table></div>';
 
     return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
     <head><meta charset="utf-8"><title>${esc(title)}</title>
@@ -825,8 +848,36 @@
     </table>`;
 
     // Build TOC
-    let tocHtml = '<div style="margin:0 0 18pt;"><h2 style="color:#1e3a5f;font-size:13pt;margin:0 0 8pt;">📑 Índice</h2>';
+    const tocEntry = (id) => {
+      const idx = ids.indexOf(id);
+      const r = results[idx];
+      if (!r?.ok) return `<tr><td colspan="2" style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a> — <span style="color:#dc2626;">Erro</span></td></tr>`;
+      const d = r.data;
+      const subj = d.subject ? ` — ${esc(truncate(d.subject, 55))}` : '';
+      let detail = '';
+      if (changes) {
+        const chg = changes[id];
+        if (chg?.isNew) {
+          detail = '<span style="color:#059669;font-weight:bold;">NOVO</span>';
+        } else if (chg?.hasChanges) {
+          const parts = [];
+          chg.changes.filter(c=>!c.newComments&&!c.isLinkedChange).forEach(c => parts.push(`${c.label}: ${esc(c.from)} → ${esc(c.to)}`));
+          if (chg.changes.some(c=>c.newComments)) parts.push('Novo comentário');
+          const lc = chg.changes.find(c=>c.isLinkedChange);
+          if (lc) parts.push(`Vinculados: ${esc(lc.from)} → ${esc(lc.to)}`);
+          detail = parts.length ? `<span style="color:#78350f;">${parts.join('; ')}</span>` : '';
+        } else {
+          detail = '<span style="color:#9ca3af;">Sem mudanças</span>';
+        }
+      }
+      return `<tr>
+        <td style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj}</td>
+        ${detail ? `<td style="padding:2pt 8pt 2pt 6pt;font-size:8pt;text-align:right;white-space:nowrap;border-bottom:1pt dotted #e2e8f0;vertical-align:top;">${detail}</td>` : '<td style="border-bottom:1pt dotted #e2e8f0;"></td>'}
+      </tr>`;
+    };
 
+    let tocHtml = '<div style="page-break-after:always;"><h2 style="color:#1e3a5f;font-size:14pt;margin:0 0 12pt;">📑 Índice</h2>';
+    tocHtml += '<table style="width:100%;border-collapse:collapse;">';
     if (changes) {
       const tocSections = [
         { label:'✅ Encerrado', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; }) },
@@ -835,23 +886,18 @@
       ];
       tocSections.forEach(s => {
         if (!s.items.length) return;
-        tocHtml += `<p style="margin:8pt 0 2pt;font-size:10pt;font-weight:bold;color:#374151;">${s.label} (${s.items.length})</p>`;
-        s.items.forEach(id => {
-          const idx = ids.indexOf(id);
-          const r = results[idx];
-          const subj = r?.ok ? r.data.subject : '';
-          tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;padding-left:12pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
-        });
+        tocHtml += `<tr><td colspan="2" style="padding:10pt 0 3pt;font-size:11pt;font-weight:bold;color:#1e3a5f;border-bottom:2pt solid #e2e8f0;">${s.label} (${s.items.length})</td></tr>`;
+        s.items.forEach(id => { tocHtml += tocEntry(id); });
       });
     } else {
       ids.forEach((id,i) => {
         const r = results[i];
-        const subj = r?.ok ? r.data.subject : '';
         const emoji = r?.ok ? r.data.statusEmoji : '❌';
-        tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
+        const subj = r?.ok && r.data.subject ? ` — ${esc(truncate(r.data.subject, 55))}` : '';
+        tocHtml += `<tr><td colspan="2" style="padding:2pt 0;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj}</td></tr>`;
       });
     }
-    tocHtml += '</div>';
+    tocHtml += '</table></div>';
 
     return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
     <head><meta charset="utf-8"><title>${esc(title)} — ${todayStr()}</title>
