@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.25
-// @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/CSV/PDF/Relatório e painel redimensionável.
+// @version      2.26
+// @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @updateURL    https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
 // @downloadURL  https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
@@ -568,7 +568,7 @@
         }
       }
 
-      return `<div style="margin-bottom:14pt;padding-bottom:10pt;border-bottom:1pt solid #e5e7eb;">
+      return `<div style="margin-bottom:14pt;padding-bottom:10pt;border-bottom:1pt solid #e5e7eb;"><a name="t-${esc(d.ticketId)}"></a>
         <p style="margin:0 0 2pt;font-size:13pt;font-weight:bold;color:#111827;">
           ${lineEmoji} <a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" style="color:#1d4ed8;text-decoration:none;">${esc(d.ticketId)}</a>${newMarker}
           ${d.subject ? `<span style="font-size:11pt;font-weight:normal;color:#374151;"> — ${esc(d.subject)}</span>` : ''}${globalPart}
@@ -580,7 +580,7 @@
     };
 
     const sectionHtml = (heading, color, bg, border, ticketsInSection) => `
-      <div style="margin:16pt 0 8pt;">
+      <div style="margin:16pt 0 8pt;page-break-before:always;">
         <h2 style="color:${color};background:${bg};border-left:4pt solid ${border};padding:6pt 12pt;font-size:13pt;margin:0 0 10pt;">${heading} (${ticketsInSection.length})</h2>
         ${ticketsInSection.map(id => ticketHtml(id, ids.indexOf(id))).join('')}
       </div>`;
@@ -597,13 +597,85 @@
       ids.forEach((id,i) => { body += ticketHtml(id, i); });
     }
 
+    // Build summary stats
+    const statusCount = {};
+    ids.forEach((id,i) => {
+      const r = results[i];
+      if (!r?.ok) return;
+      const lbl = r.data.statusLabel || 'Desconhecido';
+      statusCount[lbl] = (statusCount[lbl]||0) + 1;
+    });
+    const okCount = ids.filter((_,i) => results[i]?.ok).length;
+    const errCount = ids.length - okCount;
+    const globalCount = ids.filter((_,i) => results[i]?.ok && results[i].data.isGlobalParent).length;
+
+    let situacaoHtml = '';
+    if (changes) {
+      const cEnc = ids.filter((id,i) => results[i]?.ok && CLOSED_STATUSES.has(results[i].data.statusRaw) && changes[id]?.hasChanges).length;
+      const cAtu = ids.filter((id,i) => results[i]?.ok && !CLOSED_STATUSES.has(results[i].data.statusRaw) && changes[id]?.hasChanges).length;
+      const cSem = ids.filter((id,i) => results[i]?.ok && !changes[id]?.hasChanges).length;
+      situacaoHtml = `
+        <tr><td colspan="4" style="padding:6pt 10pt 2pt;font-weight:bold;font-size:9pt;color:#475569;border-top:1pt solid #e2e8f0;">Situação (vs. consulta anterior)</td></tr>
+        <tr>
+          <td style="padding:2pt 10pt;font-size:9pt;">Com atualização: <b>${cAtu}</b></td>
+          <td style="padding:2pt 10pt;font-size:9pt;">Sem atualização: <b>${cSem}</b></td>
+          <td style="padding:2pt 10pt;font-size:9pt;">Encerrados: <b>${cEnc}</b></td>
+          <td style="padding:2pt 10pt;font-size:9pt;">${errCount ? `Erros: <b style="color:#dc2626;">${errCount}</b>` : ''}</td>
+        </tr>`;
+    }
+
+    const statusCells = Object.entries(statusCount).map(([lbl,n]) => `<td style="padding:2pt 10pt;font-size:9pt;">${esc(lbl)}: <b>${n}</b></td>`);
+    const statusRows = [];
+    for (let i = 0; i < statusCells.length; i += 4) {
+      statusRows.push(`<tr>${statusCells.slice(i, i+4).join('')}</tr>`);
+    }
+
+    const summaryHtml = `
+    <table style="width:100%;border-collapse:collapse;margin:0 0 14pt;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:4pt;">
+      <tr><td colspan="4" style="padding:6pt 10pt 2pt;font-weight:bold;font-size:9pt;color:#475569;">Por status</td></tr>
+      ${statusRows.join('')}
+      <tr><td colspan="4" style="padding:2pt 10pt;font-size:9pt;color:#6b7280;">Globais (pai): <b>${globalCount}</b></td></tr>
+      ${situacaoHtml}
+    </table>`;
+
+    // Build TOC
+    let tocHtml = '<div style="margin:0 0 18pt;"><h2 style="color:#1e3a5f;font-size:13pt;margin:0 0 8pt;">📑 Índice</h2>';
+
+    if (changes) {
+      const tocSections = [
+        { label:'✅ Encerrado', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; }) },
+        { label:'⏸️ Sem atualização', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && !changes[id]?.hasChanges; }) },
+        { label:'🆕 Nova atualização', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; }) },
+      ];
+      tocSections.forEach(s => {
+        if (!s.items.length) return;
+        tocHtml += `<p style="margin:8pt 0 2pt;font-size:10pt;font-weight:bold;color:#374151;">${s.label} (${s.items.length})</p>`;
+        s.items.forEach(id => {
+          const idx = ids.indexOf(id);
+          const r = results[idx];
+          const subj = r?.ok ? r.data.subject : '';
+          tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;padding-left:12pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
+        });
+      });
+    } else {
+      ids.forEach((id,i) => {
+        const r = results[i];
+        const subj = r?.ok ? r.data.subject : '';
+        const emoji = r?.ok ? r.data.statusEmoji : '❌';
+        tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
+      });
+    }
+    tocHtml += '</div>';
+
     return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
     <head><meta charset="utf-8"><title>${esc(title)}</title>
-    <style>body{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#111827;margin:2cm;}p{margin:0 0 4pt;line-height:1.5;}img{max-width:100%;}table{border-collapse:collapse;}</style>
+    <style>body{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#111827;margin:2cm;}p{margin:0 0 4pt;line-height:1.5;}img{max-width:100%;}table{border-collapse:collapse;}@page{@bottom-center{content:"Página " counter(page);font-size:8pt;color:#6b7280;}}</style>
     </head><body>
     <h1 style="color:#1e3a5f;font-size:17pt;margin:0 0 4pt;">${esc(title)}</h1>
     <p style="color:#6b7280;font-size:9pt;margin:0 0 14pt;">${ids.length} chamado${ids.length!==1?'s':''}</p>
     <hr style="border:none;border-top:2pt solid #1d4ed8;margin:0 0 16pt;">
+    ${summaryHtml}
+    ${tocHtml}
     ${body}</body></html>`;
   };
 
@@ -681,7 +753,7 @@
       const comLabel = fields.has('comments') && commentsBlock
         ? `<p style="margin:5pt 0 2pt;font-size:9pt;font-weight:bold;color:#475569;">${isComparison && chg?.hasChanges ? 'NOVOS COMENTÁRIOS' : 'ÚLTIMOS COMENTÁRIOS'}</p>` : '';
 
-      return `<div style="margin-bottom:16pt;page-break-inside:avoid;">
+      return `<div style="margin-bottom:16pt;page-break-inside:avoid;"><a name="t-${esc(d.ticketId)}"></a>
         <p style="margin:0 0 4pt;font-size:13pt;font-weight:bold;color:#1e3a5f;">
           ${d.statusEmoji} <a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" style="color:#1d4ed8;text-decoration:none;">#${d.ticketId}</a>
           ${d.subject ? `<span style="color:#374151;font-size:11pt;font-weight:normal;"> — ${esc(d.subject)}</span>` : ''}${globalInfo}${linkedInfo}
@@ -704,43 +776,93 @@
       sections.forEach(s => {
         const inSection = ids.filter((id,i)=>s.filter(id,i));
         if (!inSection.length) return;
-        body += `<h2 style="color:${s.color};background:${s.bg};border-left:4pt solid ${s.border};padding:8pt 12pt;margin:16pt 0 10pt;font-size:13pt;">${s.heading} (${inSection.length})</h2>`;
+        body += `<h2 style="color:${s.color};background:${s.bg};border-left:4pt solid ${s.border};padding:8pt 12pt;margin:16pt 0 10pt;font-size:13pt;page-break-before:always;">${s.heading} (${inSection.length})</h2>`;
         inSection.forEach(id => { body += ticketHtml(id, ids.indexOf(id)); });
       });
     } else {
       ids.forEach((id,i) => { body += ticketHtml(id,i); });
     }
 
+    // Build summary stats
+    const statusCount = {};
+    ids.forEach((id,i) => {
+      const r = results[i];
+      if (!r?.ok) return;
+      const lbl = r.data.statusLabel || 'Desconhecido';
+      statusCount[lbl] = (statusCount[lbl]||0) + 1;
+    });
+    const okCount = ids.filter((_,i) => results[i]?.ok).length;
+    const errCount = ids.length - okCount;
+    const globalCount = ids.filter((_,i) => results[i]?.ok && results[i].data.isGlobalParent).length;
+
+    let situacaoHtml = '';
+    if (changes) {
+      const cEnc = ids.filter((id,i) => results[i]?.ok && CLOSED_STATUSES.has(results[i].data.statusRaw) && changes[id]?.hasChanges).length;
+      const cAtu = ids.filter((id,i) => results[i]?.ok && !CLOSED_STATUSES.has(results[i].data.statusRaw) && changes[id]?.hasChanges).length;
+      const cSem = ids.filter((id,i) => results[i]?.ok && !changes[id]?.hasChanges).length;
+      situacaoHtml = `
+        <tr><td colspan="4" style="padding:6pt 10pt 2pt;font-weight:bold;font-size:9pt;color:#475569;border-top:1pt solid #e2e8f0;">Situação (vs. consulta anterior)</td></tr>
+        <tr>
+          <td style="padding:2pt 10pt;font-size:9pt;">Com atualização: <b>${cAtu}</b></td>
+          <td style="padding:2pt 10pt;font-size:9pt;">Sem atualização: <b>${cSem}</b></td>
+          <td style="padding:2pt 10pt;font-size:9pt;">Encerrados: <b>${cEnc}</b></td>
+          <td style="padding:2pt 10pt;font-size:9pt;">${errCount ? `Erros: <b style="color:#dc2626;">${errCount}</b>` : ''}</td>
+        </tr>`;
+    }
+
+    const statusCells = Object.entries(statusCount).map(([lbl,n]) => `<td style="padding:2pt 10pt;font-size:9pt;">${esc(lbl)}: <b>${n}</b></td>`);
+    const statusRows = [];
+    for (let i = 0; i < statusCells.length; i += 4) {
+      statusRows.push(`<tr>${statusCells.slice(i, i+4).join('')}</tr>`);
+    }
+
+    const summaryHtml = `
+    <table style="width:100%;border-collapse:collapse;margin:0 0 14pt;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:4pt;">
+      <tr><td colspan="4" style="padding:6pt 10pt 2pt;font-weight:bold;font-size:9pt;color:#475569;">Por status</td></tr>
+      ${statusRows.join('')}
+      <tr><td colspan="4" style="padding:2pt 10pt;font-size:9pt;color:#6b7280;">Globais (pai): <b>${globalCount}</b></td></tr>
+      ${situacaoHtml}
+    </table>`;
+
+    // Build TOC
+    let tocHtml = '<div style="margin:0 0 18pt;"><h2 style="color:#1e3a5f;font-size:13pt;margin:0 0 8pt;">📑 Índice</h2>';
+
+    if (changes) {
+      const tocSections = [
+        { label:'✅ Encerrado', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; }) },
+        { label:'⏸️ Sem atualização', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && !changes[id]?.hasChanges; }) },
+        { label:'🆕 Nova atualização', items: ids.filter((id,i)=>{ const r=results[i]; return r?.ok && !CLOSED_STATUSES.has(r.data.statusRaw) && changes[id]?.hasChanges; }) },
+      ];
+      tocSections.forEach(s => {
+        if (!s.items.length) return;
+        tocHtml += `<p style="margin:8pt 0 2pt;font-size:10pt;font-weight:bold;color:#374151;">${s.label} (${s.items.length})</p>`;
+        s.items.forEach(id => {
+          const idx = ids.indexOf(id);
+          const r = results[idx];
+          const subj = r?.ok ? r.data.subject : '';
+          tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;padding-left:12pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
+        });
+      });
+    } else {
+      ids.forEach((id,i) => {
+        const r = results[i];
+        const subj = r?.ok ? r.data.subject : '';
+        const emoji = r?.ok ? r.data.statusEmoji : '❌';
+        tocHtml += `<p style="margin:0 0 1pt;font-size:9pt;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj ? ` — ${esc(truncate(subj,60))}` : ''}</p>`;
+      });
+    }
+    tocHtml += '</div>';
+
     return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
     <head><meta charset="utf-8"><title>${esc(title)} — ${todayStr()}</title>
-    <style>body{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1e293b;margin:2cm;}p{margin:0 0 4pt;line-height:1.5;}img{max-width:100%;height:auto;}table{border-collapse:collapse;}hr{border:none;border-top:1pt solid #e2e8f0;}</style>
+    <style>body{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1e293b;margin:2cm;}p{margin:0 0 4pt;line-height:1.5;}img{max-width:100%;height:auto;}table{border-collapse:collapse;}hr{border:none;border-top:1pt solid #e2e8f0;}@page{@bottom-center{content:"Página " counter(page);font-size:8pt;color:#6b7280;}}</style>
     </head><body>
     <h1 style="color:#1e3a5f;font-size:18pt;margin:0 0 4pt;">${esc(title)}</h1>
     <p style="color:#64748b;font-size:10pt;margin:0 0 18pt;">${todayStr()} · ${ids.length} chamado${ids.length!==1?'s':''}</p>
     <hr style="border:none;border-top:2pt solid #1d4ed8;margin:0 0 18pt;">
+    ${summaryHtml}
+    ${tocHtml}
     ${body}</body></html>`;
-  };
-
-  // ══════════════════════════════════════════════════════════════════
-  // EXPORTAÇÃO — CSV
-  // ══════════════════════════════════════════════════════════════════
-
-  const buildCsv = (results, ids) => {
-    const cols = ['ID','Assunto','Status','Status Operacional','Vinculados','Abertura','Últ. Atualização',
-      'É Global','Global Pai','Solicitante','Grupo','Especialista',
-      'Descrição','Solução','Comentário 1','Comentário 2','Comentário 3'];
-    const e = (v) => `"${String(v||'').replace(/"/g,'""')}"`;
-    const ct = (c) => c ? `[${c.date}] ${c.from}: ${c.bodyText}` : '';
-    const rows = ids.map((id,i)=>{
-      const r = results[i];
-      if (!r?.ok) return [id,'ERRO:'+(r?.error||''),...Array(cols.length-2).fill('')].map(e).join(',');
-      const d = r.data;
-      return [d.ticketId,d.subject,d.statusLabel,d.statusSCCDLabel,d.linkedCount||0,d.createTime,d.lastUpdateTime,
-        d.isGlobal?'Sim':'Não',d.globalId,d.requestedFor,d.group,d.assignee,
-        htmlToText(d.descHtml),htmlToText(d.solutionHtml),
-        ct(d.lastComments[2]),ct(d.lastComments[1]),ct(d.lastComments[0])].map(e).join(',');
-    });
-    return [cols.map(e).join(','),...rows].join('\r\n');
   };
 
   // ══════════════════════════════════════════════════════════════════
@@ -816,7 +938,7 @@
   const printAsPdf = (htmlContent) => {
     const win = window.open('','_blank','width=900,height=700');
     if (!win) { alert('Popup bloqueado. Permita popups para este site.'); return; }
-    win.document.write(htmlContent.replace('</head>','<style>@media print{body{margin:1cm;}*{-webkit-print-color-adjust:exact;}}</style></head>'));
+    win.document.write(htmlContent.replace('</head>','<style>@media print{body{margin:1cm;}*{-webkit-print-color-adjust:exact;}@page{@bottom-center{content:"Página " counter(page);font-size:8pt;color:#6b7280;}}}</style></head>'));
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
   };
@@ -1196,7 +1318,6 @@
               <button class="sqc-btn-secondary" id="sqc-btn-excel">📊 Excel (.xls)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-pdf-consulta">🖨️ PDF</button>
               <button class="sqc-btn-secondary" id="sqc-btn-md">📝 Markdown (.md)</button>
-              <button class="sqc-btn-secondary" id="sqc-btn-csv">📊 CSV (.csv)</button>
               <div class="sqc-export-divider">Exportar relatório</div>
               <button class="sqc-btn-secondary" id="sqc-btn-rel-word">📋 Word (.doc)</button>
               <button class="sqc-btn-secondary" id="sqc-btn-rel-excel">📊 Excel (.xls)</button>
@@ -2008,11 +2129,6 @@
         if (!lastResults.length) return;
         downloadFile(buildMarkdown(lastResults,lastIds,lastChanges,activeList()?.name), `${fname()}.md`, 'text/markdown');
       });
-      panel.querySelector('#sqc-btn-csv').addEventListener('click', () => {
-        if (!lastResults.length) return;
-        downloadFile(buildCsv(lastResults,lastIds), `${fname()}.csv`, 'text/csv');
-      });
-
       // Exports — relatório
       panel.querySelector('#sqc-btn-rel-word').addEventListener('click', () => {
         if (!lastResults.length) return;
