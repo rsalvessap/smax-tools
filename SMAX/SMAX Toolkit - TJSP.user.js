@@ -3299,7 +3299,8 @@
       });
     };
 
-    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship bulk. */
+    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship bulk.
+     *  Usa o mesmo padrão de postCreateRequestCausesRequest (relationships array). */
     const postAddFollower = (ticketId, personId) => {
       if (!prefs.enableRealWrites) {
         console.warn('[SMAX] Real writes disabled.');
@@ -3312,14 +3313,10 @@
         return Promise.resolve(null);
       }
       const body = {
-        entities: [{
-          entity_type: 'Follow',
-          properties: {
-            FollowedEntityType: 'Request',
-            FollowedEntityId: ticket,
-            FollowedByPerson: person,
-            IsSystem: false
-          }
+        relationships: [{
+          name: 'RequestFollowedByPerson',
+          firstEndpoint: { Request: ticket },
+          secondEndpoint: { Person: person }
         }],
         operation: 'CREATE'
       };
