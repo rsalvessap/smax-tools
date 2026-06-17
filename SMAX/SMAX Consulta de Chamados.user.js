@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Consulta de Chamados - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.27
+// @version      2.28
 // @description  Consulta de chamados SMAX com listas salvas, detecção de mudanças, exportação Word/Markdown/PDF/Relatório e painel redimensionável.
 // @author       rsalvessap
 // @updateURL    https://raw.githubusercontent.com/rsalvessap/SMAX-TOOLS/master/SMAX/SMAX%20Consulta%20de%20Chamados.user.js
@@ -210,6 +210,31 @@
     }
     if (props.RequestCausesRequestCount) return Number(props.RequestCausesRequestCount) || 0;
     return 0;
+  };
+
+  // Converte <img src="..."> para data URIs base64 (embute imagens no HTML)
+  const embedImages = async (html) => {
+    if (!html) return html;
+    const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    const matches = [...html.matchAll(imgRegex)];
+    if (!matches.length) return html;
+    let result = html;
+    for (const match of matches) {
+      const src = match[1];
+      if (src.startsWith('data:')) continue;
+      try {
+        const resp = await fetch(src, { credentials: 'same-origin' });
+        if (!resp.ok) continue;
+        const blob = await resp.blob();
+        const reader = new FileReader();
+        const dataUri = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+        result = result.split(src).join(dataUri);
+      } catch { /* skip unreachable images */ }
+    }
+    return result;
   };
 
   const extractTicketData = (payload, id, overrideLinkedCount = -1) => {
@@ -568,7 +593,7 @@
         }
       }
 
-      return `<div style="margin-bottom:14pt;padding-bottom:10pt;border-bottom:1pt solid #e5e7eb;"><a name="t-${esc(d.ticketId)}"></a>
+      return `<div style="margin-bottom:14pt;padding-bottom:10pt;border-bottom:1pt solid #e5e7eb;"><a name="t_${esc(d.ticketId)}"></a>
         <p style="margin:0 0 2pt;font-size:13pt;font-weight:bold;color:#111827;">
           ${lineEmoji} <a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" style="color:#1d4ed8;text-decoration:none;">${esc(d.ticketId)}</a>${newMarker}
           ${d.subject ? `<span style="font-size:11pt;font-weight:normal;color:#374151;"> — ${esc(d.subject)}</span>` : ''}${globalPart}
@@ -638,11 +663,12 @@
       ${situacaoHtml}
     </table>`;
 
-    // Build TOC
+    // Build TOC with PAGEREF page numbers (Word-only via conditional comments)
+    const pagerefField = (id) => `<!--[if supportFields]><span style="mso-element:field-begin"></span> PAGEREF t_${esc(id)} \\h <span style="mso-element:field-separate"></span><![endif]-->…<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->`;
     const tocEntry = (id) => {
       const idx = ids.indexOf(id);
       const r = results[idx];
-      if (!r?.ok) return `<tr><td colspan="2" style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a> — <span style="color:#dc2626;">Erro</span></td></tr>`;
+      if (!r?.ok) return `<tr><td colspan="3" style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t_${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a> — <span style="color:#dc2626;">Erro</span></td></tr>`;
       const d = r.data;
       const subj = d.subject ? ` — ${esc(truncate(d.subject, 55))}` : '';
       let detail = '';
@@ -662,8 +688,9 @@
         }
       }
       return `<tr>
-        <td style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj}</td>
+        <td style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t_${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj}</td>
         ${detail ? `<td style="padding:2pt 8pt 2pt 6pt;font-size:8pt;text-align:right;white-space:nowrap;border-bottom:1pt dotted #e2e8f0;vertical-align:top;">${detail}</td>` : '<td style="border-bottom:1pt dotted #e2e8f0;"></td>'}
+        <td style="padding:2pt 6pt 2pt 0;font-size:8pt;text-align:right;border-bottom:1pt dotted #e2e8f0;color:#6b7280;">${pagerefField(id)}</td>
       </tr>`;
     };
 
@@ -677,7 +704,7 @@
       ];
       tocSections.forEach(s => {
         if (!s.items.length) return;
-        tocHtml += `<tr><td colspan="2" style="padding:10pt 0 3pt;font-size:11pt;font-weight:bold;color:#1e3a5f;border-bottom:2pt solid #e2e8f0;">${s.label} (${s.items.length})</td></tr>`;
+        tocHtml += `<tr><td colspan="3" style="padding:10pt 0 3pt;font-size:11pt;font-weight:bold;color:#1e3a5f;border-bottom:2pt solid #e2e8f0;">${s.label} (${s.items.length})</td></tr>`;
         s.items.forEach(id => { tocHtml += tocEntry(id); });
       });
     } else {
@@ -685,7 +712,7 @@
         const r = results[i];
         const emoji = r?.ok ? r.data.statusEmoji : '❌';
         const subj = r?.ok && r.data.subject ? ` — ${esc(truncate(r.data.subject, 55))}` : '';
-        tocHtml += `<tr><td colspan="2" style="padding:2pt 0;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj}</td></tr>`;
+        tocHtml += `<tr><td colspan="2" style="padding:2pt 0;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t_${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj}</td><td style="padding:2pt 6pt 2pt 0;font-size:8pt;text-align:right;border-bottom:1pt dotted #e2e8f0;color:#6b7280;">${pagerefField(id)}</td></tr>`;
       });
     }
     tocHtml += '</table></div>';
@@ -776,7 +803,7 @@
       const comLabel = fields.has('comments') && commentsBlock
         ? `<p style="margin:5pt 0 2pt;font-size:9pt;font-weight:bold;color:#475569;">${isComparison && chg?.hasChanges ? 'NOVOS COMENTÁRIOS' : 'ÚLTIMOS COMENTÁRIOS'}</p>` : '';
 
-      return `<div style="margin-bottom:16pt;page-break-inside:avoid;"><a name="t-${esc(d.ticketId)}"></a>
+      return `<div style="margin-bottom:16pt;page-break-inside:avoid;"><a name="t_${esc(d.ticketId)}"></a>
         <p style="margin:0 0 4pt;font-size:13pt;font-weight:bold;color:#1e3a5f;">
           ${d.statusEmoji} <a href="https://suporte.tjsp.jus.br/saw/Request/${esc(d.ticketId)}/general" style="color:#1d4ed8;text-decoration:none;">#${d.ticketId}</a>
           ${d.subject ? `<span style="color:#374151;font-size:11pt;font-weight:normal;"> — ${esc(d.subject)}</span>` : ''}${globalInfo}${linkedInfo}
@@ -847,11 +874,12 @@
       ${situacaoHtml}
     </table>`;
 
-    // Build TOC
+    // Build TOC with PAGEREF page numbers (Word-only via conditional comments)
+    const pagerefField = (id) => `<!--[if supportFields]><span style="mso-element:field-begin"></span> PAGEREF t_${esc(id)} \\h <span style="mso-element:field-separate"></span><![endif]-->…<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->`;
     const tocEntry = (id) => {
       const idx = ids.indexOf(id);
       const r = results[idx];
-      if (!r?.ok) return `<tr><td colspan="2" style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a> — <span style="color:#dc2626;">Erro</span></td></tr>`;
+      if (!r?.ok) return `<tr><td colspan="3" style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t_${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a> — <span style="color:#dc2626;">Erro</span></td></tr>`;
       const d = r.data;
       const subj = d.subject ? ` — ${esc(truncate(d.subject, 55))}` : '';
       let detail = '';
@@ -871,8 +899,9 @@
         }
       }
       return `<tr>
-        <td style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj}</td>
+        <td style="padding:2pt 0 2pt 14pt;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t_${esc(id)}" style="color:#1d4ed8;text-decoration:none;">#${esc(id)}</a>${subj}</td>
         ${detail ? `<td style="padding:2pt 8pt 2pt 6pt;font-size:8pt;text-align:right;white-space:nowrap;border-bottom:1pt dotted #e2e8f0;vertical-align:top;">${detail}</td>` : '<td style="border-bottom:1pt dotted #e2e8f0;"></td>'}
+        <td style="padding:2pt 6pt 2pt 0;font-size:8pt;text-align:right;border-bottom:1pt dotted #e2e8f0;color:#6b7280;">${pagerefField(id)}</td>
       </tr>`;
     };
 
@@ -886,7 +915,7 @@
       ];
       tocSections.forEach(s => {
         if (!s.items.length) return;
-        tocHtml += `<tr><td colspan="2" style="padding:10pt 0 3pt;font-size:11pt;font-weight:bold;color:#1e3a5f;border-bottom:2pt solid #e2e8f0;">${s.label} (${s.items.length})</td></tr>`;
+        tocHtml += `<tr><td colspan="3" style="padding:10pt 0 3pt;font-size:11pt;font-weight:bold;color:#1e3a5f;border-bottom:2pt solid #e2e8f0;">${s.label} (${s.items.length})</td></tr>`;
         s.items.forEach(id => { tocHtml += tocEntry(id); });
       });
     } else {
@@ -894,7 +923,7 @@
         const r = results[i];
         const emoji = r?.ok ? r.data.statusEmoji : '❌';
         const subj = r?.ok && r.data.subject ? ` — ${esc(truncate(r.data.subject, 55))}` : '';
-        tocHtml += `<tr><td colspan="2" style="padding:2pt 0;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t-${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj}</td></tr>`;
+        tocHtml += `<tr><td colspan="2" style="padding:2pt 0;font-size:9pt;border-bottom:1pt dotted #e2e8f0;"><a href="#t_${esc(id)}" style="color:#1d4ed8;text-decoration:none;">${emoji} #${esc(id)}</a>${subj}</td><td style="padding:2pt 6pt 2pt 0;font-size:8pt;text-align:right;border-bottom:1pt dotted #e2e8f0;color:#6b7280;">${pagerefField(id)}</td></tr>`;
       });
     }
     tocHtml += '</table></div>';
@@ -1715,6 +1744,22 @@
       CONCURRENCY,
       (done,total) => { progressEl.textContent = `Consultando… ${done}/${total}`; }
     );
+    // Embutir imagens como base64 data URIs (descrição, solução e comentários)
+    progressEl.textContent = `Incorporando imagens… 0/${fetched.filter(r=>r?.ok).length}`;
+    let imgDone = 0;
+    const imgTotal = fetched.filter(r=>r?.ok).length;
+    await Promise.all(fetched.map(async (r) => {
+      if (!r?.ok) return;
+      const d = r.data;
+      d.descHtml = await embedImages(d.descHtml);
+      d.solutionHtml = await embedImages(d.solutionHtml);
+      for (const c of d.lastComments) {
+        c.body = await embedImages(c.body);
+      }
+      imgDone++;
+      progressEl.textContent = `Incorporando imagens… ${imgDone}/${imgTotal}`;
+    }));
+
     lastResults = fetched;
 
     if (mode === 'list' && activeListId) {
