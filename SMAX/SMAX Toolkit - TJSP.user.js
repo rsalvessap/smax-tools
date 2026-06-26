@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.54
+// @version      2.55
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.54';
+  const SMAX_TOOLKIT_VERSION = '2.55';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -1819,6 +1819,31 @@
     };
     // ────────────────────────────────────────────────────────
 
+    const exportActivityCsv = (entries) => {
+      if (!entries?.length) return;
+      const pad2 = n => String(n).padStart(2, '0');
+      const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+      const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
+      const rows = entries.map(e => {
+        const desc = e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
+        const d = new Date(e.ts);
+        const hora = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+        const data = `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+        return [
+          hora, data, e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
+          e.transferredTo||'', e.statusSCCDTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
+        ].map(esc).join(',');
+      });
+      const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const now = new Date();
+      const fn = `smax_relatorio_${pad2(now.getDate())}-${pad2(now.getMonth()+1)}-${now.getFullYear()}.csv`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = fn;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    };
+
     return {
       debounce,
       getGridViewport,
@@ -1844,7 +1869,8 @@
       triggerFileDownload,
       linkifyCNJ,
       normalizeCNJ,
-      openEprocProcess
+      openEprocProcess,
+      exportActivityCsv
     };
   })();
 
@@ -5285,31 +5311,7 @@
         if (exportBtn) { exportBtn.style.display = ''; spFilteredEntries = entries; }
       });
 
-      exportBtn?.addEventListener('click', () => {
-        const entriesToExport = spFilteredEntries;
-        if (!entriesToExport?.length) return;
-        const pad2 = n => String(n).padStart(2, '0');
-        const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-        const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
-        const rows = entriesToExport.map(e => {
-          const desc = e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
-          const d = new Date(e.ts);
-          const hora = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-          const data = `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
-          return [
-            hora, data, e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
-            e.transferredTo||'', e.statusSCCDTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
-          ].map(esc).join(',');
-        });
-        const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-        const now = new Date();
-        const fn = `smax_relatorio_${pad2(now.getDate())}-${pad2(now.getMonth()+1)}-${now.getFullYear()}.csv`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = fn;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      });
+      exportBtn?.addEventListener('click', () => Utils.exportActivityCsv(spFilteredEntries));
     };
 
     /* ── Main render ── */
@@ -8674,7 +8676,7 @@
       const selectScript = (s) => {
         selectedScript = s;
         useBtn.disabled = false;
-        previewCol.innerHTML = s.conteudo_bruto || '<em>Sem conteúdo.</em>';
+        previewCol.innerHTML = Utils.sanitizeRichText(s.conteudo_bruto) || '<em>Sem conteúdo.</em>';
         listCol.querySelectorAll('.smax-resp-script-row').forEach(r => {
           r.classList.toggle('selected', r.dataset.idx === String(allScripts.indexOf(s)));
         });
@@ -8732,7 +8734,7 @@
       useBtn.onclick = () => {
         if (!selectedScript) return;
         const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
-        if (solEl) { solEl.innerHTML = selectedScript.conteudo_bruto || ''; solEl.focus(); updateSendButton(); }
+        if (solEl) { solEl.innerHTML = Utils.sanitizeRichText(selectedScript.conteudo_bruto) || ''; solEl.focus(); updateSendButton(); }
         closePicker();
       };
 
@@ -10379,31 +10381,7 @@
         if (exportBtn) exportBtn.style.display = '';
         respFilteredEntries = entries;
       });
-      backdrop.querySelector('#smax-resp-report-export-btn')?.addEventListener('click', () => {
-        const entriesToExport = respFilteredEntries;
-        if (!entriesToExport?.length) return;
-        const pad2 = n => String(n).padStart(2, '0');
-        const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-        const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
-        const rows = entriesToExport.map(e => {
-          const desc = e.ticketSubject || DataRepository.triageCache.get(e.ticketId)?.subjectText || '';
-          const d2 = new Date(e.ts);
-          const hora = `${pad2(d2.getHours())}:${pad2(d2.getMinutes())}:${pad2(d2.getSeconds())}`;
-          const data = `${pad2(d2.getDate())}/${pad2(d2.getMonth()+1)}/${d2.getFullYear()}`;
-          return [
-            hora, data, e.ticketId, desc, e.relevantWork, e.assignedTo||'', e.globalChangeId||'',
-            e.transferredTo||'', e.statusSCCDTo||'', e.answered?'Sim':'Não', e.usedScript?'Sim':'Não', e.user||'', e.success?'Sim':'Não'
-          ].map(esc).join(',');
-        });
-        const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-        const now = new Date();
-        const fn = `smax_relatorio_${pad2(now.getDate())}-${pad2(now.getMonth()+1)}-${now.getFullYear()}.csv`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = fn;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      });
+      backdrop.querySelector('#smax-resp-report-export-btn')?.addEventListener('click', () => Utils.exportActivityCsv(respFilteredEntries));
 
       // Send button
       backdrop.querySelector('#smax-resp-send-btn')?.addEventListener('click', commitAll);
@@ -11214,10 +11192,10 @@
           await DataRepository.ensurePeopleLoaded();
           const target = Utils.normalizeText(q);
           const fromCache = [];
-          DataRepository.peopleCache.forEach((p, id) => {
-            if (fromCache.length >= 8) return;
+          for (const [id, p] of DataRepository.peopleCache) {
+            if (fromCache.length >= 8) break;
             if (Utils.normalizeText(p.name || '').includes(target)) fromCache.push({ id, name: p.name, upn: p.upn || '' });
-          });
+          }
           if (fromCache.length) { showDropdown(fromCache); return; }
           showDropdown(await searchPersonApi(q));
         }, 250);
@@ -11342,7 +11320,7 @@
           resultsEl.innerHTML = '<div style="color:#64748b;font-size:13px;margin-top:20px;">Nenhum chamado encontrado com essa ação.</div>';
         progTxt.textContent = `Concluído — ${doneCount}/${ids.length} verificados, ${currentMatches.length} encontrado${currentMatches.length !== 1 ? 's' : ''}.`;
       } catch (err) {
-        resultsEl.innerHTML = `<div style="color:#f87171;font-size:13px;margin-top:20px;">Erro: ${err.message}</div>`;
+        resultsEl.innerHTML = `<div style="color:#f87171;font-size:13px;margin-top:20px;">Erro: ${Utils.escapeHtml(err.message)}</div>`;
       }
 
       finishSearch(runBtn);
