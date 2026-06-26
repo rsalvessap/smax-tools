@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.52
+// @version      2.54
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -15,6 +15,8 @@
 // @grant        unsafeWindow
 // @connect      raw.githubusercontent.com
 // @connect      api.github.com
+// @connect      rlcbmrjkojopipiwpktf.supabase.co
+// @noframes
 // @downloadURL  https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @updateURL    https://github.com/rsalvessap/SMAX-TOOLS/raw/refs/heads/master/SMAX/SMAX%20Toolkit%20-%20TJSP.user.js
 // @homepageURL  https://github.com/rsalvessap/SMAX-TOOLS
@@ -45,7 +47,8 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODczMjQxOSwiZXhwIjoyMDk0MzA4NDE5fQ.TBaNcvK1PShHyuWFRHQpBshZpX7TENOya8dO6SZDI6k';
 
-  const SMAX_TOOLKIT_VERSION = '2.52';
+  const SMAX_TOOLKIT_VERSION = '2.54';
+  const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1641,15 +1644,35 @@
       attempt();
     });
 
+    const SAFE_TAGS = new Set([
+      'a','abbr','address','article','aside','b','bdi','bdo','blockquote','br','caption',
+      'cite','code','col','colgroup','dd','del','details','dfn','div','dl','dt','em',
+      'figcaption','figure','footer','h1','h2','h3','h4','h5','h6','header','hgroup',
+      'hr','i','img','ins','kbd','li','main','mark','nav','ol','p','pre','q','rp','rt',
+      'ruby','s','samp','section','small','span','strong','sub','summary','sup','table',
+      'tbody','td','tfoot','th','thead','time','tr','u','ul','var','wbr',
+    ]);
     const sanitizeRichText = (html) => {
       if (!html) return '';
       const tmp = document.createElement('div');
       tmp.innerHTML = html;
-      tmp.querySelectorAll('script, style').forEach((el) => el.remove());
+      // Remove dangerous tags entirely
+      tmp.querySelectorAll('script, style, iframe, object, embed, form, input, textarea, select, button, svg, math, template, link, meta, base, noscript').forEach(el => el.remove());
       tmp.querySelectorAll('*').forEach((node) => {
+        // Remove tags not in whitelist (keep children)
+        if (!SAFE_TAGS.has(node.tagName.toLowerCase())) {
+          node.replaceWith(...node.childNodes);
+          return;
+        }
         Array.from(node.attributes || []).forEach((attr) => {
-          if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
-          if (attr.name.toLowerCase() === 'style') node.removeAttribute(attr.name);
+          const name = attr.name.toLowerCase();
+          if (/^on/i.test(name)) { node.removeAttribute(attr.name); return; }
+          if (name === 'style') { node.removeAttribute(attr.name); return; }
+          // Block javascript: / data: / vbscript: in href/src/action
+          if (['href', 'src', 'action', 'xlink:href', 'formaction'].includes(name)) {
+            const val = (attr.value || '').replace(/[\s\u0000-\u001F]+/g, '').toLowerCase();
+            if (/^(javascript|data|vbscript)\s*:/i.test(val)) { node.removeAttribute(attr.name); }
+          }
         });
       });
       return tmp.innerHTML;
@@ -2200,32 +2223,12 @@
         removed++;
       }
     };
-    const manualPeopleSeed = [
-      {
-        id: '95970',
-        name: 'ROBSON SOUZA ALVES',
-        upn: 'robsonalves',
-        email: 'robsonalves@tjsp.jus.br',
-        isVip: false,
-        employeeNumber: '367442',
-        firstName: 'ROBSON',
-        lastName: 'SOUZA ALVES',
-        location: '49893064'
-      }
-    ];
     const supportGroupMap = new Map();
     let supportGroupTotal = null;
     const supportGroupListeners = new Set();
     let supportGroupsLoadPromise = null;
     let supportGroupsLoadedOnce = false;
 
-    const ensureManualPeople = () => {
-      manualPeopleSeed.forEach((person) => {
-        if (!person || !person.id) return;
-        if (!person.email && !person.upn) return;
-        if (!peopleCache.has(person.id)) peopleCache.set(person.id, Object.assign({}, person));
-      });
-    };
     let peopleTotal = null;
     const queueListeners = new Set();
     const peopleListeners = new Set();
@@ -2236,7 +2239,6 @@
         try { fn(snapshot); } catch (err) { console.warn('[SMAX] Support group listener failed:', err); }
       });
     };
-    ensureManualPeople();
     let peopleLoadPromise = null;
     let peopleLoadedOnce = false;
     const ingestSupportGroupPayload = (payload) => {
@@ -3008,18 +3010,17 @@
       resolvePersonId: (name) => {
         const target = Utils.normalizeText(name);
         if (!target) return '';
-        let resolved = '';
-        peopleCache.forEach((person) => {
-          if (resolved || !person) return;
+        for (const person of peopleCache.values()) {
+          if (!person) continue;
           const match = [
             person.name,
             [person.firstName, person.lastName].filter(Boolean).join(' '),
             person.DisplayLabel,
             person.FullName
           ].find((entry) => entry && Utils.normalizeText(entry) === target);
-          if (match) resolved = String(person.id);
-        });
-        return resolved;
+          if (match) return String(person.id);
+        }
+        return '';
       }
     };
   })();
@@ -3030,10 +3031,17 @@
   const Network = (() => {
     let patched = false;
     let _capturedPageFilter = null; // último filtro capturado da lista de chamados do SMAX
-    const isRequestDetailUrl = (url = '') => /\/rest\/\d+\/ems\/Request\/\d+/i.test(url);
-    const isRequestListUrl = (url = '') => /\/rest\/\d+\/ems\/Request(?:\?|$)/i.test(url) && !isRequestDetailUrl(url);
+    // Regex pré-compiladas (evita recriar em cada interceptação)
+    const RE_DETAIL     = /\/rest\/\d+\/ems\/Request\/\d+/i;
+    const RE_LIST       = /\/rest\/\d+\/ems\/Request(?:\?|$)/i;
+    const RE_EMS_ENTITY = /\/rest\/\d+\/ems\/(Request|Person|PersonGroup)/i;
+    const RE_RCR        = /\/rest\/\d+\/ems\/RequestCausesRequest/i;
+    const RE_PERSON     = /\/rest\/\d+\/ems\/Person/i;
+    const RE_PGROUP     = /\/rest\/\d+\/ems\/PersonGroup/i;
+    const isRequestDetailUrl = (url = '') => RE_DETAIL.test(url);
+    const isRequestListUrl = (url = '') => RE_LIST.test(url) && !isRequestDetailUrl(url);
 
-    const tryCapurePageFilter = (url = '') => {
+    const tryCapturePageFilter = (url = '') => {
       if (!isRequestListUrl(url)) return;
       try {
         const u = new URL(url, window.location.origin);
@@ -3061,19 +3069,19 @@
           this.addEventListener('load', function onLoad() {
             try {
               const url = this.__smaxUrl || this.responseURL || '';
-              if (!/\/rest\/\d+\/ems\/(Request|Person|PersonGroup)/i.test(url)) return;
-              tryCapurePageFilter(url);
+              if (!RE_EMS_ENTITY.test(url)) return;
+              tryCapturePageFilter(url);
               if (!this.responseText) return;
               const json = JSON.parse(this.responseText);
-              if (/\/rest\/\d+\/ems\/RequestCausesRequest/i.test(url)) {
+              if (RE_RCR.test(url)) {
                 DataRepository.ingestParentRelationshipPayload(json);
               } else if (isRequestListUrl(url)) {
                 DataRepository.ingestRequestListPayload(json);
               } else if (isRequestDetailUrl(url)) {
                 DataRepository.ingestRequestDetailPayload(json);
-              } else if (/\/rest\/\d+\/ems\/Person/i.test(url)) {
+              } else if (RE_PERSON.test(url)) {
                 DataRepository.ingestPersonListPayload(json);
-              } else if (/\/rest\/\d+\/ems\/PersonGroup/i.test(url)) {
+              } else if (RE_PGROUP.test(url)) {
                 DataRepository.ingestSupportGroupPayload(json);
               }
             } catch { }
@@ -3087,22 +3095,22 @@
             return origFetch(input, init).then((resp) => {
               try {
                 const url = resp.url || (typeof input === 'string' ? input : '');
-                if (!/\/rest\/\d+\/ems\/(Request|Person|PersonGroup)/i.test(url)) return resp;
-                tryCapurePageFilter(url);
+                if (!RE_EMS_ENTITY.test(url)) return resp;
+                tryCapturePageFilter(url);
                 const clone = resp.clone();
                 clone.text().then((txt) => {
                   try {
                     if (!txt) return;
                     const json = JSON.parse(txt);
-                    if (/\/rest\/\d+\/ems\/RequestCausesRequest/i.test(url)) {
+                    if (RE_RCR.test(url)) {
                       DataRepository.ingestParentRelationshipPayload(json);
                     } else if (isRequestListUrl(url)) {
                       DataRepository.ingestRequestListPayload(json);
                     } else if (isRequestDetailUrl(url)) {
                       DataRepository.ingestRequestDetailPayload(json);
-                    } else if (/\/rest\/\d+\/ems\/Person/i.test(url)) {
+                    } else if (RE_PERSON.test(url)) {
                       DataRepository.ingestPersonListPayload(json);
-                    } else if (/\/rest\/\d+\/ems\/PersonGroup/i.test(url)) {
+                    } else if (RE_PGROUP.test(url)) {
                       DataRepository.ingestSupportGroupPayload(json);
                     }
                   } catch { }
@@ -3385,7 +3393,7 @@
       if (size != null && size !== '') params.set('s', size);
       if (draftMode) params.set('draftMode', 'true');
       const query = params.toString();
-      return `/rest/213963628/frs/file-list/${encodeURIComponent(normalized)}${query ? `?${query}` : ''}`;
+      return `/rest/${SMAX_TENANT_ID}/frs/file-list/${encodeURIComponent(normalized)}${query ? `?${query}` : ''}`;
     };
 
     const buildDownloadCandidates = (id, fileList = [], context = {}) => {
@@ -3412,11 +3420,11 @@
         if (parentId) {
           const params = new URLSearchParams({ attachmentId: variant });
           if (context.fileNameParam) params.append('fileName', context.fileNameParam);
-          candidates.push(`/rest/213963628/entity-page/attachment/Request/${encodeURIComponent(parentId)}?${params.toString()}`);
+          candidates.push(`/rest/${SMAX_TENANT_ID}/entity-page/attachment/Request/${encodeURIComponent(parentId)}?${params.toString()}`);
         }
-        candidates.push(`/rest/213963628/entity-page/attachment/Attachment/${encodeURIComponent(variant)}`);
-        candidates.push(`/rest/213963628/entity-page/attachment/Attachment/${encodeURIComponent(variant)}?attachmentId=${encodeURIComponent(variant)}`);
-        candidates.push(`/rest/213963628/ems/file-list/Attachment/${encodeURIComponent(variant)}`);
+        candidates.push(`/rest/${SMAX_TENANT_ID}/entity-page/attachment/Attachment/${encodeURIComponent(variant)}`);
+        candidates.push(`/rest/${SMAX_TENANT_ID}/entity-page/attachment/Attachment/${encodeURIComponent(variant)}?attachmentId=${encodeURIComponent(variant)}`);
+        candidates.push(`/rest/${SMAX_TENANT_ID}/ems/file-list/Attachment/${encodeURIComponent(variant)}`);
       });
 
       return uniqueList(candidates);
@@ -3521,7 +3529,7 @@
       const parentRef = formatParentReference(requestId);
       const filter = encodeURIComponent(`ParentEntity.Id = "${parentRef}"`);
       const layout = encodeURIComponent('Id,Name,FileName,MimeType,FileSize,file_list');
-      const url = `/rest/213963628/ems/Attachment?filter=${filter}&layout=${layout}`;
+      const url = `/rest/${SMAX_TENANT_ID}/ems/Attachment?filter=${filter}&layout=${layout}`;
       return fetch(url, { method: 'GET', credentials: 'include', headers: buildDefaultHeaders() })
         .then((r) => {
           if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -3546,7 +3554,7 @@
       const normalizedId = normalizeCacheKey(requestId);
       if (!normalizedId) return Promise.resolve(null);
       const layoutParam = encodeURIComponent('FORM_LAYOUT.withoutResolution,FORM_LAYOUT.onlyResolution');
-      const url = `/rest/213963628/entity-page/initializationDataByLayout/Request/${encodeURIComponent(normalizedId)}?layout=${layoutParam}`;
+      const url = `/rest/${SMAX_TENANT_ID}/entity-page/initializationDataByLayout/Request/${encodeURIComponent(normalizedId)}?layout=${layoutParam}`;
       return fetch(url, { method: 'GET', credentials: 'include', headers: buildDefaultHeaders() })
         .then((r) => {
           if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -3599,7 +3607,7 @@
       if (!normalizedId) return null;
       const variants = uniqueList([normalizedId, `Attachment:${normalizedId}`]);
       for (const variant of variants) {
-        const url = `/rest/213963628/ems/Attachment/${encodeURIComponent(variant)}?layout=Id,Name,FileName,file_list,FileList`;
+        const url = `/rest/${SMAX_TENANT_ID}/ems/Attachment/${encodeURIComponent(variant)}?layout=Id,Name,FileName,file_list,FileList`;
         try {
           const resp = await fetch(url, { method: 'GET', credentials: 'include', headers: buildDefaultHeaders() });
           if (!resp.ok) continue;
@@ -4307,17 +4315,8 @@
           searchInput.addEventListener('blur', () => setTimeout(() => { resultsEl.style.display = 'none'; }, 200));
         }
 
-        const addWorkerBtn = container.querySelector('#smax-add-worker-btn');
-        if (addWorkerBtn) addWorkerBtn.addEventListener('click', () => addWorkerResult('')); // Add empty if manual
-
         // Existing deletes
         container.querySelectorAll('.smax-worker-del-btn').forEach(b => b.addEventListener('click', e => e.target.closest('div').remove()));
-
-        container.querySelectorAll('.smax-worker-color-bg, .smax-worker-color-fg').forEach(input => {
-          input.addEventListener('change', () => {
-            // color pickers removed — no-op
-          });
-        });
       }
     };
 
@@ -4821,10 +4820,6 @@
       });
     };
 
-    const wireEspecialistasEvents = () => {
-      // color pickers removed — no-op
-    };
-
     const wireDestaqueEvents = () => {
       if (!container) return;
       const detAddBtn   = container.querySelector('#smax-det-add-btn');
@@ -5208,6 +5203,7 @@
       const genBtn = container.querySelector('#smax-resp-report-gen-sp');
       const exportBtn = container.querySelector('#smax-resp-report-export-sp');
       const contentEl = container.querySelector('#smax-resp-report-content-sp');
+      let spFilteredEntries = [];
 
       genBtn?.addEventListener('click', async () => {
         const fromVal = fromInput?.value;
@@ -5286,14 +5282,13 @@
           </table>
           </div>`;
         contentEl.innerHTML = summaryHtml;
-        if (exportBtn) { exportBtn.style.display = ''; exportBtn._filteredEntries = entries; }
+        if (exportBtn) { exportBtn.style.display = ''; spFilteredEntries = entries; }
       });
 
-      exportBtn?.addEventListener('click', function() {
-        const entriesToExport = this._filteredEntries;
+      exportBtn?.addEventListener('click', () => {
+        const entriesToExport = spFilteredEntries;
         if (!entriesToExport?.length) return;
         const pad2 = n => String(n).padStart(2, '0');
-        const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
         const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
         const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
         const rows = entriesToExport.map(e => {
@@ -5355,7 +5350,7 @@
       switch (activeSection) {
         case 'geral':         wireGeralEvents();         break;
         case 'equipes':       wireTeamEvents();          break;
-        case 'especialistas': wireEspecialistasEvents(); break;
+        case 'especialistas': break;
         case 'destaque':      wireDestaqueEvents();      break;
         case 'templates':     wireTemplatesEvents();     break;
         case 'triagem':       wireTriagemEvents();       break;
@@ -5411,6 +5406,11 @@
       };
 
       backdropEl.addEventListener('click', closePanel);
+
+      // ESC fecha o painel de configurações
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && container && container.style.display === 'flex') closePanel();
+      });
 
       toggleBtn.addEventListener('click', () => {
         const visible = container.style.display === 'flex';
@@ -6283,7 +6283,7 @@
         return { list: applyPersonalFinalsFilter(snapshot.slice()), selectedId: selectedFromDom };
       }
       const viewport = Utils.getGridViewport();
-      if (!viewport) return [];
+      if (!viewport) return { list: [], selectedId: null };
       let idColIndex = 0;
       let createTimeColIndex = null;
       try {
@@ -6426,7 +6426,7 @@
               <span class="smax-discussion-title">${title}</span>
               <span class="smax-discussion-privacy">${privacyLabel}</span>
             </div>
-            <div class="smax-discussion-body">${bodyHtml}</div>
+            <div class="smax-discussion-body">${Utils.sanitizeRichText(bodyHtml)}</div>
             <div class="smax-discussion-meta">${author} | ${timestamp}</div>
           </article>
         `;
@@ -6525,7 +6525,7 @@
         if (ticketDetailsEl) ticketDetailsEl.innerHTML = '<div style="font-size:14px;color:#e5e7eb;">Nenhum chamado encontrado na lista atual. Verifique o campo "meus finais", logo acima.</div>';
         if (discussionsEl) discussionsEl.innerHTML = '<div class="smax-discussions-placeholder">Nenhuma discussão disponível.</div>';
         const rawFinals = (prefs.personalFinalsRaw || '').trim();
-        statusEl.textContent = personalFinalsSet.size
+        if (statusEl) statusEl.textContent = personalFinalsSet.size
           ? 'Nenhum chamado corresponde aos finais configurados.'
           : rawFinals
             ? '⚠️ "Meus finais" não contém dígitos válidos. Exemplo: 0-32,50'
@@ -6557,7 +6557,7 @@
           globalHint.dataset.state = 'inactive';
           globalHint.textContent = 'Sem vínculo global';
         }
-        commitBtn.disabled = true;
+        if (commitBtn) commitBtn.disabled = true;
         activeTicketId = null;
         clearQuickReplyState();
         updateAttachmentPanel({ state: 'empty', items: [] });
@@ -7393,6 +7393,10 @@
 
       // NOTE: team/worker select event handlers are wired inside render() with dataset.wired guards
 
+      // ESC fecha o HUD
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && backdrop && backdrop.style.display !== 'none') closeHud();
+      });
 
       scheduleQuickReplyEditor();
     };
@@ -7448,15 +7452,6 @@
       else batchPending[field] = value;
     };
     const clearBatchPending = () => { batchPending = {}; };
-
-    const FILTER_STATUSES = [
-      'RequestStatusActive',
-      'RequestStatusInProgress',
-      'RequestStatusPendingCustomer',
-      'RequestStatusSuspended',
-      'RequestStatusClassify',
-      'RequestStatusPending',
-    ];
 
     const close = () => {
       if (backdrop) backdrop.style.display = 'none';
@@ -7589,7 +7584,7 @@
     const fetchGlobalChildCounts = async (parentIds) => {
       if (!parentIds.length) return;
       try {
-        const tenantId = ApiClient.getTenantId() || '213963628';
+        const tenantId = ApiClient.getTenantId() || SMAX_TENANT_ID;
         const filter = parentIds.length === 1
           ? `GlobalId_c='${parentIds[0]}'`
           : `(${parentIds.map(id => `GlobalId_c='${id}'`).join(' or ')})`;
@@ -7609,18 +7604,6 @@
       } catch (e) {
         console.warn('[SMAX ResponseHUD] fetchGlobalChildCounts:', e);
       }
-    };
-
-    const applyDestaqueHighlights = () => {
-      if (!backdrop) return;
-      backdrop.querySelectorAll('.smax-resp-ticket-item').forEach(el => {
-        const entry = ticketList.find(t => t.id === el.dataset.id);
-        if (!entry) return;
-        // Fallback para triageCache — populated após upsertTriageEntryFromProps ou loadTicket
-        const nameToCheck = entry.requestedForName
-          || DataRepository.triageCache.get(entry.id)?.requestedForName
-          || '';
-      });
     };
 
     // Constrói o HTML de um único item da lista (extraído para reuso no virtual scroll)
@@ -7709,7 +7692,7 @@
         requestAnimationFrame(() => { _vsProgrammaticScroll = false; });
       }
 
-      applyDestaqueHighlights();
+      // destaque highlights removido (implementação pendente)
       updateSendButton();
 
       // Event delegation — anexado uma única vez ao container
@@ -7832,7 +7815,7 @@
               <span class="smax-resp-disc-author">${Utils.escapeHtml(submitter)}</span>
               <span>${Utils.escapeHtml(dateStr)}</span>
             </div>
-            <div class="smax-resp-disc-body">${d.bodyHtml || Utils.escapeHtml(d.body || '')}</div>
+            <div class="smax-resp-disc-body">${Utils.sanitizeRichText(d.bodyHtml) || Utils.escapeHtml(d.body || '')}</div>
             <div class="smax-resp-disc-footer">
               <button class="smax-resp-disc-expand-btn" data-disc-idx="${idx}" title="Expandir discussão">⤢</button>
               <button class="smax-resp-disc-replicate-btn" data-disc-idx="${idx}" title="Relançar esta discussão com o mesmo texto">↺ Replicar</button>
@@ -7871,7 +7854,7 @@
       if (d.purposeLabel) badges.push(d.purposeLabel);
       modal.querySelector('#smax-disc-modal-badges').innerHTML =
         badges.map(b => `<span class="smax-disc-modal-badge">${Utils.escapeHtml(b)}</span>`).join('');
-      modal.querySelector('#smax-disc-modal-body').innerHTML = d.bodyHtml || Utils.escapeHtml(d.bodyText || '');
+      modal.querySelector('#smax-disc-modal-body').innerHTML = Utils.sanitizeRichText(d.bodyHtml) || Utils.escapeHtml(d.bodyText || '');
       modal.querySelector('#smax-disc-modal-counter').textContent = `${discModalIdx + 1} de ${currentDiscussions.length}`;
       modal.querySelector('#smax-disc-modal-prev').disabled = discModalIdx === 0;
       modal.querySelector('#smax-disc-modal-next').disabled = discModalIdx === currentDiscussions.length - 1;
@@ -8027,11 +8010,11 @@
       }
 
       const descEl = backdrop.querySelector('#smax-resp-desc-content');
-      if (descEl) descEl.innerHTML = entry.descriptionHtml || '<em style="color:#6b7280;">Sem descrição.</em>';
+      if (descEl) descEl.innerHTML = Utils.sanitizeRichText(entry.descriptionHtml) || '<em style="color:#6b7280;">Sem descrição.</em>';
 
       const solEl = backdrop.querySelector('#smax-resp-solution-editor');
       if (solEl) {
-        solEl.innerHTML = entry.solutionHtml || '';
+        solEl.innerHTML = Utils.sanitizeRichText(entry.solutionHtml) || '';
       }
 
       // Meta-bar: Seguidor chip (mostra pendente ou estado padrão)
@@ -8086,7 +8069,7 @@
       backdrop?.querySelectorAll('.smax-resp-ticket-item').forEach(el => {
         el.classList.toggle('active', el.dataset.id === id);
       });
-      applyDestaqueHighlights();
+      // destaque highlights removido (implementação pendente)
       setStatusMsg('Carregando chamado...', '#93c5fd');
 
       // Função auxiliar para aplicar subject + badge global no item da lista
@@ -8309,7 +8292,7 @@
           const missingIds = [...new Set(allFetchedEntries.map(e => e.assignee).filter(id => id && !DataRepository.peopleCache.has(id)))];
           if (missingIds.length) {
             try {
-              const _tid = ApiClient.getTenantId() || '213963628';
+              const _tid = ApiClient.getTenantId() || SMAX_TENANT_ID;
               const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName,Upn,Email&size=200&TENANTID=${_tid}`;
               const _r = await fetch(_url, { credentials: 'include' });
               if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
@@ -8464,7 +8447,7 @@
       const layout = 'Id,Status,PhaseId,CreateTime,ExpertAssignee,RequestedForPerson,StatusSCCDSMAX_c,AssignedToGroup,GlobalId_c,Description,RegisteredForLocation';
 
       try {
-        const tenantId = ApiClient.getTenantId() || '213963628';
+        const tenantId = ApiClient.getTenantId() || SMAX_TENANT_ID;
         const url = `/rest/${tenantId}/ems/Request?filter=${encodeURIComponent(filter)}&layout=${encodeURIComponent(layout)}&size=1000&TENANTID=${tenantId}`;
         console.log('[SMAX ResponseHUD] GET', url);
         const resp = await fetch(url, { credentials: 'include' });
@@ -8617,7 +8600,7 @@
           const missingIds = [...new Set(allFetchedEntries.map(e => e.assignee).filter(id => id && !DataRepository.peopleCache.has(id)))];
           if (missingIds.length) {
             try {
-              const _tid = ApiClient.getTenantId() || '213963628';
+              const _tid = ApiClient.getTenantId() || SMAX_TENANT_ID;
               const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName,Upn,Email&size=200&TENANTID=${_tid}`;
               const _r = await fetch(_url, { credentials: 'include' });
               if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
@@ -8741,20 +8724,32 @@
       renderList(allScripts);
       searchInp.focus();
 
-      searchInp.addEventListener('input', () => applyFilter(searchInp.value.trim()));
+      // Evita acúmulo de listeners: remove anterior antes de adicionar
+      if (searchInp._smaxFilterHandler) searchInp.removeEventListener('input', searchInp._smaxFilterHandler);
+      searchInp._smaxFilterHandler = () => applyFilter(searchInp.value.trim());
+      searchInp.addEventListener('input', searchInp._smaxFilterHandler);
 
       useBtn.onclick = () => {
         if (!selectedScript) return;
         const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
         if (solEl) { solEl.innerHTML = selectedScript.conteudo_bruto || ''; solEl.focus(); updateSendButton(); }
-        modal.dataset.open = 'false';
+        closePicker();
       };
 
-      closeBtn.onclick = () => { modal.dataset.open = 'false'; };
-      modal.addEventListener('mousedown', (e) => {
+      const closePicker = () => {
+        modal.dataset.open = 'false';
+        if (modal._smaxOutsideHandler) { document.removeEventListener('mousedown', modal._smaxOutsideHandler); modal._smaxOutsideHandler = null; }
+      };
+
+      closeBtn.onclick = closePicker;
+
+      // Click-outside-to-close persistente (não usa {once:true} que quebrava após clique interno)
+      if (modal._smaxOutsideHandler) document.removeEventListener('mousedown', modal._smaxOutsideHandler);
+      modal._smaxOutsideHandler = (e) => {
         const box = modal.querySelector('#smax-resp-script-box');
-        if (box && !box.contains(e.target)) modal.dataset.open = 'false';
-      }, { once: true });
+        if (box && !box.contains(e.target) && modal.dataset.open === 'true') closePicker();
+      };
+      setTimeout(() => document.addEventListener('mousedown', modal._smaxOutsideHandler), 0);
     };
 
     // Analisa o que vai mudar por ticket (para confirmação e smart-skip)
@@ -8854,7 +8849,7 @@
           followerAdded:    followerWillChange,
           followerName:     followerWillChange ? (pending.follower.name || pending.follower.id) : '',
           statusSCCDChanged: statusSCCDWillChange,
-          statusSCCDTo:     statusSCCDWillChange ? pendingStatusSCCDByTicket[id].key : '',
+          statusSCCDTo:     statusSCCDWillChange ? (pendingStatusSCCDByTicket[id]?.key || '') : '',
           usedScript:       false,
           success,
         });
@@ -9233,7 +9228,7 @@
       positionPicker(picker, btn);
 
       const search = picker.querySelector('.smax-resp-field-picker-search');
-      search?.addEventListener('input', () => renderGroups(search.value));
+      search?.addEventListener('input', Utils.debounce(() => renderGroups(search.value), 120));
       search?.focus();
 
       const closeOnOutside = (e) => {
@@ -9308,7 +9303,7 @@
       positionPicker(picker, btn);
 
       const search = picker.querySelector('.smax-resp-field-picker-search');
-      search?.addEventListener('input', () => renderPeople(search.value));
+      search?.addEventListener('input', Utils.debounce(() => renderPeople(search.value), 120));
       search?.focus();
 
       const closeOnOutside = (e) => {
@@ -9570,7 +9565,7 @@
       positionPicker(picker, btn);
 
       const search = picker.querySelector('.smax-resp-field-picker-search');
-      search?.addEventListener('input', () => renderPeople(search.value));
+      search?.addEventListener('input', Utils.debounce(() => renderPeople(search.value), 120));
       search?.focus();
 
       const closeOnOutside = (e) => {
@@ -9949,6 +9944,11 @@
       backdrop.querySelector('#smax-theme-toggle-hud')?.addEventListener('click', () => ThemeManager.toggle());
       backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 
+      // ESC fecha o ResponseHUD
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && backdrop && backdrop.style.display !== 'none') close();
+      });
+
       // Local do solicitante: clique revela nome completo via tooltip flutuante
       backdrop.querySelector('#smax-resp-location-label')?.addEventListener('click', function() {
         const full = this.dataset.fullLocation || this.textContent;
@@ -10022,7 +10022,7 @@
           const missingIds = [...new Set(allFetchedEntries.map(e => e.assignee).filter(id => id && !DataRepository.peopleCache.has(id)))];
           if (missingIds.length) {
             try {
-              const _tid = ApiClient.getTenantId() || '213963628';
+              const _tid = ApiClient.getTenantId() || SMAX_TENANT_ID;
               const _url = `/rest/${_tid}/ems/Person?filter=${encodeURIComponent('Id in (' + missingIds.join(',') + ')')}&layout=Id,Name,FirstName,LastName,Upn,Email&size=200&TENANTID=${_tid}`;
               const _r = await fetch(_url, { credentials: 'include' });
               if (_r.ok) DataRepository.ingestPersonListPayload(await _r.json());
@@ -10039,13 +10039,13 @@
       });
 
       // Select all button
-      let allSelected = false;
       backdrop.querySelector('#smax-resp-select-all-btn')?.addEventListener('click', () => {
-        allSelected = !allSelected;
-        if (allSelected) ticketList.forEach(t => selectedTicketIds.add(t.id));
-        else selectedTicketIds.clear();
+        // Computa estado real a partir do Set em vez de toggle booleano
+        const allCurrentlySelected = ticketList.length > 0 && ticketList.every(t => selectedTicketIds.has(t.id));
+        if (allCurrentlySelected) selectedTicketIds.clear();
+        else ticketList.forEach(t => selectedTicketIds.add(t.id));
         const icon = backdrop.querySelector('#smax-resp-select-all-icon');
-        if (icon) icon.textContent = allSelected ? '☑' : '☐';
+        if (icon) icon.textContent = allCurrentlySelected ? '☐' : '☑';
         renderTicketList();
         updateBatchBar();
       });
@@ -10299,6 +10299,7 @@
       backdrop.querySelector('#smax-resp-report-close')?.addEventListener('click', () => {
         if (reportModal) reportModal.style.display = 'none';
       });
+      let respFilteredEntries = [];
       backdrop.querySelector('#smax-resp-report-gen-btn')?.addEventListener('click', async function() {
         const fromVal = backdrop.querySelector('#smax-resp-report-from')?.value;
         const toVal = backdrop.querySelector('#smax-resp-report-to')?.value;
@@ -10376,14 +10377,12 @@
           </table>`;
         if (content) content.innerHTML = summaryHtml;
         if (exportBtn) exportBtn.style.display = '';
-        // Armazena range filtrado para exportar
-        exportBtn._filteredEntries = entries;
+        respFilteredEntries = entries;
       });
-      backdrop.querySelector('#smax-resp-report-export-btn')?.addEventListener('click', function() {
-        const entriesToExport = this._filteredEntries;
+      backdrop.querySelector('#smax-resp-report-export-btn')?.addEventListener('click', () => {
+        const entriesToExport = respFilteredEntries;
         if (!entriesToExport?.length) return;
         const pad2 = n => String(n).padStart(2, '0');
-        const fmtFull = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
         const esc = v => { const s = String(v||''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s; };
         const headers = ['Hora','Data','Chamado','Descrição','Ação','Atribuído Para','Global','Transferido Para','Status Op.','Respondido','Script','Usuário','Sucesso'];
         const rows = entriesToExport.map(e => {
@@ -10753,8 +10752,8 @@
           Array.isArray(data.scripts.disc) ? data.scripts.disc : []
         );
       }
-      // Auto-aplica chaves de config compartilhada (exceto dados pessoais)
-      const SHARED_KEYS = ['nameGroups', 'ausentes', 'enableRealWrites', 'defaultGlobalChangeId'];
+      // Auto-aplica chaves de config compartilhada (exceto dados pessoais e flags de segurança)
+      const SHARED_KEYS = ['nameGroups', 'ausentes', 'defaultGlobalChangeId'];
       let sharedApplied = false;
       SHARED_KEYS.forEach(key => {
         if (data[key] !== undefined) { prefs[key] = data[key]; sharedApplied = true; }
@@ -11000,7 +10999,7 @@
 
     // Busca o histórico de auditoria de um chamado
     const fetchAudit = async (id) => {
-      const tid = ApiClient.getTenantId() || '213963628';
+      const tid = ApiClient.getTenantId() || SMAX_TENANT_ID;
       const url = `/rest/${tid}/audit/ems-history-service/Request?changeType=ALL&entityId=${id}&order=time%20desc&size=250&skip=0`;
       try {
         const resp = await pageWindow.fetch(url);
@@ -11082,15 +11081,15 @@
         const rowsHtml = a.rows.map(r => {
           if (r.oldVal === null) {
             return `<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
-              <span style="font-size:11px;color:#64748b;min-width:120px;flex-shrink:0;">${r.label}</span>
-              <span style="font-size:12px;color:#4ade80;">${r.newVal}</span>
+              <span style="font-size:11px;color:#64748b;min-width:120px;flex-shrink:0;">${Utils.escapeHtml(r.label)}</span>
+              <span style="font-size:12px;color:#4ade80;">${Utils.escapeHtml(r.newVal)}</span>
             </div>`;
           }
           return `<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
-            <span style="font-size:11px;color:#64748b;min-width:120px;flex-shrink:0;">${r.label}</span>
-            <span style="font-size:12px;color:#f87171;text-decoration:line-through;opacity:.8;">${r.oldVal}</span>
+            <span style="font-size:11px;color:#64748b;min-width:120px;flex-shrink:0;">${Utils.escapeHtml(r.label)}</span>
+            <span style="font-size:12px;color:#f87171;text-decoration:line-through;opacity:.8;">${Utils.escapeHtml(r.oldVal)}</span>
             <span style="font-size:11px;color:#475569;">→</span>
-            <span style="font-size:12px;color:#4ade80;">${r.newVal}</span>
+            <span style="font-size:12px;color:#4ade80;">${Utils.escapeHtml(r.newVal)}</span>
           </div>`;
         }).join('');
         return `<div style="padding:8px 10px;border-left:2px solid rgba(255,255,255,.07);margin-bottom:6px;">
@@ -11109,14 +11108,27 @@
       </div>`;
     };
 
-    const renderResults = () => {
+    let _aqpRenderedCount = 0;
+    const renderResults = (incremental = false) => {
       const resultsEl = backdropEl.querySelector('#aqp-results');
       const countEl   = backdropEl.querySelector('#aqp-res-count');
       const exportBtn = backdropEl.querySelector('#aqp-export');
       const n = currentMatches.length;
       countEl.textContent = n ? `${n} chamado${n !== 1 ? 's' : ''} encontrado${n !== 1 ? 's' : ''}` : '—';
       exportBtn.style.display = n ? 'block' : 'none';
-      resultsEl.innerHTML = currentMatches.map(renderTicketCard).join('');
+      if (incremental && _aqpRenderedCount < n) {
+        // Append somente os novos itens (evita O(n²) de reconstruir tudo)
+        const fragment = document.createDocumentFragment();
+        for (let i = _aqpRenderedCount; i < n; i++) {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = renderTicketCard(currentMatches[i]);
+          if (tmp.firstElementChild) fragment.appendChild(tmp.firstElementChild);
+        }
+        resultsEl.appendChild(fragment);
+      } else {
+        resultsEl.innerHTML = currentMatches.map(renderTicketCard).join('');
+      }
+      _aqpRenderedCount = n;
     };
 
     const exportCsv = () => {
@@ -11160,7 +11172,7 @@
 
     // Busca pessoas pela API como fallback quando não estão no cache local
     const searchPersonApi = async (q) => {
-      const tid = ApiClient.getTenantId() || '213963628';
+      const tid = ApiClient.getTenantId() || SMAX_TENANT_ID;
       try {
         const resp = await pageWindow.fetch(
           `/rest/${tid}/ems/Person?filter=Name%20like%20'${encodeURIComponent(q)}%25'&layout=Id,Name,Upn&size=8`
@@ -11185,9 +11197,9 @@
       const showDropdown = (results) => {
         if (!results.length) { dd.style.display = 'none'; return; }
         dd.innerHTML = results.map(p =>
-          `<div class="aqp-po" data-id="${p.id}" data-name="${p.name}" data-upn="${p.upn}"` +
+          `<div class="aqp-po" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(p.name)}" data-upn="${Utils.escapeHtml(p.upn)}"` +
           ` style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid rgba(255,255,255,.05);">` +
-          `${p.name}${p.upn ? ` <span style="color:#475569;">(${p.upn})</span>` : ''}</div>`
+          `${Utils.escapeHtml(p.name)}${p.upn ? ` <span style="color:#475569;">(${Utils.escapeHtml(p.upn)})</span>` : ''}</div>`
         ).join('');
         dd.style.display = 'block';
       };
@@ -11251,6 +11263,7 @@
       running = true;
       abortFlag = false;
       currentMatches = [];
+      _aqpRenderedCount = 0;
 
       const okEl    = backdropEl.querySelector('#aqp-ok');
       const personId = okEl.dataset.id || '';
@@ -11317,7 +11330,7 @@
             const matched = userEntries.filter(e => matchActions(e, keys));
             if (matched.length) {
               currentMatches.push({ id, actions: matched.map(e => ({ time: e.time, rows: describeRich(e) })) });
-              renderResults();
+              renderResults(true);
             }
           }));
           doneCount = Math.min(i + CONCURRENCY, ids.length);
@@ -11490,8 +11503,8 @@ if (window.location.hostname === 'eproc1g.tjsp.jus.br') {
     const run = () => {
       const pending = sessionStorage.getItem(STORAGE_KEY);
       if (!pending) return;
+      // Só limpa o pending se a consulta foi bem-sucedida
       if (tryConsultar(pending)) sessionStorage.removeItem(STORAGE_KEY);
-      else sessionStorage.removeItem(STORAGE_KEY);
     };
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
