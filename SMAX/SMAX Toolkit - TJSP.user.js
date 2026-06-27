@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.56
+// @version      2.57
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.56';
+  const SMAX_TOOLKIT_VERSION = '2.57';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -93,6 +93,7 @@
           workers: []
         }
       ]),
+      teamSignaturesRaw: '{}',
     };
 
     const state = JSON.parse(JSON.stringify(defaults));
@@ -136,6 +137,7 @@
     const defaults = {
       myDestaque:  [],  // ["NOME NORMALIZADO", ...] — usuários em destaque (pessoal)
       themeMode:   'dark', // 'dark' | 'light'
+      personalSignatures: [],  // [{ name: string, html: string }]
     };
 
     const state = JSON.parse(JSON.stringify(defaults));
@@ -167,6 +169,60 @@
 
   const personal     = PersonalStore.state;
   const savePersonal = PersonalStore.save;
+
+  /* =========================================================
+   * SignatureManager — assinaturas configuráveis por equipe e pessoais
+   * =======================================================*/
+  const SignatureManager = {
+    getTeamSignatures() {
+      try { return JSON.parse(prefs.teamSignaturesRaw || '{}'); } catch { return {}; }
+    },
+    saveTeamSignatures(obj) {
+      prefs.teamSignaturesRaw = JSON.stringify(obj || {});
+      PrefStore.save();
+    },
+    getPersonalSignatures() {
+      return Array.isArray(personal.personalSignatures) ? personal.personalSignatures : [];
+    },
+    savePersonalSignatures(arr) {
+      personal.personalSignatures = arr;
+      savePersonal();
+    },
+    buildSignatureList() {
+      const list = [];
+      const teamSigs = this.getTeamSignatures();
+      // TeamsConfig pode não estar disponível ainda — guard
+      const allTeams = (typeof TeamsConfig !== 'undefined' && TeamsConfig.getTeams) ? TeamsConfig.getTeams() : [];
+      allTeams.forEach(t => {
+        const html = teamSigs[t.id];
+        if (html && html.trim()) list.push({ label: t.name || t.id, html, source: 'team' });
+      });
+      this.getPersonalSignatures().forEach(s => {
+        if (s.html && s.html.trim()) list.push({ label: s.name || 'Assinatura pessoal', html: s.html, source: 'personal' });
+      });
+      return list;
+    },
+    appendToContenteditable(editor, sigHtml) {
+      if (!editor || !sigHtml) return;
+      const sigText = sigHtml.replace(/<[^>]+>/g, '').trim().slice(0, 60);
+      if (sigText && (editor.textContent || '').includes(sigText)) return;
+      editor.focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand('insertHTML', false, sigHtml);
+    },
+    appendToCKEditor(instance, sigHtml) {
+      if (!instance || !sigHtml) return;
+      const current = instance.getData() || '';
+      const sigText = sigHtml.replace(/<[^>]+>/g, '').trim().slice(0, 60);
+      if (sigText && current.includes(sigText)) return;
+      instance.setData(current + sigHtml);
+    }
+  };
 
   /* =========================================================
    * ThemeManager — light / dark mode
@@ -890,10 +946,13 @@
     #smax-resp-desc-content { font-size:14px; color:var(--sp-text); overflow-y:auto; min-height:40px; max-height:28vh; line-height:1.6; }
     #smax-resp-desc-content img { max-width:100%; height:auto; border-radius:4px; }
     #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
-    #smax-resp-solution-toolbar { display:flex; gap:2px; padding:5px 8px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; }
+    #smax-resp-solution-toolbar { display:flex; gap:2px; padding:5px 8px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; align-items:center; }
     .smax-resp-tb-btn { background:transparent; border:1px solid transparent; border-radius:4px; color:var(--sp-text-muted); cursor:pointer; font-size:12px; line-height:1; padding:4px 8px; transition:background .12s,color .12s; }
     .smax-resp-tb-btn:hover { background:var(--sp-primary-hover); color:var(--sp-text); }
     .smax-resp-tb-sep { width:1px; background:var(--sp-border); margin:3px 2px; align-self:stretch; }
+    .smax-resp-tb-color { width:22px; height:22px; padding:0; border:1px solid var(--sp-border); border-radius:4px; cursor:pointer; background:transparent; vertical-align:middle; }
+    .smax-resp-tb-select { background:var(--sp-surface-2); border:1px solid var(--sp-border); border-radius:4px; color:var(--sp-text-muted); font-size:11px; padding:2px 4px; cursor:pointer; height:24px; }
+    .smax-resp-tb-label { display:inline-flex; align-items:center; gap:2px; cursor:pointer; font-size:11px; color:var(--sp-text-muted); }
     #smax-resp-solution-editor { min-height:110px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:12px 14px; color:var(--sp-text); font-size:14px; line-height:1.65; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
     #smax-resp-solution-editor:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
     #smax-resp-solution-editor:empty::before { content:attr(data-placeholder); color:var(--sp-text-muted); pointer-events:none; display:block; }
@@ -3333,8 +3392,7 @@
       });
     };
 
-    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship bulk.
-     *  Usa o mesmo padrão de postCreateRequestCausesRequest (relationships array). */
+    /** Adiciona um seguidor (Person) a um chamado (Request) via entity Follow. */
     const postAddFollower = (ticketId, personId) => {
       if (!prefs.enableRealWrites) {
         console.warn('[SMAX] Real writes disabled.');
@@ -3347,15 +3405,26 @@
         return Promise.resolve(null);
       }
       const body = {
-        relationships: [{
-          name: 'RequestFollowedByPerson',
-          firstEndpoint: { Request: ticket },
-          secondEndpoint: { Person: person }
+        entities: [{
+          entity_type: 'Follow',
+          properties: {
+            FollowedEntityType: 'Request',
+            FollowedEntityId: ticket,
+            FollowedByPerson: person
+          }
         }],
         operation: 'CREATE'
       };
-      return ApiClient.ems.bulk(body).catch((err) => {
-        console.warn('[SMAX] postAddFollower failed:', err);
+      return ApiClient.ems.bulk(body).then((res) => {
+        const outcome = summarizeBulkOutcome(res);
+        if (!outcome?.ok) {
+          console.warn('[SMAX] postAddFollower lógica falhou:', outcome?.messages, res);
+        } else {
+          console.info('[SMAX] postAddFollower OK para ticket', ticket, '→ pessoa', person);
+        }
+        return res;
+      }).catch((err) => {
+        console.warn('[SMAX] postAddFollower HTTP error:', err);
         return null;
       });
     };
@@ -3817,6 +3886,7 @@
       { id: 'templates',     icon: '📋',  label: 'Scripts' },
       { id: 'triagem',       icon: '🎯',  label: 'Triagem' },
       { id: 'respostas',     icon: '📨',  label: 'Respostas' },
+      { id: 'assinaturas',   icon: '✒️',  label: 'Assinaturas' },
     ];
 
     // Load fresh config from prefs — shared teams are excluded from editing
@@ -4023,6 +4093,14 @@
             <div id="smax-workers-list">${workersHtml}</div>
           </div>
 
+          <div style="margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--sp-text);">Assinatura da equipe
+              <span title="HTML da assinatura que aparece no seletor ✒️ do editor de solução para esta equipe." style="cursor:help;margin-left:4px;font-size:11px;color:var(--sp-text-dim);font-weight:400;">ℹ️</span>
+            </div>
+            <textarea id="smax-team-signature" placeholder="<p>Atenciosamente,<br>Equipe de Suporte</p>" rows="3"
+              style="width:100%;padding:7px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-input-bg);color:var(--sp-text);font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace;outline:none;">${Utils.escapeHtml((SignatureManager.getTeamSignatures()[team.id]) || '')}</textarea>
+          </div>
+
           <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
             <button class="smax-cancel-edit" style="padding:8px 14px;cursor:pointer;background:var(--sp-surface-2);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:8px;font-size:12px;">Cancelar</button>
             <button id="smax-save-team-btn" style="padding:8px 16px;cursor:pointer;background:var(--sp-accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;">Salvar Equipe</button>
@@ -4148,6 +4226,18 @@
               const updatedId = isDefault ? existingTeam.id : newId;
               currentTeams[idx] = { ...existingTeam, id: updatedId, name: updatedName, priority: newPrio, gseRules: newGseRules, workers: newWorkers, matchers: newMatchers };
             }
+          }
+
+          // Save team signature — use the actual persisted team ID
+          const sigTextarea = container.querySelector('#smax-team-signature');
+          if (sigTextarea) {
+            const savedTeam = currentTeams.find(t => t.id === newId) || currentTeams.find(t => t.id === editingTeamId);
+            const finalTeamId = savedTeam ? savedTeam.id : newId;
+            const sigs = SignatureManager.getTeamSignatures();
+            const sigVal = sigTextarea.value.trim();
+            if (sigVal) sigs[finalTeamId] = sigVal;
+            else delete sigs[finalTeamId];
+            SignatureManager.saveTeamSignatures(sigs);
           }
 
           editingTeamId = null;
@@ -4690,6 +4780,85 @@
         </div>
       </div>`;
 
+    const renderSectionAssinaturas = () => {
+      const sigs = SignatureManager.getPersonalSignatures();
+      const sigsHtml = sigs.map((s, i) => `
+        <div class="smax-sig-row" data-idx="${i}" style="display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface-2);">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" class="smax-sig-name" value="${Utils.escapeHtml(s.name || '')}" placeholder="Nome (ex: Suporte N1)"
+              style="flex:1;padding:5px 8px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:12px;outline:none;">
+            <button class="smax-sig-del-btn" style="background:none;border:1px solid var(--sp-danger-text,#f87171);border-radius:6px;color:var(--sp-danger-text,#f87171);cursor:pointer;padding:4px 10px;font-size:11px;">✕ Remover</button>
+          </div>
+          <textarea class="smax-sig-html" placeholder="<p>Atenciosamente,<br>Suporte TJSP</p>" rows="4"
+            style="width:100%;padding:7px 10px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace;outline:none;">${Utils.escapeHtml(s.html || '')}</textarea>
+          <div class="smax-sig-preview" style="padding:8px 10px;border:1px dashed var(--sp-border);border-radius:6px;font-size:12px;color:var(--sp-text);min-height:20px;line-height:1.5;">${Utils.sanitizeRichText(s.html || '') || '<em style="color:var(--sp-text-muted);">Pré-visualização da assinatura</em>'}</div>
+        </div>`).join('');
+
+      return `
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="smax-sp-card">
+          <div class="smax-sp-section-title">✒️ Assinaturas Pessoais</div>
+          <div class="smax-sp-muted" style="margin-bottom:10px;">
+            Assinaturas pessoais que aparecem no seletor ✒️ do editor de solução. Use HTML para formatação.<br>
+            Para assinaturas por equipe, edite cada equipe na aba <b>Equipes</b>.
+          </div>
+          <div id="smax-sig-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">${sigsHtml}</div>
+          <button id="smax-sig-add-btn" style="padding:6px 16px;border:1px dashed var(--sp-border);border-radius:8px;background:transparent;color:var(--sp-text-muted);cursor:pointer;font-size:12px;transition:all .15s;">+ Adicionar Assinatura</button>
+        </div>
+      </div>`;
+    };
+
+    const wireAssinaturasEvents = () => {
+      const saveSigs = () => {
+        const rows = container.querySelectorAll('.smax-sig-row');
+        const sigs = Array.from(rows).map(row => ({
+          name: row.querySelector('.smax-sig-name')?.value?.trim() || '',
+          html: row.querySelector('.smax-sig-html')?.value?.trim() || ''
+        })).filter(s => s.name || s.html);
+        SignatureManager.savePersonalSignatures(sigs);
+      };
+
+      const updatePreview = (row) => {
+        const htmlEl = row.querySelector('.smax-sig-html');
+        const previewEl = row.querySelector('.smax-sig-preview');
+        if (htmlEl && previewEl) {
+          const html = htmlEl.value.trim();
+          previewEl.innerHTML = Utils.sanitizeRichText(html) || '<em style="color:var(--sp-text-muted);">Pré-visualização da assinatura</em>';
+        }
+      };
+
+      const wireRow = (row) => {
+        row.querySelector('.smax-sig-name')?.addEventListener('input', saveSigs);
+        const htmlEl = row.querySelector('.smax-sig-html');
+        if (htmlEl) {
+          htmlEl.addEventListener('input', () => { saveSigs(); updatePreview(row); });
+        }
+        row.querySelector('.smax-sig-del-btn')?.addEventListener('click', () => { row.remove(); saveSigs(); });
+      };
+
+      container.querySelectorAll('.smax-sig-row').forEach(wireRow);
+
+      container.querySelector('#smax-sig-add-btn')?.addEventListener('click', () => {
+        const listEl = container.querySelector('#smax-sig-list');
+        if (!listEl) return;
+        const div = document.createElement('div');
+        div.className = 'smax-sig-row';
+        Object.assign(div.style, { display:'flex', flexDirection:'column', gap:'6px', padding:'10px', border:'1px solid var(--sp-border)', borderRadius:'8px', background:'var(--sp-surface-2)' });
+        div.innerHTML = `
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" class="smax-sig-name" placeholder="Nome (ex: Suporte N1)"
+              style="flex:1;padding:5px 8px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:12px;outline:none;">
+            <button class="smax-sig-del-btn" style="background:none;border:1px solid var(--sp-danger-text,#f87171);border-radius:6px;color:var(--sp-danger-text,#f87171);cursor:pointer;padding:4px 10px;font-size:11px;">✕ Remover</button>
+          </div>
+          <textarea class="smax-sig-html" placeholder="<p>Atenciosamente,<br>Suporte TJSP</p>" rows="4"
+            style="width:100%;padding:7px 10px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:11px;resize:vertical;box-sizing:border-box;font-family:monospace;outline:none;"></textarea>
+          <div class="smax-sig-preview" style="padding:8px 10px;border:1px dashed var(--sp-border);border-radius:6px;font-size:12px;color:var(--sp-text);min-height:20px;line-height:1.5;"><em style="color:var(--sp-text-muted);">Pré-visualização da assinatura</em></div>`;
+        listEl.appendChild(div);
+        wireRow(div);
+        div.querySelector('.smax-sig-name')?.focus();
+      });
+    };
+
     const renderSectionContent = () => {
       switch (activeSection) {
         case 'geral':         return renderSectionGeral();
@@ -4699,6 +4868,7 @@
         case 'templates':     return renderSectionTemplates();
         case 'triagem':       return renderSectionTriagem();
         case 'respostas':     return renderSectionRespostas();
+        case 'assinaturas':   return renderSectionAssinaturas();
         default:              return renderSectionGeral();
       }
     };
@@ -5357,6 +5527,7 @@
         case 'templates':     wireTemplatesEvents();     break;
         case 'triagem':       wireTriagemEvents();       break;
         case 'respostas':     wireRespostasEvents();     break;
+        case 'assinaturas':   wireAssinaturasEvents();   break;
       }
     };
 
@@ -7260,6 +7431,10 @@
                 <button type="button" class="smax-triage-primary smax-triage-chip" id="smax-triage-commit" disabled>ENVIAR</button>
               </div>
               <div id="smax-triage-quickreply-card" data-staged="false">
+                <div id="smax-triage-sig-bar" style="display:flex;gap:4px;margin-bottom:4px;align-items:center;">
+                  <button type="button" id="smax-triage-sig-btn" class="smax-resp-tb-btn" title="Inserir assinatura" style="font-size:13px;padding:2px 6px;">✒️</button>
+                </div>
+                <div id="smax-triage-signature-picker" class="smax-resp-field-picker" style="display:none;position:absolute;z-index:10001;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.3);padding:4px 0;min-width:200px;max-height:240px;overflow-y:auto;"></div>
                 <textarea id="smax-triage-quickreply-editor" placeholder="Digite aqui sua resposta..."></textarea>
               </div>
               <div id="smax-triage-status-row" data-empty="true">
@@ -7399,6 +7574,63 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && backdrop && backdrop.style.display !== 'none') closeHud();
       });
+
+      // ── Assinatura picker no TriageHUD ──
+      const triageSigBtn = backdrop.querySelector('#smax-triage-sig-btn');
+      const triageSigPicker = backdrop.querySelector('#smax-triage-signature-picker');
+      if (triageSigBtn && triageSigPicker) {
+        triageSigBtn.addEventListener('click', () => {
+          if (triageSigPicker.style.display !== 'none') { triageSigPicker.style.display = 'none'; return; }
+          const sigs = SignatureManager.buildSignatureList();
+          if (!sigs.length) {
+            triageSigPicker.innerHTML = '<div style="padding:10px 14px;font-size:11px;color:var(--sp-text-muted);">Nenhuma assinatura configurada.<br>Vá em ⚙ Configurações → ✒️ Assinaturas.</div>';
+          } else {
+            triageSigPicker.innerHTML = sigs.map((s, i) => {
+              const icon = s.source === 'team' ? '👥' : '👤';
+              return `<div class="smax-resp-field-picker-item" data-sig-idx="${i}" style="padding:6px 12px;cursor:pointer;font-size:12px;">
+                ${icon} <span>${Utils.escapeHtml(s.label)}</span>
+              </div>`;
+            }).join('');
+            triageSigPicker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+              item.addEventListener('click', () => {
+                const idx = parseInt(item.dataset.sigIdx, 10);
+                const sig = sigs[idx];
+                if (sig) {
+                  // Detect if CKEditor is active
+                  if (quickReplyEditor && typeof quickReplyEditor.insertHtml === 'function') {
+                    SignatureManager.appendToCKEditor(quickReplyEditor, sig.html);
+                  } else {
+                    const ta = backdrop.querySelector('#smax-triage-quickreply-editor');
+                    if (ta) {
+                      // Plain textarea: strip HTML tags for plain text
+                      const tmp = document.createElement('div');
+                      tmp.innerHTML = sig.html;
+                      const plainText = tmp.textContent || tmp.innerText || '';
+                      ta.value = ta.value + '\n' + plainText;
+                      ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                  }
+                }
+                triageSigPicker.style.display = 'none';
+              });
+            });
+          }
+          // Position below button
+          const rect = triageSigBtn.getBoundingClientRect();
+          triageSigPicker.style.display = 'block';
+          triageSigPicker.style.left = rect.left + 'px';
+          triageSigPicker.style.top = (rect.bottom + 4) + 'px';
+          triageSigPicker.style.position = 'fixed';
+
+          const closeOnOutside = (e) => {
+            if (!triageSigPicker.contains(e.target) && e.target !== triageSigBtn) {
+              triageSigPicker.style.display = 'none';
+              document.removeEventListener('mousedown', closeOnOutside, true);
+            }
+          };
+          setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+        });
+      }
 
       scheduleQuickReplyEditor();
     };
@@ -8830,11 +9062,15 @@
           if (gseWillChange && fwdHtml) {
             await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'INTERNAL' });
           }
-          // Adicionar seguidor (relationship separada do update de propriedades)
+          // Adicionar seguidor (entity Follow separada do update de propriedades)
           if (followerWillChange) {
             try {
-              await Api.postAddFollower(id, pending.follower.id);
-            } catch (fe) { console.warn('[SMAX ResponseHUD] addFollower:', fe); }
+              const followerResult = await Api.postAddFollower(id, pending.follower.id);
+              const followerOutcome = Api.summarizeBulkOutcome(followerResult);
+              if (!followerOutcome?.ok) {
+                console.warn('[SMAX ResponseHUD] addFollower falhou:', followerOutcome?.messages);
+              }
+            } catch (fe) { console.warn('[SMAX ResponseHUD] addFollower HTTP error:', fe); }
           }
         }
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
@@ -9582,6 +9818,65 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
+    // ── Signature picker ──
+    const openSignaturePicker = () => {
+      if (!backdrop) return;
+      const picker = backdrop.querySelector('#smax-resp-signature-picker');
+      const btn = backdrop.querySelector('#smax-resp-sig-btn');
+      if (!picker || !btn) return;
+      if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+      closeAllPickers();
+
+      const sigs = SignatureManager.buildSignatureList();
+      if (!sigs.length) {
+        picker.innerHTML = '<div style="padding:10px 14px;font-size:11px;color:var(--sp-text-muted);">Nenhuma assinatura configurada.<br>Vá em ⚙ Configurações → ✒️ Assinaturas.</div>';
+        positionPicker(picker, btn);
+        const closeOnOutside = (e) => {
+          if (!picker.contains(e.target) && e.target !== btn) {
+            picker.style.display = 'none';
+            document.removeEventListener('mousedown', closeOnOutside, true);
+            picker._closeHandler = null;
+          }
+        };
+        if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+        picker._closeHandler = closeOnOutside;
+        setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+        return;
+      }
+
+      picker.innerHTML = sigs.map((s, i) => {
+        const icon = s.source === 'team' ? '👥' : '👤';
+        return `<div class="smax-resp-field-picker-item" data-sig-idx="${i}" style="padding:6px 12px;cursor:pointer;font-size:12px;">
+          ${icon} <span>${Utils.escapeHtml(s.label)}</span>
+        </div>`;
+      }).join('');
+
+      picker.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const idx = parseInt(item.dataset.sigIdx, 10);
+          const sig = sigs[idx];
+          if (sig) {
+            const editor = backdrop.querySelector('#smax-resp-solution-editor');
+            if (editor) SignatureManager.appendToContenteditable(editor, sig.html);
+            updateSendButton();
+          }
+          picker.style.display = 'none';
+        });
+      });
+
+      positionPicker(picker, btn);
+      const closeOnOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== btn) {
+          picker.style.display = 'none';
+          document.removeEventListener('mousedown', closeOnOutside, true);
+          picker._closeHandler = null;
+        }
+      };
+      if (picker._closeHandler) document.removeEventListener('mousedown', picker._closeHandler, true);
+      picker._closeHandler = closeOnOutside;
+      setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
+    };
+
     // Renderiza (ou re-renderiza) as pills de equipe — chamado no open() para garantir
     // que as equipes do SharedConfig (carregado assincronamente) já estejam disponíveis
     const renderTeamPills = () => {
@@ -9789,12 +10084,37 @@
                         <button type="button" class="smax-resp-tb-btn" data-cmd="bold"                title="Negrito (Ctrl+B)"><b>N</b></button>
                         <button type="button" class="smax-resp-tb-btn" data-cmd="italic"              title="Itálico (Ctrl+I)"><i>I</i></button>
                         <button type="button" class="smax-resp-tb-btn" data-cmd="underline"           title="Sublinhado (Ctrl+U)"><u>S</u></button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="strikeThrough"       title="Tachado"><s>T</s></button>
                         <span class="smax-resp-tb-sep"></span>
                         <button type="button" class="smax-resp-tb-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">• Lista</button>
                         <button type="button" class="smax-resp-tb-btn" data-cmd="insertOrderedList"   title="Lista numerada">1. Lista</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="indent"              title="Aumentar recuo">→]</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="outdent"             title="Diminuir recuo">[←</button>
+                        <span class="smax-resp-tb-sep"></span>
+                        <button type="button" class="smax-resp-tb-btn" data-action="createLink"       title="Inserir link">🔗</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="unlink"              title="Remover link">🔗✕</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="insertHorizontalRule" title="Linha horizontal">─</button>
+                        <span class="smax-resp-tb-sep"></span>
+                        <select id="smax-resp-tb-fontsize" class="smax-resp-tb-select" title="Tamanho de fonte">
+                          <option value="">Tam.</option>
+                          <option value="1">Muito pequeno</option>
+                          <option value="2">Pequeno</option>
+                          <option value="3">Normal</option>
+                          <option value="4">Médio</option>
+                          <option value="5">Grande</option>
+                          <option value="6">Muito grande</option>
+                          <option value="7">Enorme</option>
+                        </select>
+                        <label class="smax-resp-tb-label" title="Cor do texto">A <input type="color" id="smax-resp-tb-fgcolor" class="smax-resp-tb-color" value="#ffffff"></label>
+                        <label class="smax-resp-tb-label" title="Cor de fundo">■ <input type="color" id="smax-resp-tb-bgcolor" class="smax-resp-tb-color" value="#ffff00"></label>
                         <span class="smax-resp-tb-sep"></span>
                         <button type="button" class="smax-resp-tb-btn" data-cmd="removeFormat"        title="Remover formatação">T̲×</button>
+                        <button type="button" class="smax-resp-tb-btn" data-action="normalizeText"    title="Normalizar espaçamento">⊞</button>
+                        <button type="button" class="smax-resp-tb-btn" data-action="formatImages"     title="Borda azul TJSP nas imagens">🖼️</button>
+                        <span class="smax-resp-tb-sep"></span>
+                        <button type="button" class="smax-resp-tb-btn" id="smax-resp-sig-btn" title="Inserir assinatura">✒️</button>
                       </div>
+                      <div id="smax-resp-signature-picker" class="smax-resp-field-picker" style="display:none;position:absolute;z-index:10001;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.3);padding:4px 0;min-width:200px;max-height:240px;overflow-y:auto;"></div>
                       <div id="smax-resp-solution-editor" contenteditable="true" spellcheck="false" data-placeholder="Digite aqui a solução do chamado..."></div>
                       <div id="smax-resp-script-picker"></div>
                     </div>
@@ -10067,14 +10387,133 @@
         });
       });
 
-      // Toolbar de formatação (execCommand via mousedown para não tirar o foco do editor)
-      backdrop.querySelectorAll('#smax-resp-solution-toolbar .smax-resp-tb-btn').forEach(btn => {
+      // ── Helpers de formatação (portados do script tjsp-suporte-robo-automacoes) ──
+      const normalizeEditorContent = (editor) => {
+        if (!editor) return;
+        // Remove blocos vazios
+        editor.querySelectorAll('p, div').forEach(el => {
+          const text = (el.textContent || '').replace(/\u00A0/g, ' ').trim();
+          if (!text && !el.querySelector('img, table, video, canvas, svg, iframe')) el.remove();
+        });
+        // Espaçamento uniforme
+        editor.querySelectorAll('p, div').forEach(el => {
+          el.style.marginTop = '0'; el.style.marginBottom = '10px';
+          el.style.paddingTop = '0'; el.style.paddingBottom = '0';
+          el.style.lineHeight = '1.35';
+        });
+        editor.querySelectorAll('li').forEach(el => {
+          el.style.marginTop = '0'; el.style.marginBottom = '4px';
+          el.style.lineHeight = '1.35';
+        });
+        // Limpar HTML
+        let html = editor.innerHTML || '';
+        html = html.replace(/&nbsp;/gi, ' ')
+          .replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>')
+          .replace(/<(p|div)([^>]*)>\s*<br\s*\/?>\s*<\/\1>/gi, '')
+          .replace(/<(p|div)([^>]*)>\s*<\/\1>/gi, '')
+          .replace(/^(\s|<br\s*\/?>)+/gi, '')
+          .replace(/(\s|<br\s*\/?>)+$/gi, '');
+        editor.innerHTML = html;
+        // Re-aplicar margens após rewrite
+        editor.querySelectorAll('p, div').forEach(el => {
+          el.style.marginTop = '0'; el.style.marginBottom = '10px';
+          el.style.lineHeight = '1.35';
+        });
+      };
+
+      const formatEditorImages = (editor) => {
+        if (!editor) return;
+        const imgs = editor.querySelectorAll('img');
+        if (!imgs.length) return;
+        imgs.forEach(img => {
+          img.style.border = '4px solid #004b8d';
+          img.style.borderRadius = '4px';
+          img.style.boxSizing = 'border-box';
+          img.style.maxWidth = '100%';
+          img.style.height = 'auto';
+          img.style.display = 'block';
+          img.style.marginTop = '10px';
+          img.style.marginBottom = '10px';
+        });
+      };
+
+      // ── Salvar/restaurar seleção do editor para controles que roubam foco ──
+      let savedEditorRange = null;
+      const solEditorEl = backdrop.querySelector('#smax-resp-solution-editor');
+      if (solEditorEl) {
+        document.addEventListener('selectionchange', () => {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount > 0 && solEditorEl.contains(sel.anchorNode)) {
+            savedEditorRange = sel.getRangeAt(0).cloneRange();
+          }
+        });
+      }
+      const restoreEditorSelection = () => {
+        if (savedEditorRange && solEditorEl) {
+          solEditorEl.focus();
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(savedEditorRange);
+        }
+      };
+
+      // ── Toolbar de formatação ──
+      // Botões simples com data-cmd (execCommand direto)
+      backdrop.querySelectorAll('#smax-resp-solution-toolbar .smax-resp-tb-btn[data-cmd]').forEach(btn => {
         btn.addEventListener('mousedown', e => {
           e.preventDefault();
           document.execCommand(btn.dataset.cmd, false, null);
           updateSendButton();
         });
       });
+
+      // Botões com data-action (lógica customizada)
+      backdrop.querySelectorAll('#smax-resp-solution-toolbar .smax-resp-tb-btn[data-action]').forEach(btn => {
+        btn.addEventListener('mousedown', e => {
+          e.preventDefault();
+          const action = btn.dataset.action;
+          if (action === 'createLink') {
+            const url = prompt('URL do link:', 'https://');
+            if (url) { solEditorEl?.focus(); document.execCommand('createLink', false, url); }
+          } else if (action === 'normalizeText') {
+            normalizeEditorContent(solEditorEl);
+          } else if (action === 'formatImages') {
+            formatEditorImages(solEditorEl);
+          }
+          updateSendButton();
+        });
+      });
+
+      // Tamanho de fonte
+      const fontsizeEl = backdrop.querySelector('#smax-resp-tb-fontsize');
+      if (fontsizeEl) {
+        fontsizeEl.addEventListener('change', () => {
+          const size = fontsizeEl.value;
+          if (!size) return;
+          restoreEditorSelection();
+          document.execCommand('fontSize', false, size);
+          fontsizeEl.value = '';
+          updateSendButton();
+        });
+      }
+
+      // Cor do texto e cor de fundo
+      const fgColorEl = backdrop.querySelector('#smax-resp-tb-fgcolor');
+      const bgColorEl = backdrop.querySelector('#smax-resp-tb-bgcolor');
+      if (fgColorEl) {
+        fgColorEl.addEventListener('input', () => {
+          restoreEditorSelection();
+          document.execCommand('foreColor', false, fgColorEl.value);
+          updateSendButton();
+        });
+      }
+      if (bgColorEl) {
+        bgColorEl.addEventListener('input', () => {
+          restoreEditorSelection();
+          document.execCommand('hiliteColor', false, bgColorEl.value);
+          updateSendButton();
+        });
+      }
 
       // Scripts picker
       backdrop.querySelector('#smax-resp-scripts-btn')?.addEventListener('click', openScriptPicker);
@@ -10091,6 +10530,8 @@
       backdrop.querySelector('#smax-resp-statussccd-btn')?.addEventListener('click', openStatusSCCDPicker);
       // Seguidor picker
       backdrop.querySelector('#smax-resp-follower-btn')?.addEventListener('click', openFollowerPicker);
+      // Assinatura picker
+      backdrop.querySelector('#smax-resp-sig-btn')?.addEventListener('click', openSignaturePicker);
 
       // Botão Vincular Global — suporte a lote, auto-designar, detectar duplicata
       backdrop.querySelector('#smax-resp-global-link-btn')?.addEventListener('click', async () => {
