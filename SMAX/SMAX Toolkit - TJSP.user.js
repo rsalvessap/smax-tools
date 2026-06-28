@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.67
+// @version      2.68
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.67';
+  const SMAX_TOOLKIT_VERSION = '2.68';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -303,13 +303,13 @@
       'Accept-Profile':'public',
     };
 
+    let _sbHasTicketSubject = true; // assume coluna existe; desativa se 400
     const syncToSupabase = (entry) => {
       try {
         const equipeId = GM_getValue('smax_gerenciador_equipe_id', null);
         const row = {
           ts:               entry.ts,
           ticket_id:        entry.ticketId,
-          ticket_subject:   entry.ticketSubject  || null,
           relevant_work:    entry.relevantWork  || null,
           answered:         !!entry.answered,
           assigned:         !!entry.assigned,
@@ -323,6 +323,7 @@
           equipe_id:        equipeId             || null,
           success:          entry.success !== false,
         };
+        if (_sbHasTicketSubject) row.ticket_subject = entry.ticketSubject || null;
         const sbWriteCtrl = new AbortController();
         const sbWriteTimer = setTimeout(() => sbWriteCtrl.abort(), 8000);
         fetch(`${SMAX_SB_URL}/rest/v1/smax_activity_log`, {
@@ -330,8 +331,18 @@
           headers: SB_WRITE_HEADERS,
           body:    JSON.stringify(row),
           signal:  sbWriteCtrl.signal,
-        }).then(() => clearTimeout(sbWriteTimer))
-          .catch(e => { clearTimeout(sbWriteTimer); syncFailCount++; console.warn('[SMAX] ActivityLog Supabase sync failed:', e); });
+        }).then(resp => {
+          clearTimeout(sbWriteTimer);
+          if (resp && !resp.ok && resp.status === 400 && _sbHasTicketSubject) {
+            // Coluna ticket_subject provavelmente não existe — retentar sem ela
+            _sbHasTicketSubject = false;
+            delete row.ticket_subject;
+            fetch(`${SMAX_SB_URL}/rest/v1/smax_activity_log`, {
+              method: 'POST', headers: SB_WRITE_HEADERS,
+              body: JSON.stringify(row)
+            }).catch(() => { syncFailCount++; });
+          }
+        }).catch(e => { clearTimeout(sbWriteTimer); syncFailCount++; console.warn('[SMAX] ActivityLog Supabase sync failed:', e); });
       } catch (e) {
         syncFailCount++;
         console.warn('[SMAX] ActivityLog syncToSupabase error:', e);
@@ -3372,38 +3383,86 @@
       });
     };
 
-    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship RequestFollowedByPerson. */
-    const postAddFollower = (ticketId, personId) => {
+    /** Adiciona um seguidor (Person) a um chamado (Request).
+     *  Tenta múltiplos formatos de API até encontrar o que funciona. */
+    const postAddFollower = async (ticketId, personId) => {
       if (!prefs.enableRealWrites) {
         console.warn('[SMAX] Real writes disabled.');
-        return Promise.resolve({ skipped: true, reason: 'real-writes-disabled' });
+        return { skipped: true, reason: 'real-writes-disabled' };
       }
       const ticket = String(ticketId || '').trim();
       const person = String(personId || '').trim();
       if (!ticket || !person) {
         console.warn('[SMAX] Missing ids for addFollower.');
-        return Promise.resolve(null);
-      }
-      const body = {
-        relationships: [{
-          name: 'RequestFollowedByPerson',
-          firstEndpoint: { Request: ticket },
-          secondEndpoint: { Person: person }
-        }],
-        operation: 'CREATE'
-      };
-      return ApiClient.ems.bulk(body).then((res) => {
-        const outcome = summarizeBulkOutcome(res);
-        if (!outcome?.ok) {
-          console.warn('[SMAX] postAddFollower lógica falhou:', outcome?.messages, res);
-        } else {
-          console.info('[SMAX] postAddFollower OK para ticket', ticket, '→ pessoa', person);
-        }
-        return res;
-      }).catch((err) => {
-        console.warn('[SMAX] postAddFollower HTTP error:', err);
         return null;
-      });
+      }
+
+      // Estratégia: tentar 3 formatos conhecidos de API do SMAX para Follow.
+      // O primeiro que retornar sucesso é usado; os demais são ignorados.
+
+      // 1) Tentativa via collaboration API (endpoint nativo de follows do SMAX)
+      try {
+        const collabRes = await ApiClient.request(`collaboration/follows/Request/${ticket}`, {
+          method: 'POST',
+          body: { PersonId: person },
+          useXsrf: true
+        });
+        console.info('[SMAX] postAddFollower OK via collaboration API:', ticket, '→', person, collabRes);
+        return collabRes;
+      } catch (e1) {
+        console.warn('[SMAX] postAddFollower collaboration API falhou:', e1.message);
+      }
+
+      // 2) Tentativa via ems/bulk relationship (nomes comuns)
+      const relNames = ['RequestFollowedByPerson', 'PersonFollowsRequest', 'FollowedByPerson'];
+      for (const relName of relNames) {
+        try {
+          const relBody = {
+            relationships: [{
+              name: relName,
+              firstEndpoint: { Request: ticket },
+              secondEndpoint: { Person: person }
+            }],
+            operation: 'CREATE'
+          };
+          const res = await ApiClient.ems.bulk(relBody);
+          const outcome = summarizeBulkOutcome(res);
+          if (outcome?.ok) {
+            console.info(`[SMAX] postAddFollower OK via relationship ${relName}:`, ticket, '→', person);
+            return res;
+          }
+          console.warn(`[SMAX] postAddFollower relationship '${relName}' falhou:`, outcome?.messages, JSON.stringify(res));
+        } catch (e2) {
+          console.warn(`[SMAX] postAddFollower relationship '${relName}' HTTP error:`, e2.message);
+        }
+      }
+
+      // 3) Tentativa via ems/bulk entity Follow com diferentes nomes de campo
+      const fieldVariants = [
+        { FollowedEntityType: 'Request', FollowedEntityId: ticket, PersonId: person },
+        { FollowedEntityType: 'Request', FollowedEntityId: ticket, FollowerPerson: person },
+        { FollowedEntityType: 'Request', FollowedEntityId: ticket, FollowedByPerson: person, IsSystem: false }
+      ];
+      for (const props of fieldVariants) {
+        try {
+          const entBody = { entities: [{ entity_type: 'Follow', properties: props }], operation: 'CREATE' };
+          const res = await ApiClient.ems.bulk(entBody);
+          const outcome = summarizeBulkOutcome(res);
+          if (outcome?.ok) {
+            console.info('[SMAX] postAddFollower OK via entity Follow:', JSON.stringify(props));
+            return res;
+          }
+          // Verificar se realmente criou (a API às vezes retorna 200 sem erro mas sem efeito)
+          const rl = res?.relationship_result_list || res?.entity_result_list || [];
+          console.warn('[SMAX] postAddFollower entity Follow tentativa:', JSON.stringify(props), '→', JSON.stringify(res));
+        } catch (e3) {
+          console.warn('[SMAX] postAddFollower entity Follow HTTP error:', e3.message);
+        }
+      }
+
+      console.error('[SMAX] postAddFollower: TODAS as tentativas falharam para ticket', ticket, 'pessoa', person,
+        '— verifique o console acima para detalhes. Pode ser necessário capturar a chamada de rede da UI nativa do SMAX.');
+      return null;
     };
 
     return { postUpdateRequest, postCreateRequestCausesRequest, postDiscussion, postAddFollower, extractBulkErrorMessages, summarizeBulkOutcome };
