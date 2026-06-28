@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.68
+// @version      2.69
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.68';
+  const SMAX_TOOLKIT_VERSION = '2.69';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -3383,8 +3383,8 @@
       });
     };
 
-    /** Adiciona um seguidor (Person) a um chamado (Request).
-     *  Tenta múltiplos formatos de API até encontrar o que funciona. */
+    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship FollowedByUsers.
+     *  Nome descoberto via captura de tráfego da UI nativa do SMAX TJSP. */
     const postAddFollower = async (ticketId, personId) => {
       if (!prefs.enableRealWrites) {
         console.warn('[SMAX] Real writes disabled.');
@@ -3397,71 +3397,36 @@
         return null;
       }
 
-      // Estratégia: tentar 3 formatos conhecidos de API do SMAX para Follow.
-      // O primeiro que retornar sucesso é usado; os demais são ignorados.
+      // Tenta ambas as ordens de endpoint (a relação FollowedByUsers pode ser
+      // definida com Request como first ou Person como first, dependendo do modelo).
+      const attempts = [
+        { firstEndpoint: { Request: ticket }, secondEndpoint: { Person: person } },
+        { firstEndpoint: { Person: person }, secondEndpoint: { Request: ticket } }
+      ];
 
-      // 1) Tentativa via collaboration API (endpoint nativo de follows do SMAX)
-      try {
-        const collabRes = await ApiClient.request(`collaboration/follows/Request/${ticket}`, {
-          method: 'POST',
-          body: { PersonId: person },
-          useXsrf: true
-        });
-        console.info('[SMAX] postAddFollower OK via collaboration API:', ticket, '→', person, collabRes);
-        return collabRes;
-      } catch (e1) {
-        console.warn('[SMAX] postAddFollower collaboration API falhou:', e1.message);
-      }
-
-      // 2) Tentativa via ems/bulk relationship (nomes comuns)
-      const relNames = ['RequestFollowedByPerson', 'PersonFollowsRequest', 'FollowedByPerson'];
-      for (const relName of relNames) {
+      for (const endpoints of attempts) {
         try {
-          const relBody = {
+          const body = {
             relationships: [{
-              name: relName,
-              firstEndpoint: { Request: ticket },
-              secondEndpoint: { Person: person }
+              name: 'FollowedByUsers',
+              ...endpoints
             }],
             operation: 'CREATE'
           };
-          const res = await ApiClient.ems.bulk(relBody);
+          const res = await ApiClient.ems.bulk(body);
           const outcome = summarizeBulkOutcome(res);
           if (outcome?.ok) {
-            console.info(`[SMAX] postAddFollower OK via relationship ${relName}:`, ticket, '→', person);
+            console.info('[SMAX] postAddFollower OK via FollowedByUsers:', ticket, '→', person);
             return res;
           }
-          console.warn(`[SMAX] postAddFollower relationship '${relName}' falhou:`, outcome?.messages, JSON.stringify(res));
-        } catch (e2) {
-          console.warn(`[SMAX] postAddFollower relationship '${relName}' HTTP error:`, e2.message);
+          const detail = res?.relationship_result_list?.[0]?.errorDetails?.message || '';
+          console.warn('[SMAX] postAddFollower FollowedByUsers tentativa:', JSON.stringify(endpoints), '→', detail || JSON.stringify(res));
+        } catch (err) {
+          console.warn('[SMAX] postAddFollower HTTP error:', err.message);
         }
       }
 
-      // 3) Tentativa via ems/bulk entity Follow com diferentes nomes de campo
-      const fieldVariants = [
-        { FollowedEntityType: 'Request', FollowedEntityId: ticket, PersonId: person },
-        { FollowedEntityType: 'Request', FollowedEntityId: ticket, FollowerPerson: person },
-        { FollowedEntityType: 'Request', FollowedEntityId: ticket, FollowedByPerson: person, IsSystem: false }
-      ];
-      for (const props of fieldVariants) {
-        try {
-          const entBody = { entities: [{ entity_type: 'Follow', properties: props }], operation: 'CREATE' };
-          const res = await ApiClient.ems.bulk(entBody);
-          const outcome = summarizeBulkOutcome(res);
-          if (outcome?.ok) {
-            console.info('[SMAX] postAddFollower OK via entity Follow:', JSON.stringify(props));
-            return res;
-          }
-          // Verificar se realmente criou (a API às vezes retorna 200 sem erro mas sem efeito)
-          const rl = res?.relationship_result_list || res?.entity_result_list || [];
-          console.warn('[SMAX] postAddFollower entity Follow tentativa:', JSON.stringify(props), '→', JSON.stringify(res));
-        } catch (e3) {
-          console.warn('[SMAX] postAddFollower entity Follow HTTP error:', e3.message);
-        }
-      }
-
-      console.error('[SMAX] postAddFollower: TODAS as tentativas falharam para ticket', ticket, 'pessoa', person,
-        '— verifique o console acima para detalhes. Pode ser necessário capturar a chamada de rede da UI nativa do SMAX.');
+      console.error('[SMAX] postAddFollower: falhou para ticket', ticket, 'pessoa', person);
       return null;
     };
 
