@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.63
+// @version      2.64
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.63';
+  const SMAX_TOOLKIT_VERSION = '2.64';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -878,28 +878,9 @@
     .smax-triage-meta-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; font-size:13px; color:var(--sp-text); }
     #smax-triage-quickreply-card { border:1px solid var(--sp-border); border-radius:8px; padding:10px; background:var(--sp-bg); width:100%; box-sizing:border-box; transition:border-color 0.2s ease, box-shadow 0.2s ease; }
     #smax-triage-quickreply-card[data-staged="true"] { border-color:#38bdf8; box-shadow:0 0 12px rgba(56,189,248,0.35); }
-    #smax-triage-quickreply-card textarea { width:100%; min-height:140px; resize:vertical; background:var(--sp-input-bg); color:var(--sp-text); border:1px solid var(--sp-border); border-radius:6px; padding:8px; font-family:"Segoe UI",sans-serif; box-sizing:border-box; }
-    #smax-triage-quickreply-card .cke { width:100% !important; max-width:100%; box-sizing:border-box; }
-    #smax-triage-hud .cke { z-index:1000000 !important; }
-    body .cke_panel, body .cke_combopanel, body .cke_panel_block { z-index:1000003 !important; }
-    body .cke_dialog, body .cke_dialog_container, body .cke_dialog_body, body .cke_dialog_background_cover { z-index:1000005 !important; }
-    body .cke_colorauto .cke_colorbox_color { background-color:#000 !important; }
-    body .cke_colorauto .cke_colorbox { border-color:#000 !important; }
-    body .cke_colorauto { color:#f5f5f5 !important; }
-    body[data-smax-theme="light"] #smax-triage-hud .cke_button__icon,
-    body[data-smax-theme="light"] #smax-resp-hud .cke_button__icon { filter:brightness(0) !important; opacity:0.55 !important; }
-    body[data-smax-theme="light"] #smax-triage-hud .cke_toolbar_separator,
-    body[data-smax-theme="light"] #smax-resp-hud .cke_toolbar_separator { background:#999 !important; }
-    body[data-smax-theme="gray"] #smax-triage-hud .cke_toolbar_separator,
-    body[data-smax-theme="gray"] #smax-resp-hud .cke_toolbar_separator { background:rgba(255,255,255,.35) !important; }
-    body[data-smax-theme="light"] #smax-triage-hud .cke_combo_text,
-    body[data-smax-theme="light"] #smax-resp-hud .cke_combo_text { color:#333333 !important; }
-    body[data-smax-theme="gray"] #smax-triage-hud .cke_combo_text,
-    body[data-smax-theme="gray"] #smax-resp-hud .cke_combo_text { color:#e8e6e3 !important; }
-    body[data-smax-theme="light"] #smax-triage-hud .cke_button:hover,
-    body[data-smax-theme="light"] #smax-resp-hud .cke_button:hover { background:rgba(0,115,231,.08) !important; }
-    body[data-smax-theme="gray"] #smax-triage-hud .cke_button:hover,
-    body[data-smax-theme="gray"] #smax-resp-hud .cke_button:hover { background:rgba(212,169,106,.10) !important; }
+    #smax-triage-quickreply-toolbar { display:flex; gap:2px; padding:5px 8px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; align-items:center; }
+    #smax-triage-quickreply-editor { min-height:110px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:12px 14px; color:var(--sp-text); font-size:14px; line-height:1.65; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
+    #smax-triage-quickreply-editor:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
     body[data-smax-theme="dark"] #smax-triage-hud .cke_button__icon,
     body[data-smax-theme="dark"] #smax-resp-hud .cke_button__icon { filter:brightness(10) !important; opacity:0.65 !important; }
     body[data-smax-theme="gray"] #smax-triage-hud .cke_button__icon,
@@ -5718,13 +5699,7 @@
       stagedStatus: ''  // raw SMAX status key chosen by the user, empty = no change
     };
     let quickReplyHtml = '';
-    let quickReplyEditor = null;
-    let quickReplyEditorAttempts = 0;
-    let quickReplyEditorConfig = null;
-    let globalCkSnapshot = null;
-    let nativeWatcherArmed = false;
-    let quickReplyFallbackNotified = false;
-    let quickReplyEditorPollTimer = null;
+    let _triageSavedRange = null;
     let activeTicketId = null;
     let editorBaselineHtml = '';
     let quickReplyDirtyState = false;
@@ -5862,30 +5837,19 @@
 
     const setQuickReplyHtml = (html, { syncBaseline = false } = {}) => {
       quickReplyHtml = html || '';
-      if (quickReplyEditor && typeof quickReplyEditor.setData === 'function') {
-        try {
-          quickReplyEditor.setData(quickReplyHtml);
-        } catch (err) {
-          console.warn('[SMAX] Falha ao atualizar o CKEditor da resposta rápida:', err);
-        }
-      } else {
-        const field = getQuickReplyField();
-        if (field) field.value = quickReplyHtml;
-      }
+      const field = getQuickReplyField();
+      if (field) field.innerHTML = quickReplyHtml;
       if (syncBaseline) {
         editorBaselineHtml = Utils.normalizeHtml(quickReplyHtml);
         updateQuickReplyStageState();
       } else {
-        syncBaselineFromEditor({ immediate: !quickReplyEditor });
+        syncBaselineFromEditor({ immediate: true });
       }
     };
 
     const readQuickReplyHtml = () => {
-      if (quickReplyEditor && typeof quickReplyEditor.getData === 'function') {
-        return quickReplyEditor.getData();
-      }
       const field = getQuickReplyField();
-      return field ? field.value : '';
+      return field ? field.innerHTML : '';
     };
 
     const clearQuickReplyState = () => {
@@ -5906,7 +5870,7 @@
         editorBaselineHtml = Utils.normalizeHtml(readQuickReplyHtml());
         updateQuickReplyStageState();
       };
-      if (immediate || !quickReplyEditor) {
+      if (immediate) {
         apply();
         return;
       }
@@ -6206,231 +6170,7 @@
       return queue.filter((entry) => matchesPersonalFinals(entry));
     };
 
-    const ensureSourceButton = (toolbar) => {
-      if (!Array.isArray(toolbar)) return;
-      const hasSource = toolbar.some((group) => {
-        if (!group) return false;
-        if (typeof group === 'string') return group === 'Source';
-        if (Array.isArray(group)) return group.includes('Source');
-        const items = Array.isArray(group.items) ? group.items : null;
-        return items ? items.includes('Source') : false;
-      });
-      if (hasSource) return;
-      if (toolbar.length) {
-        const first = toolbar[0];
-        if (typeof first === 'string') toolbar.unshift('Source');
-        else if (Array.isArray(first)) first.unshift('Source');
-        else if (first && Array.isArray(first.items)) first.items.unshift('Source');
-        else toolbar.unshift({ name: 'document', items: ['Source'] });
-      } else {
-        toolbar.push({ name: 'document', items: ['Source'] });
-      }
-    };
-
-    const defaultQuickReplyConfig = () => ({
-      height: 180,
-      allowedContent: true,
-      removePlugins: 'elementspath',
-      extraPlugins: 'colorbutton,font',
-      toolbar: [
-        { name: 'document', items: ['Source', 'Preview'] },
-        { name: 'clipboard', items: ['Undo', 'Redo'] },
-        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat'] },
-        { name: 'paragraph', items: ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent'] },
-        { name: 'links', items: ['Link', 'Unlink'] },
-        { name: 'insert', items: ['Table', 'HorizontalRule'] },
-        { name: 'styles', items: ['Format', 'Font', 'FontSize'] },
-        { name: 'colors', items: ['TextColor', 'BGColor'] }
-      ]
-    });
-
-    const copyConfigKeys = (source) => {
-      if (!source) return null;
-      const cfg = {
-        height: source.height || 180,
-        allowedContent: source.allowedContent !== undefined ? source.allowedContent : true,
-        removePlugins: source.removePlugins || 'elementspath',
-        extraPlugins: source.extraPlugins || ''
-      };
-      const keys = [
-        'toolbar', 'toolbarGroups', 'font_names', 'fontSize_sizes', 'format_tags', 'contentsCss',
-        'skin', 'uiColor', 'colorButton_foreStyle', 'colorButton_backStyle', 'stylesSet',
-        'enterMode', 'shiftEnterMode', 'removeButtons'
-      ];
-      keys.forEach((key) => {
-        if (source[key] !== undefined) cfg[key] = Utils.deepClone(source[key]);
-      });
-      if (cfg.toolbar) ensureSourceButton(cfg.toolbar);
-      return cfg;
-    };
-
-    const appendEditorCss = (config, cssText) => {
-      if (!config || !cssText) return;
-      const dataUri = `data:text/css,${encodeURIComponent(cssText)}`;
-      if (Array.isArray(config.contentsCss)) {
-        config.contentsCss.push(dataUri);
-      } else if (typeof config.contentsCss === 'string' && config.contentsCss.length) {
-        config.contentsCss = [config.contentsCss, dataUri];
-      } else {
-        config.contentsCss = [dataUri];
-      }
-    };
-
-    const pickAnyEditorInstance = () => {
-      const ck = getPageCKEditor();
-      if (!(ck && ck.instances)) return null;
-      const list = Object.values(ck.instances);
-      if (!list.length) return null;
-      const target = list.find((inst) => {
-        try {
-          const id = `${inst.name || ''} ${inst.element && inst.element.getName ? inst.element.getName() : ''}`;
-          return /solution|solucao|plCkeditor/i.test(id);
-        } catch {
-          return false;
-        }
-      });
-      return target || list[0];
-    };
-
-    const captureGlobalConfigSnapshot = () => {
-      const ck = getPageCKEditor();
-      if (globalCkSnapshot || !(ck && ck.config)) return globalCkSnapshot;
-      try {
-        globalCkSnapshot = copyConfigKeys(ck.config) || null;
-      } catch (err) {
-        console.warn('[SMAX] Failed to snapshot global CKEditor config:', err);
-        globalCkSnapshot = null;
-      }
-      return globalCkSnapshot;
-    };
-
-    const captureQuickReplyConfig = () => {
-      if (quickReplyEditorConfig) return quickReplyEditorConfig;
-      const ck = getPageCKEditor();
-      if (ck && ck.instances) {
-        const native = (Utils.locateSolutionEditor && Utils.locateSolutionEditor()) || pickAnyEditorInstance();
-        if (native && native.config) {
-          quickReplyEditorConfig = copyConfigKeys(native.config);
-          if (quickReplyEditorConfig) {
-            quickReplyFallbackNotified = false;
-            return quickReplyEditorConfig;
-          }
-        }
-      }
-      quickReplyEditorConfig = captureGlobalConfigSnapshot();
-      if (quickReplyEditorConfig && !quickReplyFallbackNotified) {
-        quickReplyFallbackNotified = true;
-        console.warn('[SMAX] CKEditor nativo ainda não foi aberto; usando configuração global detectada.');
-      }
-      return quickReplyEditorConfig;
-    };
-
-    const hookNativeEditors = () => {
-      if (nativeWatcherArmed) return;
-      nativeWatcherArmed = true;
-      console.info('[SMAX] Aguardando o CKEditor nativo para copiar a configuração...');
-      const attempt = () => {
-        const ck = getPageCKEditor();
-        if (!(ck && ck.on)) {
-          setTimeout(attempt, 800);
-          return;
-        }
-        const tryCapture = (editor) => {
-          if (!editor || !editor.config) return;
-          const cfg = copyConfigKeys(editor.config);
-          if (cfg) {
-            quickReplyEditorConfig = cfg;
-            quickReplyFallbackNotified = false;
-            console.info('[SMAX] Configuração do CKEditor clonada para a resposta rápida.');
-            if (!quickReplyEditor) ensureQuickReplyEditor();
-          }
-        };
-        Object.values(ck.instances || {}).forEach(tryCapture);
-        ck.on('instanceReady', (evt) => {
-          tryCapture(evt && evt.editor);
-        });
-      };
-      attempt();
-    };
-
-    const buildQuickReplyConfig = () => {
-      const captured = captureQuickReplyConfig();
-      if (captured) return Utils.deepClone(captured);
-      const fallback = defaultQuickReplyConfig();
-      ensureSourceButton(fallback.toolbar);
-      if (!quickReplyFallbackNotified) {
-        quickReplyFallbackNotified = true;
-        console.warn('[SMAX] CKEditor nativo não detectado; usando configuração padrão na resposta rápida.');
-      }
-      return fallback;
-    };
-
-    const ensureQuickReplyEditor = () => {
-      const ck = getPageCKEditor();
-      if (!ck || !ck.replace || quickReplyEditor) return;
-      const field = getQuickReplyField();
-      if (!field) return;
-      const config = buildQuickReplyConfig();
-      if (!config) return;
-      try {
-        console.info('[SMAX] Inicializando editor de resposta rápida.');
-        const instanceConfig = Object.assign({ resize_enabled: true }, config);
-        appendEditorCss(instanceConfig, 'body{color:#000000 !important;}');
-        quickReplyEditor = ck.replace(field, instanceConfig);
-        const enforceDefaultColor = () => {
-          try {
-            if (!quickReplyEditor) return;
-            const editable = typeof quickReplyEditor.editable === 'function' ? quickReplyEditor.editable() : null;
-            if (editable && typeof editable.setStyle === 'function') {
-              editable.setStyle('color', '#000000');
-              editable.removeClass('smax-quickreply-muted');
-            }
-          } catch (err) {
-            console.warn('[SMAX] Failed to enforce default CKEditor text color:', err);
-          }
-        };
-        quickReplyEditor.on('instanceReady', () => {
-          enforceDefaultColor();
-          quickReplyEditor.setData(quickReplyHtml || '');
-          setTimeout(() => syncBaselineFromEditor({ immediate: true }), 60);
-          console.info('[SMAX] Editor de resposta rápida pronto e sincronizado.');
-        });
-        quickReplyEditor.on('contentDom', enforceDefaultColor);
-        quickReplyEditor.on('change', () => {
-          handleQuickReplyChange(quickReplyEditor.getData());
-        });
-      } catch (err) {
-        console.warn('[SMAX] Failed to init quick reply editor:', err);
-        console.error('[SMAX] Não consegui carregar o CKEditor no painel de resposta rápida.');
-      }
-    };
-
-    const QUICK_REPLY_MAX_ATTEMPTS = 60; // ~50s máximo de polling
-    const scheduleQuickReplyEditor = () => {
-      if (quickReplyEditor) return;
-      if (quickReplyEditorPollTimer) clearTimeout(quickReplyEditorPollTimer);
-      quickReplyEditorAttempts += 1;
-      if (quickReplyEditorAttempts > QUICK_REPLY_MAX_ATTEMPTS) {
-        quickReplyEditorPollTimer = null;
-        console.warn('[SMAX] scheduleQuickReplyEditor: CKEditor não encontrado após', QUICK_REPLY_MAX_ATTEMPTS, 'tentativas. Polling encerrado.');
-        return;
-      }
-      const ck = getPageCKEditor();
-      const ckReady = Boolean(ck && ck.replace);
-      if (ckReady) {
-        ensureQuickReplyEditor();
-      } else {
-        if (quickReplyEditorAttempts === 1) {
-          console.info('[SMAX] Carregando scripts do CKEditor para a resposta rápida...');
-        }
-      }
-      if (!quickReplyEditor) {
-        const delay = Math.min(1200, 600 + quickReplyEditorAttempts * 40);
-        quickReplyEditorPollTimer = setTimeout(scheduleQuickReplyEditor, delay);
-      } else {
-        quickReplyEditorPollTimer = null;
-      }
-    };
+    // CKEditor removido — editor de resposta rápida usa contenteditable + toolbar customizada
 
     const captureSelectedIdFromDom = () => {
       try {
@@ -7433,7 +7173,31 @@
                 <button type="button" class="smax-triage-primary smax-triage-chip" id="smax-triage-commit" disabled>ENVIAR</button>
               </div>
               <div id="smax-triage-quickreply-card" data-staged="false">
-                <textarea id="smax-triage-quickreply-editor" placeholder="Digite aqui sua resposta..."></textarea>
+                <div id="smax-triage-quickreply-toolbar">
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="bold" title="Negrito"><b>B</b></button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="italic" title="Itálico"><i>I</i></button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="underline" title="Sublinhado"><u>U</u></button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="strikeThrough" title="Tachado"><s>S</s></button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="removeFormat" title="Limpar formatação">⊘</button>
+                  <span class="smax-resp-tb-sep"></span>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="insertOrderedList" title="Lista numerada">1.</button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">•</button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="indent" title="Aumentar recuo">⇥</button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="outdent" title="Diminuir recuo">⇤</button>
+                  <span class="smax-resp-tb-sep"></span>
+                  <button type="button" class="smax-resp-tb-btn" data-action="link" title="Inserir link">🔗</button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="unlink" title="Remover link">🔗̸</button>
+                  <button type="button" class="smax-resp-tb-btn" data-cmd="insertHorizontalRule" title="Linha horizontal">―</button>
+                  <span class="smax-resp-tb-sep"></span>
+                  <select class="smax-resp-tb-select" id="smax-triage-tb-fontsize" title="Tamanho da fonte">
+                    <option value="">Tam.</option>
+                    <option value="1">8</option><option value="2">10</option><option value="3">12</option>
+                    <option value="4">14</option><option value="5">18</option><option value="6">24</option><option value="7">36</option>
+                  </select>
+                  <label class="smax-resp-tb-label" title="Cor do texto">A <input type="color" class="smax-resp-tb-color" id="smax-triage-tb-fgcolor" value="#000000"></label>
+                  <label class="smax-resp-tb-label" title="Cor de fundo">🖌 <input type="color" class="smax-resp-tb-color" id="smax-triage-tb-bgcolor" value="#ffff00"></label>
+                </div>
+                <div id="smax-triage-quickreply-editor" contenteditable="true" data-placeholder="Digite aqui sua resposta..."></div>
               </div>
               <div id="smax-triage-status-row" data-empty="true">
                 <div id="smax-triage-status">Fila de triagem ainda não inicializada.</div>
@@ -7509,10 +7273,42 @@
       const refreshBtn = backdrop.querySelector('#smax-triage-refresh');
       if (refreshBtn) refreshBtn.addEventListener('click', () => syncQueueFromApi({ force: true, announce: true }));
       backdrop.querySelector('#smax-triage-commit').addEventListener('click', () => commit());
-      const quickTextarea = backdrop.querySelector('#smax-triage-quickreply-editor');
-      if (quickTextarea) quickTextarea.addEventListener('input', () => {
-        if (!quickReplyEditor) handleQuickReplyChange(quickTextarea.value);
-      });
+      // ── Toolbar do editor de resposta rápida (contenteditable) ──
+      const quickEditor = backdrop.querySelector('#smax-triage-quickreply-editor');
+      if (quickEditor) {
+        quickEditor.addEventListener('input', () => handleQuickReplyChange(quickEditor.innerHTML));
+        document.addEventListener('selectionchange', () => {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount && quickEditor.contains(sel.anchorNode)) {
+            _triageSavedRange = sel.getRangeAt(0).cloneRange();
+          }
+        });
+        const restoreSel = () => {
+          if (!_triageSavedRange) return;
+          quickEditor.focus();
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(_triageSavedRange);
+        };
+        backdrop.querySelectorAll('#smax-triage-quickreply-toolbar [data-cmd]').forEach(btn => {
+          btn.addEventListener('mousedown', e => e.preventDefault());
+          btn.addEventListener('click', () => { restoreSel(); document.execCommand(btn.dataset.cmd, false, null); });
+        });
+        backdrop.querySelector('#smax-triage-quickreply-toolbar [data-action="link"]')?.addEventListener('click', () => {
+          restoreSel();
+          const url = prompt('URL do link:');
+          if (url) document.execCommand('createLink', false, url);
+        });
+        const tFontSize = backdrop.querySelector('#smax-triage-tb-fontsize');
+        if (tFontSize) {
+          tFontSize.addEventListener('mousedown', e => e.stopPropagation());
+          tFontSize.addEventListener('change', () => { restoreSel(); document.execCommand('fontSize', false, tFontSize.value); tFontSize.value = ''; });
+        }
+        const tFg = backdrop.querySelector('#smax-triage-tb-fgcolor');
+        if (tFg) tFg.addEventListener('input', () => { restoreSel(); document.execCommand('foreColor', false, tFg.value); });
+        const tBg = backdrop.querySelector('#smax-triage-tb-bgcolor');
+        if (tBg) tBg.addEventListener('input', () => { restoreSel(); document.execCommand('hiliteColor', false, tBg.value); });
+      }
       const attachmentListEl = backdrop.querySelector('#smax-triage-attachment-list');
       if (attachmentListEl) {
         attachmentListEl.addEventListener('click', (evt) => {
@@ -7595,17 +7391,8 @@
                 const idx = parseInt(item.dataset.sigIdx, 10);
                 const sig = sigs[idx];
                 if (sig) {
-                  // Detect if CKEditor is active
-                  if (quickReplyEditor && typeof quickReplyEditor.insertHtml === 'function') {
-                    SignatureManager.appendToCKEditor(quickReplyEditor, sig.html);
-                  } else {
-                    const ta = backdrop.querySelector('#smax-triage-quickreply-editor');
-                    if (ta) {
-                      // Textarea: inserir HTML bruto para preservar formatação na submissão
-                      ta.value = ta.value + '\n' + sig.html;
-                      ta.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                  }
+                  const editorEl = backdrop.querySelector('#smax-triage-quickreply-editor');
+                  if (editorEl) SignatureManager.appendToContenteditable(editorEl, sig.html);
                 }
                 triageSigPicker.style.display = 'none';
               });
@@ -7628,7 +7415,6 @@
         });
       }
 
-      scheduleQuickReplyEditor();
     };
 
     DataRepository.onQueueUpdate(() => {
