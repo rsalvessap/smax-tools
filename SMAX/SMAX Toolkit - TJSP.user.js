@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.69
+// @version      2.70
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.69';
+  const SMAX_TOOLKIT_VERSION = '2.70';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -7473,6 +7473,8 @@
     let pendingStatusSCCDByTicket = {}; // { [ticketId]: {key, label} } — StatusSCCDSMAX_c por ticket
     // Cache das discussões renderizadas — permite lookup por índice no handler do botão Replicar
     let currentDiscussions = [];
+    // Cache de seguidores existentes no SMAX — { ticketId: [{id, name}] }
+    let existingFollowersMap = new Map();
     // Filtro de texto livre sobre a lista já carregada
     let textFilter = '';
     // Ordenação da lista
@@ -8067,21 +8069,16 @@
 
       setRespSolutionData(Utils.sanitizeRichText(entry.solutionHtml) || '');
 
-      // Meta-bar: Seguidor chip (mostra pendente ou estado padrão)
-      const followerChipName = backdrop.querySelector('#smax-resp-follower-chip-name');
-      const followerBtn = backdrop.querySelector('#smax-resp-follower-btn');
-      if (followerChipName && followerBtn) {
-        const fl = pending.followers || [];
-        if (fl.length) {
-          followerChipName.textContent = fl.length === 1 ? fl[0].name : `${fl.length} seguidores`;
-          followerBtn.classList.add('dirty');
-          followerBtn.title = `Seguidores pendentes: ${fl.map(f => f.name).join(', ')}`;
-        } else {
-          followerChipName.textContent = 'Seguidor';
-          followerBtn.classList.remove('dirty');
-          followerBtn.title = 'Adicionar seguidor';
-        }
+      // Meta-bar: Seguidor chip — busca seguidores existentes e mostra estado
+      const follTid = entry.idText || activeTicketId || '';
+      if (follTid && !existingFollowersMap.has(follTid)) {
+        // Busca em background, atualiza chip quando chegar
+        fetchExistingFollowers(follTid).then(list => {
+          existingFollowersMap.set(follTid, list);
+          if (activeTicketId === follTid) updateFollowerChip(follTid);
+        });
       }
+      updateFollowerChip(follTid);
 
       // Preencher input Global ID com valor do ticket ativo
       const globalIdInput = backdrop.querySelector('#smax-resp-global-id');
@@ -8969,10 +8966,16 @@
         if (chipAssBtn)  chipAssBtn.classList.remove('dirty');
         if (chipSccdName && entry) chipSccdName.textContent = STATUS_SCCD_LABELS[entry.statusSCCD] || entry.statusSCCD || '—';
         if (chipSccdBtn)  chipSccdBtn.classList.remove('dirty');
-        const chipFollName = backdrop?.querySelector('#smax-resp-follower-chip-name');
-        const chipFollBtn  = backdrop?.querySelector('#smax-resp-follower-btn');
-        if (chipFollName) chipFollName.textContent = 'Seguidor';
-        if (chipFollBtn)  chipFollBtn.classList.remove('dirty');
+        // Invalidar cache de seguidores para forçar re-busca (foram adicionados novos)
+        for (const t of targets) existingFollowersMap.delete(t);
+        // Re-buscar seguidores do ticket ativo e atualizar chip
+        if (activeTicketId) {
+          fetchExistingFollowers(activeTicketId).then(list => {
+            existingFollowersMap.set(activeTicketId, list);
+            updateFollowerChip(activeTicketId);
+          });
+        }
+        updateFollowerChip(activeTicketId);
         setStatusMsg(`${ok} ok, ${fail} com erro${skipped > 0 ? `, ${skipped} ignorado(s)` : ''}.`, '#fca5a5');
       }
       updateSendButton();
@@ -9543,6 +9546,50 @@
       setTimeout(() => document.addEventListener('mousedown', closeOnOutside, true), 0);
     };
 
+    // ── Follower (Seguidor) — buscar existentes ─────────────────────
+    const fetchExistingFollowers = async (ticketId) => {
+      if (!ticketId) return [];
+      try {
+        const res = await ApiClient.ems.collection('Person', {
+          filter: `(FollowedByUsers[Id = '${ticketId}'])`,
+          layout: 'Id,Name,FullName',
+          size: 200
+        });
+        const entities = res?.entities || [];
+        return entities.map(e => ({
+          id: String(e.properties?.Id || ''),
+          name: e.properties?.Name || e.properties?.FullName || String(e.properties?.Id || '')
+        })).filter(f => f.id);
+      } catch (err) {
+        console.warn('[SMAX] fetchExistingFollowers falhou:', err.message);
+        return [];
+      }
+    };
+
+    const updateFollowerChip = (ticketId) => {
+      const chipEl = backdrop?.querySelector('#smax-resp-follower-chip-name');
+      const chipBtn = backdrop?.querySelector('#smax-resp-follower-btn');
+      if (!chipEl || !chipBtn) return;
+      const pending = getBatchPending();
+      const fl = pending.followers || [];
+      const existing = existingFollowersMap.get(ticketId) || [];
+      if (fl.length) {
+        // Há seguidores pendentes para adicionar
+        chipEl.textContent = fl.length === 1 ? `+ ${fl[0].name}` : `+ ${fl.length} novos`;
+        chipBtn.classList.add('dirty');
+        chipBtn.title = `Adicionar: ${fl.map(f => f.name).join(', ')}${existing.length ? `\nJá seguem: ${existing.map(f => f.name).join(', ')}` : ''}`;
+      } else if (existing.length) {
+        // Sem pendentes, mas tem seguidores existentes
+        chipEl.textContent = existing.length === 1 ? existing[0].name : `${existing.length} seguidores`;
+        chipBtn.classList.remove('dirty');
+        chipBtn.title = `Seguidores atuais: ${existing.map(f => f.name).join(', ')}`;
+      } else {
+        chipEl.textContent = 'Seguidor';
+        chipBtn.classList.remove('dirty');
+        chipBtn.title = 'Adicionar seguidor';
+      }
+    };
+
     // ── Follower (Seguidor) picker ─────────────────────────────────
     const openFollowerPicker = async () => {
       if (!backdrop || !activeTicketId) return;
@@ -9551,26 +9598,26 @@
       if (!picker || !btn) return;
       if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
       closeAllPickers();
-      picker.innerHTML = '<div class="smax-resp-field-picker-empty">Carregando pessoas...</div>';
+      picker.innerHTML = '<div class="smax-resp-field-picker-empty">Carregando...</div>';
       positionPicker(picker, btn);
 
       await DataRepository.ensurePeopleLoaded();
+      // Buscar seguidores existentes (se ainda não temos)
+      if (!existingFollowersMap.has(activeTicketId)) {
+        existingFollowersMap.set(activeTicketId, await fetchExistingFollowers(activeTicketId));
+      }
+      const existingSet = new Map((existingFollowersMap.get(activeTicketId) || []).map(f => [f.id, f.name]));
+
       const pending = getBatchPending();
-      // selectedFollowers: cópia local do array pendente para multi-select
+      // selectedFollowers: novos seguidores a adicionar (excluindo os que já existem)
       const selectedFollowers = new Map((pending.followers || []).map(f => [f.id, f.name]));
       const people = Array.from(DataRepository.peopleCache.values()).sort((a, b) =>
         (a.name || '').localeCompare(b.name || '', 'pt'));
 
-      const updateChip = () => {
-        const chipEl = backdrop.querySelector('#smax-resp-follower-chip-name');
-        const chipBtn = backdrop.querySelector('#smax-resp-follower-btn');
+      const updateChipLocal = () => {
         const arr = Array.from(selectedFollowers.entries()).map(([id, name]) => ({ id, name }));
         setBatchPending('followers', arr.length ? arr : null);
-        if (chipEl) chipEl.textContent = arr.length === 0 ? 'Seguidor' : arr.length === 1 ? arr[0].name : `${arr.length} seguidores`;
-        if (chipBtn) {
-          chipBtn.classList.toggle('dirty', arr.length > 0);
-          chipBtn.title = arr.length ? `Seguidores: ${arr.map(f => f.name).join(', ')}` : 'Adicionar seguidor';
-        }
+        updateFollowerChip(activeTicketId);
         updateSendButton();
       };
 
@@ -9584,13 +9631,21 @@
           return;
         }
         listEl.innerHTML = filtered.map(p => {
+          const isExisting = existingSet.has(p.id);
           const isSelected = selectedFollowers.has(p.id);
           const label = p.name || p.fullName || p.id;
+          if (isExisting) {
+            return `<div class="smax-resp-field-picker-item" style="cursor:default;opacity:.6;" title="Já é seguidor deste chamado">
+              <span style="display:inline-block;width:18px;text-align:center;color:#22c55e;">●</span><span>${Utils.escapeHtml(label)}</span>
+              <span style="margin-left:auto;font-size:10px;color:#6b7280;">já segue</span>
+            </div>`;
+          }
           return `<div class="smax-resp-field-picker-item${isSelected ? ' active' : ''}" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(label)}" style="cursor:pointer;">
             <span style="display:inline-block;width:18px;text-align:center;">${isSelected ? '✓' : ''}</span><span>${Utils.escapeHtml(label)}</span>
           </div>`;
         }).join('');
-        listEl.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
+        // Bind click apenas nos itens que NÃO são existentes
+        listEl.querySelectorAll('.smax-resp-field-picker-item[data-id]').forEach(item => {
           item.addEventListener('click', () => {
             const pid = item.dataset.id;
             const pname = item.dataset.name;
@@ -9599,15 +9654,19 @@
             } else {
               selectedFollowers.set(pid, pname);
             }
-            updateChip();
+            updateChipLocal();
             renderPeople(picker.querySelector('.smax-resp-field-picker-search')?.value || '');
           });
         });
       };
 
-      // Cabeçalho: limpar todos + confirmar
-      const headerHtml = `<div style="display:flex;gap:6px;padding:4px 6px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;">
-        <button class="smax-fp-clear-btn" style="flex:1;padding:4px 8px;border:1px solid rgba(248,113,113,.4);background:transparent;color:#f87171;border-radius:5px;cursor:pointer;font-size:11px;">× Limpar todos</button>
+      // Cabeçalho: seguidores existentes + botões
+      const existingCount = existingSet.size;
+      const existingHtml = existingCount
+        ? `<div style="padding:4px 8px 2px;font-size:10px;color:#6b7280;">👁️ ${existingCount} seguidor(es) atual(is)</div>`
+        : '';
+      const headerHtml = `${existingHtml}<div style="display:flex;gap:6px;padding:4px 6px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;">
+        <button class="smax-fp-clear-btn" style="flex:1;padding:4px 8px;border:1px solid rgba(248,113,113,.4);background:transparent;color:#f87171;border-radius:5px;cursor:pointer;font-size:11px;">× Limpar seleção</button>
         <button class="smax-fp-confirm-btn" style="flex:1;padding:4px 8px;border:none;background:#22c55e;color:#fff;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;">✓ Confirmar</button>
       </div>`;
 
@@ -9617,7 +9676,7 @@
 
       picker.querySelector('.smax-fp-clear-btn')?.addEventListener('click', () => {
         selectedFollowers.clear();
-        updateChip();
+        updateChipLocal();
         picker.style.display = 'none';
       });
       picker.querySelector('.smax-fp-confirm-btn')?.addEventListener('click', () => {
