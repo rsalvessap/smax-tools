@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.66
+// @version      2.67
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.66';
+  const SMAX_TOOLKIT_VERSION = '2.67';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -3310,9 +3310,7 @@
       if (!prefs.enableRealWrites) return { skipped: true };
       if (!ticketId || !bodyHtml) return null;
 
-      // SMAX exige: Comments como string JSON com TODOS os comentários existentes + o novo,
-      // e LastUpdateTime do ticket. Buscamos fresco via ensureRequestPayload (usa FULL_LAYOUT
-      // que sabemos retornar Comments), depois lemos rawComments/lastUpdateTime do cache.
+      // Buscar LastUpdateTime fresco (necessário para o UPDATE)
       try {
         await DataRepository.ensureRequestPayload(String(ticketId), { force: true });
       } catch (err) {
@@ -3321,7 +3319,6 @@
       }
       const cached = DataRepository.triageCache.get(String(ticketId)) || {};
       const lastUpdateTime = cached.lastUpdateTime || 0;
-      const existingComments = cached.rawComments || [];
 
       // Gera CommentId no mesmo formato hex de 36 chars usado pelo SMAX
       const commentId = Array.from({ length: 36 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -3354,13 +3351,16 @@
         AttachmentIds: ''
       };
 
+      // Envia APENAS o novo comentário (não todos os existentes).
+      // Re-enviar todos os comentários acumulados faz o JSON ultrapassar
+      // o limite do campo Comments do SMAX, causando truncamento server-side.
       const body = {
         entities: [{
           entity_type: 'Request',
           properties: {
             Id: String(ticketId),
             LastUpdateTime: lastUpdateTime,
-            Comments: JSON.stringify({ Comment: [...existingComments, newComment] })
+            Comments: JSON.stringify({ Comment: [newComment] })
           }
         }],
         operation: 'UPDATE'
@@ -3372,7 +3372,7 @@
       });
     };
 
-    /** Adiciona um seguidor (Person) a um chamado (Request) via entity Follow. */
+    /** Adiciona um seguidor (Person) a um chamado (Request) via relationship RequestFollowedByPerson. */
     const postAddFollower = (ticketId, personId) => {
       if (!prefs.enableRealWrites) {
         console.warn('[SMAX] Real writes disabled.');
@@ -3385,13 +3385,10 @@
         return Promise.resolve(null);
       }
       const body = {
-        entities: [{
-          entity_type: 'Follow',
-          properties: {
-            FollowedEntityType: 'Request',
-            FollowedEntityId: ticket,
-            FollowerPerson: person
-          }
+        relationships: [{
+          name: 'RequestFollowedByPerson',
+          firstEndpoint: { Request: ticket },
+          secondEndpoint: { Person: person }
         }],
         operation: 'CREATE'
       };
