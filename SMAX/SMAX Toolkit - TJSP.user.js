@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.61
+// @version      2.62
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.61';
+  const SMAX_TOOLKIT_VERSION = '2.62';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -7390,7 +7390,7 @@
               </div>
             </div>
             <div id="smax-triage-hud-footer">
-              <div class="smax-triage-top-row" style="flex-wrap:nowrap;gap:14px;align-items:center;">
+              <div class="smax-triage-top-row">
                 <div class="smax-triage-urg-group">
                   <button type="button" class="smax-triage-secondary smax-triage-chip smax-urg-low" id="smax-triage-urg-low" disabled>Baixa</button>
                   <button type="button" class="smax-triage-secondary smax-triage-chip smax-urg-med" id="smax-triage-urg-med" disabled>Média</button>
@@ -7727,6 +7727,39 @@
       ]
     });
 
+    const buildRespEditorConfig = () => {
+      const ck = getPageCKEditor();
+      // Tentar clonar config de qualquer instância nativa do CKEditor (skin, contentsCss, etc.)
+      let nativeCfg = null;
+      if (ck && ck.instances) {
+        for (const inst of Object.values(ck.instances)) {
+          if (inst && inst.config) {
+            nativeCfg = {};
+            const keys = ['contentsCss','skin','uiColor','language','baseHref',
+              'font_names','fontSize_sizes','format_tags',
+              'colorButton_foreStyle','colorButton_backStyle','stylesSet',
+              'enterMode','shiftEnterMode'];
+            keys.forEach(k => { if (inst.config[k] !== undefined) nativeCfg[k] = Utils.deepClone(inst.config[k]); });
+            break;
+          }
+        }
+      }
+      // Mesclar com toolbar e settings desejados
+      const defaults = defaultRespEditorConfig();
+      const config = Object.assign({}, nativeCfg || {}, defaults);
+      // Injetar CSS de cor padrão (mesmo padrão do TriageHUD)
+      const cssText = 'body{color:#000000 !important;}';
+      const dataUri = `data:text/css,${encodeURIComponent(cssText)}`;
+      if (Array.isArray(config.contentsCss)) {
+        config.contentsCss.push(dataUri);
+      } else if (typeof config.contentsCss === 'string' && config.contentsCss.length) {
+        config.contentsCss = [config.contentsCss, dataUri];
+      } else {
+        config.contentsCss = [dataUri];
+      }
+      return config;
+    };
+
     const ensureRespSolutionEditor = () => {
       const ck = getPageCKEditor();
       if (!ck || !ck.replace || respSolutionEditor) return;
@@ -7734,7 +7767,7 @@
       if (!field) return;
       try {
         console.info('[SMAX ResponseHUD] Inicializando CKEditor no campo de solução.');
-        const config = defaultRespEditorConfig();
+        const config = buildRespEditorConfig();
         respSolutionEditor = ck.replace(field, config);
         respSolutionEditor.on('instanceReady', () => {
           console.info('[SMAX ResponseHUD] CKEditor de solução pronto.');
@@ -8323,7 +8356,7 @@
       }
 
       const descEl = backdrop.querySelector('#smax-resp-desc-content');
-      if (descEl) descEl.innerHTML = Utils.sanitizeRichText(entry.descriptionHtml) || '<em style="color:#6b7280;">Sem descrição.</em>';
+      if (descEl) descEl.innerHTML = Utils.linkifyCNJ(Utils.sanitizeRichText(entry.descriptionHtml)) || '<em style="color:#6b7280;">Sem descrição.</em>';
 
       setRespSolutionData(Utils.sanitizeRichText(entry.solutionHtml) || '');
 
