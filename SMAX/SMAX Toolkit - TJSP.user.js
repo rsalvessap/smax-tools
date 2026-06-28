@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.62
+// @version      2.63
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.62';
+  const SMAX_TOOLKIT_VERSION = '2.63';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -948,8 +948,13 @@
     #smax-resp-solution-panel { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
     .smax-resp-tb-btn { background:transparent; border:1px solid transparent; border-radius:4px; color:var(--sp-text-muted); cursor:pointer; font-size:12px; line-height:1; padding:4px 8px; transition:background .12s,color .12s; }
     .smax-resp-tb-btn:hover { background:var(--sp-primary-hover); color:var(--sp-text); }
-    #smax-resp-solution-editor { width:100%; min-height:110px; box-sizing:border-box; }
-    #smax-resp-solution-panel .cke { width:100% !important; max-width:100%; box-sizing:border-box; }
+    #smax-resp-solution-toolbar { display:flex; gap:2px; padding:5px 8px; background:var(--sp-surface-2); border:1px solid var(--sp-border); border-bottom:none; border-radius:8px 8px 0 0; flex-wrap:wrap; align-items:center; }
+    .smax-resp-tb-sep { width:1px; background:var(--sp-border); margin:3px 2px; align-self:stretch; }
+    .smax-resp-tb-color { width:22px; height:22px; padding:0; border:1px solid var(--sp-border); border-radius:4px; cursor:pointer; background:transparent; vertical-align:middle; }
+    .smax-resp-tb-select { background:var(--sp-surface-2); border:1px solid var(--sp-border); border-radius:4px; color:var(--sp-text-muted); font-size:11px; padding:2px 4px; cursor:pointer; height:24px; }
+    .smax-resp-tb-label { display:inline-flex; align-items:center; gap:2px; cursor:pointer; font-size:11px; color:var(--sp-text-muted); }
+    #smax-resp-solution-editor { min-height:110px; width:100%; box-sizing:border-box; background:var(--sp-input-bg); border:1px solid var(--sp-border); border-radius:0 0 8px 8px; padding:12px 14px; color:var(--sp-text); font-size:14px; line-height:1.65; outline:none; font-family:inherit; transition:border-color .15s; overflow-y:auto; max-height:40vh; }
+    #smax-resp-solution-editor:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
     .smax-resp-list-desc { font-size:11px; color:var(--sp-text-muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .smax-sort-btn { font-size:10px; padding:2px 6px; border-radius:4px; border:1px solid var(--sp-border); background:transparent; color:var(--sp-text-muted); cursor:pointer; transition:all .12s; white-space:nowrap; line-height:1.4; }
     .smax-sort-btn:hover { color:var(--sp-text); border-color:var(--sp-border); }
@@ -7684,120 +7689,20 @@
       if (settingsBtn) settingsBtn.style.display = '';
     };
 
-    // ── CKEditor para o campo de solução do ResponseHUD ──
-    let respSolutionEditor = null;
-    let respEditorPollTimer = null;
-    let respEditorAttempts = 0;
-    const RESP_EDITOR_MAX_ATTEMPTS = 60;
+    // ── Editor de solução do ResponseHUD (contenteditable + toolbar) ──
+    let _savedRange = null;
 
     const getRespSolutionData = () => {
-      if (respSolutionEditor) return respSolutionEditor.getData() || '';
-      const ta = backdrop?.querySelector('#smax-resp-solution-editor');
-      return ta?.value || '';
+      const el = backdrop?.querySelector('#smax-resp-solution-editor');
+      return el ? el.innerHTML : '';
     };
     const setRespSolutionData = (html) => {
-      if (respSolutionEditor) { respSolutionEditor.setData(html || ''); return; }
-      const ta = backdrop?.querySelector('#smax-resp-solution-editor');
-      if (ta) ta.value = html || '';
+      const el = backdrop?.querySelector('#smax-resp-solution-editor');
+      if (el) el.innerHTML = html || '';
     };
     const getRespSolutionText = () => {
-      if (respSolutionEditor) {
-        const doc = respSolutionEditor.document;
-        return doc ? (doc.getBody().getText() || '').trim() : '';
-      }
-      const ta = backdrop?.querySelector('#smax-resp-solution-editor');
-      return (ta?.value || '').trim();
-    };
-
-    const defaultRespEditorConfig = () => ({
-      height: 180,
-      allowedContent: true,
-      removePlugins: 'elementspath',
-      extraPlugins: 'colorbutton,font',
-      resize_enabled: true,
-      toolbar: [
-        { name: 'document', items: ['Source', 'Preview'] },
-        { name: 'clipboard', items: ['Undo', 'Redo'] },
-        { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat'] },
-        { name: 'paragraph', items: ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent'] },
-        { name: 'links', items: ['Link', 'Unlink'] },
-        { name: 'insert', items: ['Table', 'HorizontalRule'] },
-        { name: 'styles', items: ['Format', 'Font', 'FontSize'] },
-        { name: 'colors', items: ['TextColor', 'BGColor'] }
-      ]
-    });
-
-    const buildRespEditorConfig = () => {
-      const ck = getPageCKEditor();
-      // Tentar clonar config de qualquer instância nativa do CKEditor (skin, contentsCss, etc.)
-      let nativeCfg = null;
-      if (ck && ck.instances) {
-        for (const inst of Object.values(ck.instances)) {
-          if (inst && inst.config) {
-            nativeCfg = {};
-            const keys = ['contentsCss','skin','uiColor','language','baseHref',
-              'font_names','fontSize_sizes','format_tags',
-              'colorButton_foreStyle','colorButton_backStyle','stylesSet',
-              'enterMode','shiftEnterMode'];
-            keys.forEach(k => { if (inst.config[k] !== undefined) nativeCfg[k] = Utils.deepClone(inst.config[k]); });
-            break;
-          }
-        }
-      }
-      // Mesclar com toolbar e settings desejados
-      const defaults = defaultRespEditorConfig();
-      const config = Object.assign({}, nativeCfg || {}, defaults);
-      // Injetar CSS de cor padrão (mesmo padrão do TriageHUD)
-      const cssText = 'body{color:#000000 !important;}';
-      const dataUri = `data:text/css,${encodeURIComponent(cssText)}`;
-      if (Array.isArray(config.contentsCss)) {
-        config.contentsCss.push(dataUri);
-      } else if (typeof config.contentsCss === 'string' && config.contentsCss.length) {
-        config.contentsCss = [config.contentsCss, dataUri];
-      } else {
-        config.contentsCss = [dataUri];
-      }
-      return config;
-    };
-
-    const ensureRespSolutionEditor = () => {
-      const ck = getPageCKEditor();
-      if (!ck || !ck.replace || respSolutionEditor) return;
-      const field = backdrop?.querySelector('#smax-resp-solution-editor');
-      if (!field) return;
-      try {
-        console.info('[SMAX ResponseHUD] Inicializando CKEditor no campo de solução.');
-        const config = buildRespEditorConfig();
-        respSolutionEditor = ck.replace(field, config);
-        respSolutionEditor.on('instanceReady', () => {
-          console.info('[SMAX ResponseHUD] CKEditor de solução pronto.');
-          try {
-            const editable = typeof respSolutionEditor.editable === 'function' ? respSolutionEditor.editable() : null;
-            if (editable && typeof editable.setStyle === 'function') editable.setStyle('color', '#000000');
-          } catch (_) {}
-        });
-        respSolutionEditor.on('change', () => updateSendButton());
-      } catch (err) {
-        console.warn('[SMAX ResponseHUD] Falha ao inicializar CKEditor:', err);
-      }
-    };
-
-    const scheduleRespSolutionEditor = () => {
-      if (respSolutionEditor) return;
-      if (respEditorPollTimer) clearTimeout(respEditorPollTimer);
-      respEditorAttempts += 1;
-      if (respEditorAttempts > RESP_EDITOR_MAX_ATTEMPTS) {
-        respEditorPollTimer = null;
-        console.warn('[SMAX ResponseHUD] CKEditor não encontrado após', RESP_EDITOR_MAX_ATTEMPTS, 'tentativas.');
-        return;
-      }
-      ensureRespSolutionEditor();
-      if (!respSolutionEditor) {
-        const delay = Math.min(1200, 600 + respEditorAttempts * 40);
-        respEditorPollTimer = setTimeout(scheduleRespSolutionEditor, delay);
-      } else {
-        respEditorPollTimer = null;
-      }
+      const el = backdrop?.querySelector('#smax-resp-solution-editor');
+      return el ? (el.textContent || '').trim() : '';
     };
 
     const setStatusMsg = (msg, color) => {
@@ -8222,12 +8127,6 @@
       }
       if (noTicket) noTicket.style.display = 'none';
       if (detailPanel) detailPanel.style.display = 'flex';
-
-      // Inicializar CKEditor somente após o painel estar visível (evita iframe de 0px)
-      if (!respSolutionEditor) {
-        respEditorAttempts = 0;
-        scheduleRespSolutionEditor();
-      }
 
       const idLink = backdrop.querySelector('#smax-resp-ticket-id-link');
       if (idLink) {
@@ -9075,7 +8974,8 @@
       useBtn.onclick = () => {
         if (!selectedScript) return;
         setRespSolutionData(Utils.sanitizeRichText(selectedScript.conteudo_bruto) || '');
-        if (respSolutionEditor) respSolutionEditor.focus();
+        const solEl = backdrop?.querySelector('#smax-resp-solution-editor');
+        if (solEl) solEl.focus();
         updateSendButton();
         closePicker();
       };
@@ -9965,12 +9865,8 @@
           const idx = parseInt(item.dataset.sigIdx, 10);
           const sig = sigs[idx];
           if (sig) {
-            if (respSolutionEditor) {
-              SignatureManager.appendToCKEditor(respSolutionEditor, sig.html);
-            } else {
-              const editor = backdrop.querySelector('#smax-resp-solution-editor');
-              if (editor) SignatureManager.appendToContenteditable(editor, sig.html);
-            }
+            const editor = backdrop.querySelector('#smax-resp-solution-editor');
+            if (editor) SignatureManager.appendToContenteditable(editor, sig.html);
             updateSendButton();
           }
           picker.style.display = 'none';
@@ -10198,7 +10094,31 @@
                     </div>
                     <div style="position:relative;">
                       <div id="smax-resp-signature-picker" class="smax-resp-field-picker" style="display:none;"></div>
-                      <textarea id="smax-resp-solution-editor" placeholder="Digite aqui a solução do chamado..." style="width:100%;min-height:140px;box-sizing:border-box;resize:vertical;padding:10px 12px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:13px;font-family:inherit;outline:none;line-height:1.6;"></textarea>
+                      <div id="smax-resp-solution-toolbar">
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="bold" title="Negrito"><b>B</b></button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="italic" title="Itálico"><i>I</i></button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="underline" title="Sublinhado"><u>U</u></button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="strikeThrough" title="Tachado"><s>S</s></button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="removeFormat" title="Limpar formatação">⊘</button>
+                        <span class="smax-resp-tb-sep"></span>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="insertOrderedList" title="Lista numerada">1.</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">•</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="indent" title="Aumentar recuo">⇥</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="outdent" title="Diminuir recuo">⇤</button>
+                        <span class="smax-resp-tb-sep"></span>
+                        <button type="button" class="smax-resp-tb-btn" data-action="link" title="Inserir link">🔗</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="unlink" title="Remover link">🔗̸</button>
+                        <button type="button" class="smax-resp-tb-btn" data-cmd="insertHorizontalRule" title="Linha horizontal">―</button>
+                        <span class="smax-resp-tb-sep"></span>
+                        <select class="smax-resp-tb-select" id="smax-resp-tb-fontsize" title="Tamanho da fonte">
+                          <option value="">Tam.</option>
+                          <option value="1">8</option><option value="2">10</option><option value="3">12</option>
+                          <option value="4">14</option><option value="5">18</option><option value="6">24</option><option value="7">36</option>
+                        </select>
+                        <label class="smax-resp-tb-label" title="Cor do texto">A <input type="color" class="smax-resp-tb-color" id="smax-resp-tb-fgcolor" value="#000000"></label>
+                        <label class="smax-resp-tb-label" title="Cor de fundo">🖌 <input type="color" class="smax-resp-tb-color" id="smax-resp-tb-bgcolor" value="#ffff00"></label>
+                      </div>
+                      <div id="smax-resp-solution-editor" contenteditable="true" data-placeholder="Digite aqui a solução do chamado..."></div>
                       <div id="smax-resp-script-picker"></div>
                     </div>
                     <div id="smax-resp-completion-bar">
@@ -10466,9 +10386,51 @@
         });
       });
 
-      // Fallback: escuta input no textarea (CKEditor será inicializado no open())
-      const solFallbackTa = backdrop.querySelector('#smax-resp-solution-editor');
-      if (solFallbackTa) solFallbackTa.addEventListener('input', updateSendButton);
+      // ── Toolbar do editor de solução (contenteditable) ──
+      const solEditor = backdrop.querySelector('#smax-resp-solution-editor');
+      if (solEditor) {
+        solEditor.addEventListener('input', updateSendButton);
+        // Salvar seleção ao mudar (para restaurar ao usar controles da toolbar)
+        document.addEventListener('selectionchange', () => {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount && solEditor.contains(sel.anchorNode)) {
+            _savedRange = sel.getRangeAt(0).cloneRange();
+          }
+        });
+        const restoreSelection = () => {
+          if (!_savedRange) return;
+          solEditor.focus();
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(_savedRange);
+        };
+        // Botões simples (data-cmd)
+        backdrop.querySelectorAll('#smax-resp-solution-toolbar [data-cmd]').forEach(btn => {
+          btn.addEventListener('mousedown', e => e.preventDefault());
+          btn.addEventListener('click', () => { restoreSelection(); document.execCommand(btn.dataset.cmd, false, null); });
+        });
+        // Link
+        backdrop.querySelector('#smax-resp-solution-toolbar [data-action="link"]')?.addEventListener('click', () => {
+          restoreSelection();
+          const url = prompt('URL do link:');
+          if (url) document.execCommand('createLink', false, url);
+        });
+        // Font size
+        const fontSizeSel = backdrop.querySelector('#smax-resp-tb-fontsize');
+        if (fontSizeSel) {
+          fontSizeSel.addEventListener('mousedown', e => e.stopPropagation());
+          fontSizeSel.addEventListener('change', () => { restoreSelection(); document.execCommand('fontSize', false, fontSizeSel.value); fontSizeSel.value = ''; });
+        }
+        // Cores
+        const fgColor = backdrop.querySelector('#smax-resp-tb-fgcolor');
+        if (fgColor) {
+          fgColor.addEventListener('input', () => { restoreSelection(); document.execCommand('foreColor', false, fgColor.value); });
+        }
+        const bgColor = backdrop.querySelector('#smax-resp-tb-bgcolor');
+        if (bgColor) {
+          bgColor.addEventListener('input', () => { restoreSelection(); document.execCommand('hiliteColor', false, bgColor.value); });
+        }
+      }
 
       // Scripts picker
       backdrop.querySelector('#smax-resp-scripts-btn')?.addEventListener('click', openScriptPicker);
