@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.59
+// @version      2.60
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.59';
+  const SMAX_TOOLKIT_VERSION = '2.60';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -1513,15 +1513,6 @@
     body[data-smax-theme="light"] #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
     body[data-smax-theme="dark"]  #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
 
-    /* ── HudNav — barra de navegação flutuante ── */
-    #smax-hud-nav { position:fixed; top:6px; left:50%; transform:translateX(-50%); z-index:9999999; display:flex; gap:2px; background:rgba(15,23,42,.92); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:3px 4px; box-shadow:0 4px 20px rgba(0,0,0,.5); }
-    #smax-hud-nav button { background:transparent; border:none; color:rgba(255,255,255,.55); font-size:12px; font-weight:500; padding:5px 14px; border-radius:8px; cursor:pointer; transition:all .15s; white-space:nowrap; }
-    #smax-hud-nav button:hover { color:rgba(255,255,255,.85); background:rgba(255,255,255,.08); }
-    #smax-hud-nav button.active { color:#fff; background:rgba(59,130,246,.6); }
-    body[data-smax-theme="light"] #smax-hud-nav { background:rgba(240,246,252,.95); border-color:#8aafc8; }
-    body[data-smax-theme="light"] #smax-hud-nav button { color:rgba(0,0,0,.5); }
-    body[data-smax-theme="light"] #smax-hud-nav button:hover { color:rgba(0,0,0,.8); background:rgba(0,0,0,.06); }
-    body[data-smax-theme="light"] #smax-hud-nav button.active { color:#fff; background:rgba(59,130,246,.7); }
 
 `);
 
@@ -5574,13 +5565,11 @@
         container.style.display = 'flex';
         backdropEl.style.display = 'block';
         ThemeManager.init();
-        HudNav.show('configuracoes');
       };
       _openPanel = openPanel;
       const closePanel = () => {
         container.style.display = 'none';
         backdropEl.style.display = 'none';
-        HudNav.hide();
       };
 
       backdropEl.addEventListener('click', closePanel);
@@ -5700,70 +5689,6 @@
     if (REQUEST_STATUS_LABELS[raw]) return REQUEST_STATUS_LABELS[raw];
     return raw.replace(/^RequestStatus/i, '').replace(/([a-z])([A-Z])/g, '$1 $2');
   };
-
-  /* =========================================================
-   * HudNav — barra de navegação flutuante entre módulos
-   * =======================================================*/
-  const HudNav = (() => {
-    let navEl = null;
-    const TABS = [
-      { id: 'triagem',       label: '🎯 Triagem' },
-      { id: 'respostas',     label: '📨 Respostas' },
-      { id: 'configuracoes', label: '⚙️ Configurações' }
-    ];
-
-    const create = () => {
-      if (navEl) return navEl;
-      navEl = document.createElement('div');
-      navEl.id = 'smax-hud-nav';
-      navEl.style.display = 'none';
-      navEl.innerHTML = TABS.map(t =>
-        `<button data-nav="${t.id}">${t.label}</button>`
-      ).join('');
-      navEl.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-nav]');
-        if (!btn) return;
-        const target = btn.dataset.nav;
-        navigateTo(target);
-      });
-      document.body.appendChild(navEl);
-      return navEl;
-    };
-
-    const navigateTo = (target) => {
-      // Close all HUDs first (silently — each close() calls HudNav.hide(), but we'll re-show)
-      if (typeof TriageHUD !== 'undefined' && TriageHUD.close) TriageHUD.close();
-      if (typeof ResponseHUD !== 'undefined' && ResponseHUD.close) ResponseHUD.close();
-      // Close settings panel
-      const settingsBackdrop = document.getElementById('smax-settings-backdrop');
-      const settingsPanel = document.getElementById('smax-settings');
-      if (settingsBackdrop) settingsBackdrop.style.display = 'none';
-      if (settingsPanel) settingsPanel.style.display = 'none';
-
-      // Open target (each open() calls HudNav.show() internally)
-      if (target === 'triagem' && typeof TriageHUD !== 'undefined') {
-        TriageHUD.open();
-      } else if (target === 'respostas' && typeof ResponseHUD !== 'undefined') {
-        ResponseHUD.open();
-      } else if (target === 'configuracoes' && typeof SettingsPanel !== 'undefined') {
-        SettingsPanel.open();
-      }
-    };
-
-    const show = (activeId) => {
-      if (!navEl) create();
-      navEl.style.display = 'flex';
-      navEl.querySelectorAll('button[data-nav]').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.nav === activeId);
-      });
-    };
-
-    const hide = () => {
-      if (navEl) navEl.style.display = 'none';
-    };
-
-    return { create, show, hide, navigateTo };
-  })();
 
   /* =========================================================
    * Triage HUD
@@ -7394,7 +7319,6 @@
       render();
       const realFlag = backdrop.querySelector('#smax-triage-real-flag');
       if (realFlag) realFlag.style.display = prefs.enableRealWrites ? 'block' : 'none';
-      HudNav.show('triagem');
     };
 
     const closeHud = () => {
@@ -7406,7 +7330,6 @@
       const settingsBtn = document.getElementById('smax-settings-btn');
       if (settingsBtn) settingsBtn.style.display = '';
       closeGseDropdown();
-      HudNav.hide();
     };
 
     const init = () => {
@@ -7456,6 +7379,7 @@
                   <button type="button" id="smax-triage-next" disabled aria-label="Próximo chamado" title="Próximo chamado">&#x203A;</button>
                 </span>
                 <button type="button" class="smax-triage-secondary" id="smax-triage-refresh" title="Sincronizar fila">&#x21bb;</button>
+                <button type="button" id="smax-triage-back" title="Voltar para Configurações" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0;">← Voltar</button>
                 <button id="smax-theme-toggle-hud" type="button" title="Alternar tema" style="width:30px;height:30px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🌙</button>
                 <button type="button" class="smax-triage-secondary" id="smax-triage-close" title="Minimizar triagem">_</button>
               </div>
@@ -7520,6 +7444,7 @@
 
       if (startBtn) startBtn.addEventListener('click', openHud);
       backdrop.querySelector('#smax-triage-close').addEventListener('click', closeHud);
+      backdrop.querySelector('#smax-triage-back')?.addEventListener('click', () => { closeHud(); SettingsPanel.open(); });
       backdrop.querySelector('#smax-theme-toggle-hud')?.addEventListener('click', () => ThemeManager.toggle());
       backdrop.addEventListener('click', (event) => {
         if (event.target === backdrop) {
@@ -7762,7 +7687,6 @@
       if (backdrop) backdrop.style.display = 'none';
       const settingsBtn = document.getElementById('smax-settings-btn');
       if (settingsBtn) settingsBtn.style.display = '';
-      HudNav.hide();
     };
 
     // ── CKEditor para o campo de solução do ResponseHUD ──
@@ -10096,7 +10020,6 @@
       }
       // Inicializar CKEditor apenas com o backdrop visível (evita problemas de dimensão)
       scheduleRespSolutionEditor();
-      HudNav.show('respostas');
     };
 
     const init = () => {
@@ -10192,6 +10115,7 @@
                 <input type="text" id="smax-resp-global-id" placeholder="Global ID" inputmode="numeric" autocomplete="off"
                   style="width:90px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:5px 9px;color:#fff;font-size:12px;outline:none;">
                 <button type="button" id="smax-resp-global-link-btn" title="Vincular chamado ativo ao Global informado">🔗 Vincular</button>
+                <button type="button" id="smax-resp-back-btn" title="Voltar para Configurações" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0;">← Voltar</button>
                 <button id="smax-theme-toggle-hud" type="button" title="Alternar tema" style="width:32px;height:32px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🌙</button>
                 <button type="button" id="smax-resp-close-btn" title="Fechar" style="border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.3);color:rgba(255,255,255,.85);font-size:15px;width:30px;height:30px;border-radius:6px;cursor:pointer;">✕</button>
               </div>
@@ -10239,7 +10163,7 @@
                         <button id="smax-resp-scripts-btn" type="button" class="smax-resp-action-btn">📋 Scripts</button>
                       </div>
                     </div>
-                    <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;">
+                    <div style="position:relative;">
                       <div id="smax-resp-signature-picker" class="smax-resp-field-picker" style="display:none;position:absolute;z-index:10001;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.3);padding:4px 0;min-width:200px;max-height:240px;overflow-y:auto;"></div>
                       <textarea id="smax-resp-solution-editor" placeholder="Digite aqui a solução do chamado..." style="width:100%;min-height:140px;box-sizing:border-box;resize:vertical;padding:10px 12px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:13px;font-family:inherit;outline:none;line-height:1.6;"></textarea>
                       <div id="smax-resp-script-picker"></div>
@@ -10389,6 +10313,7 @@
 
       // Close
       backdrop.querySelector('#smax-resp-close-btn').addEventListener('click', close);
+      backdrop.querySelector('#smax-resp-back-btn')?.addEventListener('click', () => { close(); SettingsPanel.open(); });
       backdrop.querySelector('#smax-theme-toggle-hud')?.addEventListener('click', () => ThemeManager.toggle());
       backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 
@@ -11811,7 +11736,6 @@
    * =======================================================*/
   const boot = () => {
     ThemeManager.init();
-    HudNav.create();
     SettingsPanel.init();
     TriageHUD.init();
     ResponseHUD.init();
