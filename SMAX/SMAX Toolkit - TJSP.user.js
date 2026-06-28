@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.58
+// @version      2.59
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.58';
+  const SMAX_TOOLKIT_VERSION = '2.59';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -1514,7 +1514,7 @@
     body[data-smax-theme="dark"]  #smax-resp-toggle-criteria { border-color:var(--sp-border) !important; color:var(--sp-text-muted) !important; }
 
     /* ── HudNav — barra de navegação flutuante ── */
-    #smax-hud-nav { position:fixed; top:6px; left:50%; transform:translateX(-50%); z-index:100001; display:flex; gap:2px; background:rgba(15,23,42,.92); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:3px 4px; box-shadow:0 4px 20px rgba(0,0,0,.5); }
+    #smax-hud-nav { position:fixed; top:6px; left:50%; transform:translateX(-50%); z-index:9999999; display:flex; gap:2px; background:rgba(15,23,42,.92); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:3px 4px; box-shadow:0 4px 20px rgba(0,0,0,.5); }
     #smax-hud-nav button { background:transparent; border:none; color:rgba(255,255,255,.55); font-size:12px; font-weight:500; padding:5px 14px; border-radius:8px; cursor:pointer; transition:all .15s; white-space:nowrap; }
     #smax-hud-nav button:hover { color:rgba(255,255,255,.85); background:rgba(255,255,255,.08); }
     #smax-hud-nav button.active { color:#fff; background:rgba(59,130,246,.6); }
@@ -10094,6 +10094,8 @@
         criteriaEl.classList.remove('collapsed');
         if (toggleBtn) { toggleBtn.textContent = '▲'; toggleBtn.title = 'Ocultar critérios'; }
       }
+      // Inicializar CKEditor apenas com o backdrop visível (evita problemas de dimensão)
+      scheduleRespSolutionEditor();
       HudNav.show('respostas');
     };
 
@@ -10232,14 +10234,14 @@
                   <div id="smax-resp-solution-panel">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                       <span style="font-size:10px;font-weight:600;color:var(--sp-text-muted);text-transform:uppercase;letter-spacing:.07em;">✏️ Solução</span>
-                      <button id="smax-resp-scripts-btn" type="button" class="smax-resp-action-btn">📋 Scripts</button>
+                      <div style="display:flex;gap:4px;align-items:center;">
+                        <button id="smax-resp-sig-btn" type="button" class="smax-resp-action-btn" title="Inserir assinatura">✒️ Assinatura</button>
+                        <button id="smax-resp-scripts-btn" type="button" class="smax-resp-action-btn">📋 Scripts</button>
+                      </div>
                     </div>
                     <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;">
-                      <div id="smax-resp-solution-extra-bar" style="display:flex;gap:4px;padding:4px 6px;align-items:center;">
-                        <button type="button" class="smax-resp-tb-btn" id="smax-resp-sig-btn" title="Inserir assinatura">✒️ Assinatura</button>
-                      </div>
                       <div id="smax-resp-signature-picker" class="smax-resp-field-picker" style="display:none;position:absolute;z-index:10001;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.3);padding:4px 0;min-width:200px;max-height:240px;overflow-y:auto;"></div>
-                      <textarea id="smax-resp-solution-editor" placeholder="Digite aqui a solução do chamado..." style="width:100%;min-height:110px;box-sizing:border-box;resize:vertical;"></textarea>
+                      <textarea id="smax-resp-solution-editor" placeholder="Digite aqui a solução do chamado..." style="width:100%;min-height:140px;box-sizing:border-box;resize:vertical;padding:10px 12px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:13px;font-family:inherit;outline:none;line-height:1.6;"></textarea>
                       <div id="smax-resp-script-picker"></div>
                     </div>
                     <div id="smax-resp-completion-bar">
@@ -10506,10 +10508,7 @@
         });
       });
 
-      // ── Inicializar CKEditor no campo de solução (mesma config do TriageHUD) ──
-      scheduleRespSolutionEditor();
-
-      // Fallback: se CKEditor nunca carregar, escuta input no textarea
+      // Fallback: escuta input no textarea (CKEditor será inicializado no open())
       const solFallbackTa = backdrop.querySelector('#smax-resp-solution-editor');
       if (solFallbackTa) solFallbackTa.addEventListener('input', updateSendButton);
 
