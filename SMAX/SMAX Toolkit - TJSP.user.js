@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.60
+// @version      2.61
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.60';
+  const SMAX_TOOLKIT_VERSION = '2.61';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -7423,13 +7423,11 @@
                 <span class="smax-indicator-value" id="smax-triage-assign-value" style="display:none;">Sem dono configurado</span>
                 <div id="smax-triage-assign-panel" data-state="disabled" style="display:none;"></div>
                 <div class="smax-global-hint" id="smax-triage-global-hint" style="display:none;"></div>
+                <button type="button" id="smax-triage-sig-btn" class="smax-triage-chip" title="Inserir assinatura" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.85);font-size:12px;padding:4px 10px;border-radius:16px;cursor:pointer;">✒️ Assinatura</button>
+                <div id="smax-triage-signature-picker" class="smax-resp-field-picker" style="display:none;"></div>
                 <button type="button" class="smax-triage-primary smax-triage-chip" id="smax-triage-commit" disabled>ENVIAR</button>
               </div>
               <div id="smax-triage-quickreply-card" data-staged="false">
-                <div id="smax-triage-sig-bar" style="display:flex;gap:4px;margin-bottom:4px;align-items:center;">
-                  <button type="button" id="smax-triage-sig-btn" class="smax-resp-tb-btn" title="Inserir assinatura" style="font-size:13px;padding:2px 6px;">✒️</button>
-                </div>
-                <div id="smax-triage-signature-picker" class="smax-resp-field-picker" style="display:none;position:absolute;z-index:10001;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.3);padding:4px 0;min-width:200px;max-height:240px;overflow-y:auto;"></div>
                 <textarea id="smax-triage-quickreply-editor" placeholder="Digite aqui sua resposta..."></textarea>
               </div>
               <div id="smax-triage-status-row" data-empty="true">
@@ -7598,11 +7596,8 @@
                   } else {
                     const ta = backdrop.querySelector('#smax-triage-quickreply-editor');
                     if (ta) {
-                      // Plain textarea: strip HTML tags for plain text
-                      const tmp = document.createElement('div');
-                      tmp.innerHTML = sig.html;
-                      const plainText = tmp.textContent || tmp.innerText || '';
-                      ta.value = ta.value + '\n' + plainText;
+                      // Textarea: inserir HTML bruto para preservar formatação na submissão
+                      ta.value = ta.value + '\n' + sig.html;
                       ta.dispatchEvent(new Event('input', { bubbles: true }));
                     }
                   }
@@ -8194,6 +8189,12 @@
       }
       if (noTicket) noTicket.style.display = 'none';
       if (detailPanel) detailPanel.style.display = 'flex';
+
+      // Inicializar CKEditor somente após o painel estar visível (evita iframe de 0px)
+      if (!respSolutionEditor) {
+        respEditorAttempts = 0;
+        scheduleRespSolutionEditor();
+      }
 
       const idLink = backdrop.querySelector('#smax-resp-ticket-id-link');
       if (idLink) {
@@ -9378,6 +9379,7 @@
 
     const positionPicker = (picker, anchorBtn) => {
       const rect = anchorBtn.getBoundingClientRect();
+      picker.style.position = 'fixed';
       picker.style.display = 'block';
       const pickerH = picker.offsetHeight || 280;
       const spaceBelow = window.innerHeight - rect.bottom - 8;
@@ -10018,8 +10020,6 @@
         criteriaEl.classList.remove('collapsed');
         if (toggleBtn) { toggleBtn.textContent = '▲'; toggleBtn.title = 'Ocultar critérios'; }
       }
-      // Inicializar CKEditor apenas com o backdrop visível (evita problemas de dimensão)
-      scheduleRespSolutionEditor();
     };
 
     const init = () => {
@@ -10164,7 +10164,7 @@
                       </div>
                     </div>
                     <div style="position:relative;">
-                      <div id="smax-resp-signature-picker" class="smax-resp-field-picker" style="display:none;position:absolute;z-index:10001;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.3);padding:4px 0;min-width:200px;max-height:240px;overflow-y:auto;"></div>
+                      <div id="smax-resp-signature-picker" class="smax-resp-field-picker" style="display:none;"></div>
                       <textarea id="smax-resp-solution-editor" placeholder="Digite aqui a solução do chamado..." style="width:100%;min-height:140px;box-sizing:border-box;resize:vertical;padding:10px 12px;border:1px solid var(--sp-border);border-radius:6px;background:var(--sp-input-bg);color:var(--sp-text);font-size:13px;font-family:inherit;outline:none;line-height:1.6;"></textarea>
                       <div id="smax-resp-script-picker"></div>
                     </div>
