@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.72
+// @version      2.73
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.72';
+  const SMAX_TOOLKIT_VERSION = '2.73';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -9555,19 +9555,16 @@
           layout: 'Id,Name',
           size: 200
         });
-        console.info('[SMAX] fetchExistingFollowers ticket', ticketId, '→', JSON.stringify(res));
         const entities = res?.entities || [];
-        const result = entities.map(e => {
+        return entities.map(e => {
           const props = e?.properties || e || {};
           return {
             id: String(props.Id || ''),
             name: props.Name || String(props.Id || '')
           };
         }).filter(f => f.id);
-        console.info('[SMAX] fetchExistingFollowers resultado:', ticketId, '→', result.length, 'seguidores:', result.map(f => f.name).join(', '));
-        return result;
       } catch (err) {
-        console.warn('[SMAX] fetchExistingFollowers falhou:', err.message, err);
+        console.warn('[SMAX] fetchExistingFollowers falhou:', err.message);
         return [];
       }
     };
@@ -9575,7 +9572,7 @@
     const updateFollowerChip = (ticketId) => {
       const chipEl = backdrop?.querySelector('#smax-resp-follower-chip-name');
       const chipBtn = backdrop?.querySelector('#smax-resp-follower-btn');
-      if (!chipEl || !chipBtn) { console.warn('[SMAX] updateFollowerChip: chip elements not found'); return; }
+      if (!chipEl || !chipBtn) return;
       const pending = getBatchPending();
       const fl = pending.followers || [];
       const existing = existingFollowersMap.get(ticketId) || [];
