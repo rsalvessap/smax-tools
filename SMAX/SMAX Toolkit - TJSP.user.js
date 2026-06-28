@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.65
+// @version      2.66
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.65';
+  const SMAX_TOOLKIT_VERSION = '2.66';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -309,6 +309,7 @@
         const row = {
           ts:               entry.ts,
           ticket_id:        entry.ticketId,
+          ticket_subject:   entry.ticketSubject  || null,
           relevant_work:    entry.relevantWork  || null,
           answered:         !!entry.answered,
           assigned:         !!entry.assigned,
@@ -351,6 +352,7 @@
       return (data || []).map(r => ({
         ts:             r.ts,
         ticketId:       r.ticket_id,
+        ticketSubject:  r.ticket_subject   || '',
         relevantWork:   r.relevant_work    || '',
         answered:       r.answered,
         assigned:       r.assigned,
@@ -3388,7 +3390,7 @@
           properties: {
             FollowedEntityType: 'Request',
             FollowedEntityId: ticket,
-            FollowedByPerson: person
+            FollowerPerson: person
           }
         }],
         operation: 'CREATE'
@@ -7508,7 +7510,7 @@
       const count = selectedTicketIds.size;
       const hasSolution = !!getRespSolutionText() && !!getSelectedCompletionCode();
       const pending = getBatchPending();
-      const hasPending = !!(pending.gse || pending.assignee || pending.follower || pendingStatusByTicket[activeTicketId] || pendingStatusSCCDByTicket[activeTicketId]);
+      const hasPending = !!(pending.gse || pending.assignee || pending.followers?.length || pendingStatusByTicket[activeTicketId] || pendingStatusSCCDByTicket[activeTicketId]);
       if (count > 1) {
         btn.textContent = hasSolution ? `Enviar em lote (${count})` : `Atualizar em lote (${count})`;
         btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
@@ -8048,10 +8050,11 @@
       const followerChipName = backdrop.querySelector('#smax-resp-follower-chip-name');
       const followerBtn = backdrop.querySelector('#smax-resp-follower-btn');
       if (followerChipName && followerBtn) {
-        if (pending.follower) {
-          followerChipName.textContent = pending.follower.name || pending.follower.id;
+        const fl = pending.followers || [];
+        if (fl.length) {
+          followerChipName.textContent = fl.length === 1 ? fl[0].name : `${fl.length} seguidores`;
           followerBtn.classList.add('dirty');
-          followerBtn.title = `Seguidor pendente: ${pending.follower.name}`;
+          followerBtn.title = `Seguidores pendentes: ${fl.map(f => f.name).join(', ')}`;
         } else {
           followerChipName.textContent = 'Seguidor';
           followerBtn.classList.remove('dirty');
@@ -8805,7 +8808,7 @@
       const statusSCCDWillChange = !!(effectivePendingSccd?.key)
         && effectivePendingSccd.key !== (cache.statusSCCD || '');
 
-      const followerWillChange = !!(pending.follower?.id);
+      const followerWillChange = !!(pending.followers?.length);
 
       return { hasSolution, curGseId, gseWillChange, curAssigneeId, assigneeWillChange,
                statusWillChange, statusSCCDWillChange, followerWillChange, effectivePendingStatus, effectivePendingSccd,
@@ -8857,15 +8860,17 @@
           if (gseWillChange && fwdHtml) {
             await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'INTERNAL' });
           }
-          // Adicionar seguidor (entity Follow separada do update de propriedades)
+          // Adicionar seguidores (entity Follow separada do update de propriedades)
           if (followerWillChange) {
-            try {
-              const followerResult = await Api.postAddFollower(id, pending.follower.id);
-              const followerOutcome = Api.summarizeBulkOutcome(followerResult);
-              if (!followerOutcome?.ok) {
-                console.warn('[SMAX ResponseHUD] addFollower falhou:', followerOutcome?.messages);
-              }
-            } catch (fe) { console.warn('[SMAX ResponseHUD] addFollower HTTP error:', fe); }
+            for (const f of (pending.followers || [])) {
+              try {
+                const followerResult = await Api.postAddFollower(id, f.id);
+                const followerOutcome = Api.summarizeBulkOutcome(followerResult);
+                if (!followerOutcome?.ok) {
+                  console.warn('[SMAX ResponseHUD] addFollower falhou para', f.name, ':', followerOutcome?.messages);
+                }
+              } catch (fe) { console.warn('[SMAX ResponseHUD] addFollower HTTP error:', fe); }
+            }
           }
         }
         // Registrar no ActivityLog — garante que ações do ResponseHUD apareçam no relatório
@@ -8880,7 +8885,7 @@
           transferred:      gseWillChange,
           transferredTo:    gseWillChange ? (pending.gse.name || pending.gse.id) : '',
           followerAdded:    followerWillChange,
-          followerName:     followerWillChange ? (pending.follower.name || pending.follower.id) : '',
+          followerName:     followerWillChange ? (pending.followers || []).map(f => f.name || f.id).join(', ') : '',
           statusSCCDChanged: statusSCCDWillChange,
           statusSCCDTo:     statusSCCDWillChange ? (pendingStatusSCCDByTicket[id]?.key || '') : '',
           usedScript:       false,
@@ -9004,9 +9009,9 @@
               <div class="smax-bc-changes">
                 ${pending.gse?.id      ? `<span class="smax-bc-change-pill gse">🏢 GSE → ${Utils.escapeHtml(pending.gse.name)}</span>` : ''}
                 ${pending.assignee?.id ? `<span class="smax-bc-change-pill assignee">👤 Especialista → ${Utils.escapeHtml(pending.assignee.name)}</span>` : ''}
-                ${pending.follower?.id ? `<span class="smax-bc-change-pill assignee">👁️ Seguidor → ${Utils.escapeHtml(pending.follower.name)}</span>` : ''}
+                ${pending.followers?.length ? `<span class="smax-bc-change-pill assignee">👁️ Seguidor(es) → ${Utils.escapeHtml((pending.followers||[]).map(f=>f.name).join(', '))}</span>` : ''}
                 ${solutionPlain   ? `<span class="smax-bc-change-pill solution">📋 Solução: "${Utils.escapeHtml(solutionPreview)}"</span>` : ''}
-                ${!pending.gse?.id && !pending.assignee?.id && !pending.follower?.id && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
+                ${!pending.gse?.id && !pending.assignee?.id && !pending.followers?.length && !solutionPlain ? '<span style="color:#f87171;font-size:12px;">Nenhuma alteração definida.</span>' : ''}
               </div>
             </div>
             <div>
@@ -9017,7 +9022,7 @@
                     <th>Chamado</th>
                     ${pending.gse?.id      ? '<th>GSE</th>'         : ''}
                     ${pending.assignee?.id ? '<th>Especialista</th>' : ''}
-                    ${pending.follower?.id ? '<th>Seguidor</th>'    : ''}
+                    ${pending.followers?.length ? '<th>Seguidor</th>'    : ''}
                     ${solutionPlain   ? '<th>Solução</th>'      : ''}
                     <th>Ação</th>
                   </tr>
@@ -9028,7 +9033,7 @@
                       <td style="font-weight:700;color:#60a5fa;">#${Utils.escapeHtml(r.id)}</td>
                       ${pending.gse?.id      ? `<td>${gseColHtml(r)}</td>`      : ''}
                       ${pending.assignee?.id ? `<td>${assigneeColHtml(r)}</td>` : ''}
-                      ${pending.follower?.id ? `<td><span style="color:#86efac;">✓ ${Utils.escapeHtml(pending.follower.name)}</span></td>` : ''}
+                      ${pending.followers?.length ? `<td><span style="color:#86efac;">✓ ${Utils.escapeHtml((pending.followers||[]).map(f=>f.name).join(', '))}</span></td>` : ''}
                       ${solutionPlain   ? `<td><span style="color:${r.hasSolution ? '#86efac' : '#6b7280'};">${r.hasSolution ? '✓' : '—'}</span></td>` : ''}
                       <td>${tagHtml(r)}</td>
                     </tr>`).join('')}
@@ -9530,9 +9535,23 @@
 
       await DataRepository.ensurePeopleLoaded();
       const pending = getBatchPending();
-      const currentFollowerId = pending.follower?.id || '';
+      // selectedFollowers: cópia local do array pendente para multi-select
+      const selectedFollowers = new Map((pending.followers || []).map(f => [f.id, f.name]));
       const people = Array.from(DataRepository.peopleCache.values()).sort((a, b) =>
         (a.name || '').localeCompare(b.name || '', 'pt'));
+
+      const updateChip = () => {
+        const chipEl = backdrop.querySelector('#smax-resp-follower-chip-name');
+        const chipBtn = backdrop.querySelector('#smax-resp-follower-btn');
+        const arr = Array.from(selectedFollowers.entries()).map(([id, name]) => ({ id, name }));
+        setBatchPending('followers', arr.length ? arr : null);
+        if (chipEl) chipEl.textContent = arr.length === 0 ? 'Seguidor' : arr.length === 1 ? arr[0].name : `${arr.length} seguidores`;
+        if (chipBtn) {
+          chipBtn.classList.toggle('dirty', arr.length > 0);
+          chipBtn.title = arr.length ? `Seguidores: ${arr.map(f => f.name).join(', ')}` : 'Adicionar seguidor';
+        }
+        updateSendButton();
+      };
 
       const renderPeople = (filter) => {
         const q = (filter || '').toLowerCase();
@@ -9544,54 +9563,45 @@
           return;
         }
         listEl.innerHTML = filtered.map(p => {
-          const isActive = p.id === currentFollowerId;
+          const isSelected = selectedFollowers.has(p.id);
           const label = p.name || p.fullName || p.id;
-          return `<div class="smax-resp-field-picker-item${isActive ? ' active' : ''}" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(label)}">
-            ${isActive ? '✓ ' : ''}<span>${Utils.escapeHtml(label)}</span>
+          return `<div class="smax-resp-field-picker-item${isSelected ? ' active' : ''}" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(label)}" style="cursor:pointer;">
+            <span style="display:inline-block;width:18px;text-align:center;">${isSelected ? '✓' : ''}</span><span>${Utils.escapeHtml(label)}</span>
           </div>`;
         }).join('');
         listEl.querySelectorAll('.smax-resp-field-picker-item').forEach(item => {
           item.addEventListener('click', () => {
             const pid = item.dataset.id;
             const pname = item.dataset.name;
-            const chipEl = backdrop.querySelector('#smax-resp-follower-chip-name');
-            const chipBtn = backdrop.querySelector('#smax-resp-follower-btn');
-            const curPending = getBatchPending();
-            const alreadySet = curPending.follower?.id === pid;
-            setBatchPending('follower', alreadySet ? null : { id: pid, name: pname });
-            if (chipEl) chipEl.textContent = alreadySet ? 'Seguidor' : pname;
-            if (chipBtn) {
-              chipBtn.classList.toggle('dirty', !alreadySet);
-              chipBtn.title = alreadySet ? 'Adicionar seguidor' : `Seguidor pendente: ${pname}`;
+            if (selectedFollowers.has(pid)) {
+              selectedFollowers.delete(pid);
+            } else {
+              selectedFollowers.set(pid, pname);
             }
-            updateSendButton();
-            picker.style.display = 'none';
+            updateChip();
+            renderPeople(picker.querySelector('.smax-resp-field-picker-search')?.value || '');
           });
         });
       };
 
-      // Opção para limpar seguidor pendente
-      const cancelHtml = currentFollowerId
-        ? `<div class="smax-resp-field-picker-item" data-id="__clear__" style="color:#f87171;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:8px;margin-bottom:4px;">× Cancelar seguidor pendente</div>`
-        : '';
+      // Cabeçalho: limpar todos + confirmar
+      const headerHtml = `<div style="display:flex;gap:6px;padding:4px 6px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;">
+        <button class="smax-fp-clear-btn" style="flex:1;padding:4px 8px;border:1px solid rgba(248,113,113,.4);background:transparent;color:#f87171;border-radius:5px;cursor:pointer;font-size:11px;">× Limpar todos</button>
+        <button class="smax-fp-confirm-btn" style="flex:1;padding:4px 8px;border:none;background:#22c55e;color:#fff;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;">✓ Confirmar</button>
+      </div>`;
 
-      picker.innerHTML = cancelHtml + `
+      picker.innerHTML = headerHtml + `
         <input class="smax-resp-field-picker-search" type="text" placeholder="Buscar pessoa..." autocomplete="off">
         <div class="smax-resp-field-picker-list"></div>`;
 
-      // Bind cancel option
-      const clearItem = picker.querySelector('[data-id="__clear__"]');
-      if (clearItem) {
-        clearItem.addEventListener('click', () => {
-          setBatchPending('follower', null);
-          const chipEl = backdrop.querySelector('#smax-resp-follower-chip-name');
-          const chipBtn = backdrop.querySelector('#smax-resp-follower-btn');
-          if (chipEl) chipEl.textContent = 'Seguidor';
-          if (chipBtn) { chipBtn.classList.remove('dirty'); chipBtn.title = 'Adicionar seguidor'; }
-          updateSendButton();
-          picker.style.display = 'none';
-        });
-      }
+      picker.querySelector('.smax-fp-clear-btn')?.addEventListener('click', () => {
+        selectedFollowers.clear();
+        updateChip();
+        picker.style.display = 'none';
+      });
+      picker.querySelector('.smax-fp-confirm-btn')?.addEventListener('click', () => {
+        picker.style.display = 'none';
+      });
 
       renderPeople('');
       positionPicker(picker, btn);
