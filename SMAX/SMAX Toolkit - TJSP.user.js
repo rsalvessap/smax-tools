@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.73
+// @version      2.74
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.73';
+  const SMAX_TOOLKIT_VERSION = '2.74';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -3430,7 +3430,32 @@
       return null;
     };
 
-    return { postUpdateRequest, postCreateRequestCausesRequest, postDiscussion, postAddFollower, extractBulkErrorMessages, summarizeBulkOutcome };
+    /** Remove um seguidor (Person) de um chamado (Request) via relationship FollowedByUsers. */
+    const postRemoveFollower = async (ticketId, personId) => {
+      if (!prefs.enableRealWrites) return { skipped: true, reason: 'real-writes-disabled' };
+      const ticket = String(ticketId || '').trim();
+      const person = String(personId || '').trim();
+      if (!ticket || !person) return null;
+      const attempts = [
+        { firstEndpoint: { Request: ticket }, secondEndpoint: { Person: person } },
+        { firstEndpoint: { Person: person }, secondEndpoint: { Request: ticket } }
+      ];
+      for (const endpoints of attempts) {
+        try {
+          const body = { relationships: [{ name: 'FollowedByUsers', ...endpoints }], operation: 'DELETE' };
+          const res = await ApiClient.ems.bulk(body);
+          const outcome = summarizeBulkOutcome(res);
+          if (outcome?.ok) {
+            console.info('[SMAX] postRemoveFollower OK:', ticket, '→', person);
+            return res;
+          }
+        } catch (err) { console.warn('[SMAX] postRemoveFollower error:', err.message); }
+      }
+      console.error('[SMAX] postRemoveFollower: falhou para ticket', ticket, 'pessoa', person);
+      return null;
+    };
+
+    return { postUpdateRequest, postCreateRequestCausesRequest, postDiscussion, postAddFollower, postRemoveFollower, extractBulkErrorMessages, summarizeBulkOutcome };
   })();
 
   /* =========================================================
@@ -9574,23 +9599,18 @@
       const chipBtn = backdrop?.querySelector('#smax-resp-follower-btn');
       if (!chipEl || !chipBtn) return;
       const pending = getBatchPending();
-      const fl = pending.followers || [];
+      const pendingAdd = pending.followers || [];
       const existing = existingFollowersMap.get(ticketId) || [];
-      if (fl.length) {
-        // Há seguidores pendentes para adicionar
-        chipEl.textContent = fl.length === 1 ? `+ ${fl[0].name}` : `+ ${fl.length} novos`;
-        chipBtn.classList.add('dirty');
-        chipBtn.title = `Adicionar: ${fl.map(f => f.name).join(', ')}${existing.length ? `\nJá seguem: ${existing.map(f => f.name).join(', ')}` : ''}`;
-      } else if (existing.length) {
-        // Sem pendentes, mas tem seguidores existentes
-        chipEl.textContent = existing.length === 1 ? existing[0].name : `${existing.length} seguidores`;
-        chipBtn.classList.remove('dirty');
-        chipBtn.title = `Seguidores atuais: ${existing.map(f => f.name).join(', ')}`;
+      const total = existing.length;
+      const hasPending = pendingAdd.length > 0;
+      if (total > 0) {
+        chipEl.textContent = `${total} seguidor${total > 1 ? 'es' : ''}`;
+        chipBtn.title = `Seguidores: ${existing.map(f => f.name).join(', ')}${hasPending ? `\n+ Adicionar: ${pendingAdd.map(f => f.name).join(', ')}` : ''}`;
       } else {
         chipEl.textContent = 'Seguidor';
-        chipBtn.classList.remove('dirty');
-        chipBtn.title = 'Adicionar seguidor';
+        chipBtn.title = hasPending ? `Adicionar: ${pendingAdd.map(f => f.name).join(', ')}` : 'Adicionar seguidor';
       }
+      chipBtn.classList.toggle('dirty', hasPending);
     };
 
     // ── Follower (Seguidor) picker ─────────────────────────────────
@@ -9605,14 +9625,13 @@
       positionPicker(picker, btn);
 
       await DataRepository.ensurePeopleLoaded();
-      // Buscar seguidores existentes (se ainda não temos)
-      if (!existingFollowersMap.has(activeTicketId)) {
-        existingFollowersMap.set(activeTicketId, await fetchExistingFollowers(activeTicketId));
-      }
-      const existingSet = new Map((existingFollowersMap.get(activeTicketId) || []).map(f => [f.id, f.name]));
+      // Buscar seguidores existentes (force refresh ao abrir)
+      existingFollowersMap.set(activeTicketId, await fetchExistingFollowers(activeTicketId));
+      const existingList = existingFollowersMap.get(activeTicketId) || [];
+      const existingIds = new Set(existingList.map(f => f.id));
+      const ticketIdForPicker = activeTicketId;
 
       const pending = getBatchPending();
-      // selectedFollowers: novos seguidores a adicionar (excluindo os que já existem)
       const selectedFollowers = new Map((pending.followers || []).map(f => [f.id, f.name]));
       const people = Array.from(DataRepository.peopleCache.values()).sort((a, b) =>
         (a.name || '').localeCompare(b.name || '', 'pt'));
@@ -9620,35 +9639,66 @@
       const updateChipLocal = () => {
         const arr = Array.from(selectedFollowers.entries()).map(([id, name]) => ({ id, name }));
         setBatchPending('followers', arr.length ? arr : null);
-        updateFollowerChip(activeTicketId);
+        updateFollowerChip(ticketIdForPicker);
         updateSendButton();
       };
 
-      const renderPeople = (filter) => {
+      const renderList = (filter) => {
         const q = (filter || '').toLowerCase();
-        const filtered = q ? people.filter(p => (p.name || '').toLowerCase().includes(q)) : people.slice(0, 80);
         const listEl = picker.querySelector('.smax-resp-field-picker-list');
         if (!listEl) return;
-        if (!filtered.length) {
-          listEl.innerHTML = '<div class="smax-resp-field-picker-empty">Nenhuma pessoa encontrada.</div>';
-          return;
-        }
-        listEl.innerHTML = filtered.map(p => {
-          const isExisting = existingSet.has(p.id);
+
+        // 1) Seguidores existentes (sempre no topo, independente do filtro de busca)
+        const existingHtml = existingList
+          .filter(f => !q || f.name.toLowerCase().includes(q))
+          .map(f => `<div class="smax-resp-field-picker-item" data-id="${Utils.escapeHtml(f.id)}" data-name="${Utils.escapeHtml(f.name)}" data-existing="1" style="cursor:pointer;background:rgba(34,197,94,.08);border-left:3px solid #22c55e;">
+            <span style="display:inline-block;width:18px;text-align:center;color:#22c55e;">●</span>
+            <span style="font-weight:600;color:#86efac;">${Utils.escapeHtml(f.name)}</span>
+            <span style="margin-left:auto;font-size:10px;color:#f87171;cursor:pointer;" title="Remover seguidor">✕</span>
+          </div>`).join('');
+
+        // 2) Pessoas disponíveis (não existentes)
+        const available = q
+          ? people.filter(p => !existingIds.has(p.id) && (p.name || '').toLowerCase().includes(q))
+          : people.filter(p => !existingIds.has(p.id)).slice(0, 80);
+        const availableHtml = available.map(p => {
           const isSelected = selectedFollowers.has(p.id);
-          const label = p.name || p.fullName || p.id;
-          if (isExisting) {
-            return `<div class="smax-resp-field-picker-item" style="cursor:default;opacity:.6;" title="Já é seguidor deste chamado">
-              <span style="display:inline-block;width:18px;text-align:center;color:#22c55e;">●</span><span>${Utils.escapeHtml(label)}</span>
-              <span style="margin-left:auto;font-size:10px;color:#6b7280;">já segue</span>
-            </div>`;
-          }
+          const label = p.name || p.id;
           return `<div class="smax-resp-field-picker-item${isSelected ? ' active' : ''}" data-id="${Utils.escapeHtml(p.id)}" data-name="${Utils.escapeHtml(label)}" style="cursor:pointer;">
             <span style="display:inline-block;width:18px;text-align:center;">${isSelected ? '✓' : ''}</span><span>${Utils.escapeHtml(label)}</span>
           </div>`;
         }).join('');
-        // Bind click apenas nos itens que NÃO são existentes
-        listEl.querySelectorAll('.smax-resp-field-picker-item[data-id]').forEach(item => {
+
+        // Separador entre existentes e disponíveis
+        const sepHtml = existingHtml && availableHtml
+          ? '<div style="border-top:1px solid rgba(255,255,255,.1);margin:4px 0;font-size:10px;color:#6b7280;padding:4px 8px;">Adicionar novo:</div>'
+          : '';
+
+        listEl.innerHTML = existingHtml + sepHtml + availableHtml
+          || '<div class="smax-resp-field-picker-empty">Nenhuma pessoa encontrada.</div>';
+
+        // Bind: remover seguidor existente
+        listEl.querySelectorAll('[data-existing="1"]').forEach(item => {
+          item.addEventListener('click', async () => {
+            const pid = item.dataset.id;
+            const pname = item.dataset.name;
+            if (!confirm(`Remover "${pname}" como seguidor deste chamado?`)) return;
+            item.style.opacity = '.3';
+            item.style.pointerEvents = 'none';
+            await Api.postRemoveFollower(ticketIdForPicker, pid);
+            // Atualizar lista de existentes
+            const updated = (existingFollowersMap.get(ticketIdForPicker) || []).filter(f => f.id !== pid);
+            existingFollowersMap.set(ticketIdForPicker, updated);
+            existingList.length = 0;
+            existingList.push(...updated);
+            existingIds.delete(pid);
+            updateFollowerChip(ticketIdForPicker);
+            renderList(picker.querySelector('.smax-resp-field-picker-search')?.value || '');
+          });
+        });
+
+        // Bind: selecionar novo seguidor
+        listEl.querySelectorAll('.smax-resp-field-picker-item:not([data-existing])').forEach(item => {
           item.addEventListener('click', () => {
             const pid = item.dataset.id;
             const pname = item.dataset.name;
@@ -9658,19 +9708,17 @@
               selectedFollowers.set(pid, pname);
             }
             updateChipLocal();
-            renderPeople(picker.querySelector('.smax-resp-field-picker-search')?.value || '');
+            renderList(picker.querySelector('.smax-resp-field-picker-search')?.value || '');
           });
         });
       };
 
-      // Cabeçalho: seguidores existentes + botões
-      const existingCount = existingSet.size;
-      const existingHtml = existingCount
-        ? `<div style="padding:4px 8px 2px;font-size:10px;color:#6b7280;">👁️ ${existingCount} seguidor(es) atual(is)</div>`
-        : '';
-      const headerHtml = `${existingHtml}<div style="display:flex;gap:6px;padding:4px 6px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;">
-        <button class="smax-fp-clear-btn" style="flex:1;padding:4px 8px;border:1px solid rgba(248,113,113,.4);background:transparent;color:#f87171;border-radius:5px;cursor:pointer;font-size:11px;">× Limpar seleção</button>
-        <button class="smax-fp-confirm-btn" style="flex:1;padding:4px 8px;border:none;background:#22c55e;color:#fff;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;">✓ Confirmar</button>
+      const existingCount = existingList.length;
+      const headerHtml = `<div style="display:flex;gap:6px;padding:4px 6px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;align-items:center;">
+        ${existingCount ? `<span style="font-size:10px;color:#6b7280;">👁️ ${existingCount} atual</span>` : ''}
+        <span style="flex:1;"></span>
+        <button class="smax-fp-clear-btn" style="padding:4px 8px;border:1px solid rgba(248,113,113,.4);background:transparent;color:#f87171;border-radius:5px;cursor:pointer;font-size:11px;">× Limpar</button>
+        <button class="smax-fp-confirm-btn" style="padding:4px 8px;border:none;background:#22c55e;color:#fff;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;">✓ OK</button>
       </div>`;
 
       picker.innerHTML = headerHtml + `
@@ -9686,11 +9734,11 @@
         picker.style.display = 'none';
       });
 
-      renderPeople('');
+      renderList('');
       positionPicker(picker, btn);
 
       const search = picker.querySelector('.smax-resp-field-picker-search');
-      search?.addEventListener('input', Utils.debounce(() => renderPeople(search.value), 120));
+      search?.addEventListener('input', Utils.debounce(() => renderList(search.value), 120));
       search?.focus();
 
       const closeOnOutside = (e) => {
