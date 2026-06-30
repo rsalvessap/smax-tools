@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SMAX Toolkit - TJSP
 // @namespace    https://github.com/rsalvessap/SMAX-TOOLS
-// @version      2.74
+// @version      2.75
 // @description  Conjunto de ferramentas para o SMAX TJSP: triagem, respostas em lote, scripts, discussões e consulta de processos no eProc
 // @author       rsalvessap
 // @match        https://suporte.tjsp.jus.br/saw/*
@@ -47,7 +47,7 @@
   const SMAX_SB_URL = 'https://rlcbmrjkojopipiwpktf.supabase.co';
   const SMAX_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsY2Jtcmprb2pvcGlwaXdwa3RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MzI0MTksImV4cCI6MjA5NDMwODQxOX0.Ha4xRbFvbgb2yO64ga3dV8KrNGRgbV7zWFXc5bYHdeQ';
 
-  const SMAX_TOOLKIT_VERSION = '2.74';
+  const SMAX_TOOLKIT_VERSION = '2.75';
   const SMAX_TENANT_ID = '213963628';
   console.log('%c[SMAX Toolkit] v' + SMAX_TOOLKIT_VERSION + ' carregado', 'color:#60a5fa;font-weight:bold;font-size:13px;');
 
@@ -6920,7 +6920,7 @@
                 setTimeout(() => {
                   Api.postUpdateRequest({
                     Id: props.Id,
-                    StatusSCCDSMAX_c: 'AguardandoOutraEquipe_c'
+                    StatusSCCDSMAX_c: 'Aguardando3Nivel_c'
                   }).then(resolve).catch(() => resolve(firstUpdateRes));
                 }, 2000); // 2 second delay to let server routine complete
               });
@@ -8865,8 +8865,12 @@
               followerWillChange, effectivePendingStatus, effectivePendingSccd, willAct } = analyzeTicket(id, solutionRaw);
       if (!willAct) return { skipped: true, msg: 'Sem alterações para este chamado.' };
 
+      // Encaminhamento com GSE implica remoção do especialista designado
+      const fwdHtml = pending.forwarding?.text || '';
+      const clearAssignee = gseWillChange && !!fwdHtml;
+
       // Determinar se há alterações de propriedades (excluindo seguidor, que é relationship)
-      const hasPropertyChanges = hasSolution || gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange;
+      const hasPropertyChanges = hasSolution || gseWillChange || assigneeWillChange || clearAssignee || statusWillChange || statusSCCDWillChange;
 
       const props = { Id: id };
       if (hasSolution) {
@@ -8874,7 +8878,11 @@
         props.CompletionCode = completionCode || 'CompletionCodeFulfilled';
       }
       if (gseWillChange) props.ExpertGroup = pending.gse.id;
-      if (assigneeWillChange) props.ExpertAssignee = pending.assignee.id;
+      if (clearAssignee) {
+        props.ExpertAssignee = '';
+      } else if (assigneeWillChange) {
+        props.ExpertAssignee = pending.assignee.id;
+      }
       if (statusWillChange && effectivePendingStatus?.key) props.Status = effectivePendingStatus.key;
       if (statusSCCDWillChange && effectivePendingSccd?.key) props.StatusSCCDSMAX_c = effectivePendingSccd.key;
 
@@ -8889,19 +8897,25 @@
         const success = outcome?.ok !== false;
         if (success) {
           const entry = DataRepository.triageCache.get(id);
-          if (entry && (gseWillChange || assigneeWillChange || statusWillChange || statusSCCDWillChange)) {
+          if (entry && (gseWillChange || assigneeWillChange || clearAssignee || statusWillChange || statusSCCDWillChange)) {
             DataRepository.triageCache.set(id, Object.assign({}, entry, {
               assignmentGroupId:   gseWillChange        ? pending.gse.id                         : entry.assignmentGroupId,
               assignmentGroupName: gseWillChange        ? pending.gse.name                       : entry.assignmentGroupName,
-              expertAssigneeId:    assigneeWillChange   ? pending.assignee.id                    : entry.expertAssigneeId,
+              expertAssigneeId:    clearAssignee         ? ''
+                                 : assigneeWillChange   ? pending.assignee.id                    : entry.expertAssigneeId,
               status:              statusWillChange     ? (effectivePendingStatus?.key ?? entry.status)  : entry.status,
               statusSCCD:          statusSCCDWillChange ? (effectivePendingSccd?.key  ?? entry.statusSCCD) : entry.statusSCCD,
             }));
           }
           // Postar texto de encaminhamento como discussão (quando GSE muda com forwarding)
-          const fwdHtml = pending.forwarding?.text || '';
           if (gseWillChange && fwdHtml) {
-            await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'INTERNAL' });
+            const discRes = await Api.postDiscussion(id, { bodyHtml: fwdHtml, privacyRaw: 'INTERNAL' });
+            const discOutcome = Api.summarizeBulkOutcome(discRes);
+            if (discOutcome?.ok) {
+              console.info('[SMAX ResponseHUD] Discussão de encaminhamento postada:', id);
+            } else {
+              console.warn('[SMAX ResponseHUD] Falha ao postar discussão de encaminhamento:', id, discOutcome?.messages);
+            }
           }
           // Adicionar seguidores (entity Follow separada do update de propriedades)
           if (followerWillChange) {
@@ -10426,13 +10440,20 @@
                 } catch {}
               }
 
-              // Atualizar status para Suspenso após vinculação global
+              // Atualizar status para Suspenso e status operacional para Aguardando 3º Nível
               try {
                 await Api.postUpdateRequest({ Id: ticketId, Status: 'RequestStatusSuspended' });
                 const cur2 = DataRepository.triageCache.get(ticketId) || {};
                 DataRepository.triageCache.set(ticketId, Object.assign({}, cur2, { status: 'RequestStatusSuspended' }));
                 const statusEl = backdrop.querySelector(`.smax-resp-ticket-item[data-id="${CSS.escape(ticketId)}"] .smax-resp-ticket-status`);
                 if (statusEl) statusEl.textContent = 'Suspenso';
+              } catch {}
+              // StatusSCCDSMAX_c precisa de delay para não ser sobrescrito pela rotina do servidor
+              try {
+                await new Promise(r => setTimeout(r, 2000));
+                await Api.postUpdateRequest({ Id: ticketId, StatusSCCDSMAX_c: 'Aguardando3Nivel_c' });
+                const cur3 = DataRepository.triageCache.get(ticketId) || {};
+                DataRepository.triageCache.set(ticketId, Object.assign({}, cur3, { statusSCCD: 'Aguardando3Nivel_c' }));
               } catch {}
 
               // Atualiza badge na lista
